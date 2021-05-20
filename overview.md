@@ -1,8 +1,7 @@
-# use case
+# overview
 
 ## commands
 
-1. deploy // need to install `sinkd` on server
 1. add
 1. adduser
 1. ls
@@ -25,6 +24,12 @@
 Listens to changes via rsync daemon, rsync:// on port "8466" TB or "9816" tb 
 Accepts many running clients.
 
+Uses configuration in `/etc/sinkd.conf` right next door to `rsyncd.conf` 
+maybe hijack the rsyncd.conf? 
+
 ## client (barge)
 
-Every barge comes into harbor
+_Every barge comes into harbor_
+Uses configuration in `~/.sinkd`
+
+

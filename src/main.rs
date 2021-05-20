@@ -42,29 +42,25 @@ fn main() {
     // }
 
     if let Some(matches) = matches.subcommand_matches("add") {
-        let this_dir = String::from(matches.value_of("FILE").unwrap());
+        let path = String::from(matches.value_of("PATH").unwrap());
         println!("adding file!");
         
-        if Path::new(&this_dir[..]).exists() {
-            cli::anchor(cli::DaemonType::Barge, this_dir); // always a Barge from cli
+        if Path::new(&path[..]).exists() {
+            cli::add(cli::DaemonType::Barge, path); // always a Barge from cli
         } else {
-            println!("'{}' does not exist", this_dir);
+            println!("'{}' does not exist", path);
         }
     }
     
-    if let Some(matches) = matches.subcommand_matches("deploy") {
-        cli::underway(cli::DaemonType::Barge);
-    }
+    // if let Some(matches) = matches.subcommand_matches("deploy") {
+    //     cli::underway(cli::DaemonType::Barge);
+    // }
 
-    if let Some(matches) = matches.subcommand_matches("add") {
-        cli::add();
-    }
-
-    if let Some(matches) = matches.subcommand_matches("list") {
+    if let Some(matches) = matches.subcommand_matches("ls") {
         cli::list();
     }
 
-    if let Some(matches) = matches.subcommand_matches("remove") {
+    if let Some(matches) = matches.subcommand_matches("rm") {
         cli::remove();
     }
 
@@ -72,8 +68,8 @@ fn main() {
         cli::stop();
     }
 
-    if let Some(matches) = matches.subcommand_matches("recruit") {
-        cli::recruit(matches.values_of("USER").unwrap().collect());
+    if let Some(matches) = matches.subcommand_matches("adduser") {
+        cli::adduser(matches.values_of("USER").unwrap().collect());
     }
 
 

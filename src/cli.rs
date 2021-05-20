@@ -128,9 +128,6 @@ pub fn adduser(users: Vec<&str>) {
              users)
 }
 
-pub fn add(my_str: &str) {
-    
-}
 pub fn list() {
     // list all current files loaded
     println!("print out list of all watched folders")
