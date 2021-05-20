@@ -3,6 +3,8 @@
  */
 use crate::daemon::barge::Barge;
 use crate::daemon::harbor::Harbor;
+use std::io::Write;
+use std::fs::File;
 use clap::*;
 
 pub enum DaemonType {
@@ -103,20 +105,29 @@ pub fn list() {
 }
 
 pub fn start() {
-    std::process::Command::new("sinkd")
+    let daemon = std::process::Command::new("/home/tony/Projects/sinkd/target/debug/sinkd")
                            .arg("--daemon")
-                           .arg("&") // spawn in background
-                           .output()
+                           .spawn() // spawn in background
                            .expect("ERROR couldn't start daemon");
+    // let file = File::create("/etc/sinkd-daemon.txt");
+    // let buffer = file.by_ref();
+    
+    // buffer.write_all("")
 }
 
 pub fn daemon() {
-    println!("running daemon!");
     Barge::new().daemon(); // never returns
 }
 
 pub fn stop() {
     println!("stopping daemon");
+
+    std::process::Command::new("ps")
+                        .arg("-e")
+                        .arg("|")
+                        .arg("grep")
+                        .arg("sinkd");
+
     // need to keep pid of barge process in separate file
     std::process::Command::new("kill")
                            .arg("-15")
