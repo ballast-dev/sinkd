@@ -11,15 +11,15 @@ build = "src/build.rs"
 [dependencies]
 clap = "2.33.3"
 notify = "4.0.15"
-regex = "1.4.4"
-serde = "1.0.124"
-serde_derive = "1.0.124"
+regex = "1.4.5"
+serde = "1.0.125"
+serde_derive = "1.0.125"
 toml = "0.5.8"
 daemonize = "0.4.1"
 # "std" is to enable set_boxed_logger
 log = { version = "0.4.14", features = ["std"] }
 paho-mqtt = "0.9.1"
-libc = "0.2.88"
+libc = "0.2.91"
 # paho-mqtt-sys = { version = "0.4", path = "paho-mqtt-sys", default-features=false }
 # futures = { version = "0.3", features = ["compat"] }
 # futures-timer = "3.0.2"
