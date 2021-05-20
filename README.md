@@ -10,7 +10,7 @@
 ## Intro:
 Do you want to host your files on your own server?
 We do too. Sinkd is a deployable cloud!
-
+> sinkd, main font should be `moonhouse` all low case
 ### Harbor Steps (Server)
 1. make sure ssh keys are set up, manual or automatic?
 1. create folder on server machine ~/sinkd/
