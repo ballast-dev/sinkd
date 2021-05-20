@@ -132,29 +132,33 @@ pub fn start() {
     } else {
         std::path::Path::new("/home").join(user)
     };    
-    let path = home_dir.join(".sinkd");
-    println!("{:?}", path);
-    match fs::create_dir(path) {
-        Err(why) => println!("! {:?}", why.kind()),
+    let sinkd_path = home_dir.join(".sinkd");
+    println!("{:?}", sinkd_path);
+    match fs::create_dir(&sinkd_path) {
+        Err(why) => println!("cannot create dir => {:?}", why.kind()),
         Ok(_) => {},
     }
+    let pid_path = sinkd_path.join("pid");
     // fs::create_dir(path).unwrap_or(println!("uh oh....")); // already created return empty unit
 
     // need to use correct path ~ is not interpretted
-    let pid_file = fs::File::open("~/.sinkd/pid").unwrap_or(
-        fs::File::create("~/.sinkd/pid").expect("Unable to create file")
+    let pid_file = fs::File::open(&pid_path).unwrap_or(
+        fs::File::create(&pid_path).expect("Unable to create file")
     );
     let metadata = pid_file.metadata().unwrap();
     let mut permissions = metadata.permissions();
     permissions.set_readonly(false);
-    fs::set_permissions("~/.sinkd/pid", permissions).expect("cannot set permission");      
+    fs::set_permissions(&pid_path, permissions).expect("cannot set permission");
+    
+    println!("daemonize?");
 
     let daemonize = Daemonize::new()
-        .pid_file("~/.sinkd/pid")
-        .chown_pid_file(true)      // is optional, see `Daemonize` documentation
+        .pid_file(pid_path);
+        ///// is the rest needed? having the pid within the users directory prevents ownership issues
+        // .chown_pid_file(true)      // is optional, see `Daemonize` documentation
         // .working_directory("/etc/sinkd/") // for default behaviour.
         // .user("nobody")
-        .group("sinkd"); // Group name
+        // .group("sinkd"); // Group name
         // .group(2)        // or group id.
         // .umask(0o777)    // Set umask, `0o027` by default.
         // .stdout(stdout)  // Redirect stdout to `/etc/sinkd/sinkd.out`.
@@ -164,6 +168,7 @@ pub fn start() {
 
     match daemonize.start() {
         Ok(_) => {
+            println!("started daemon!");
             Barge::new().daemon();
         },
         Err(e) => eprintln!("Error Daemonize, {}", e),
