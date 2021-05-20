@@ -66,6 +66,11 @@ impl Caravel {
 
         //! need to pull excludes from config on loaded path
         //! '/srv/sinkd/user' will have permissions of user (to prevent rsync errors)
+        //? RSYNC options to consider
+        //~ --copy-links  (included with -a, copies where it points to)
+        //~ --delete (must be a whole directory, no wildcards)
+        //~ --delete-excluded (also delete excluded files)
+        //~ --max-size=SIZE (limit size of transfers)        
 
         let rsync_result = std::process::Command::new("rsync")
                               .arg("-a") // to archive 
