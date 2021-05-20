@@ -1,6 +1,7 @@
 use std::fs;
 use std::env;
 use notify::{Watcher, RecursiveMode, watcher};
+use notify::DebouncedEvent::*;
 use std::sync::mpsc::channel;
 use std::time::Duration;
 use std::path::PathBuf;
@@ -38,16 +39,41 @@ impl Caravel {
         loop {
             match self.events.recv() {
                 Ok(event) => {
+                    match event {
+                        NoticeWrite(path) => self.synchronize(path),
+                        NoticeRemove(path) => self.synchronize(path),
+                        Create(path) => self.synchronize(path),
+                        Write(path) => self.synchronize(path),
+                        Chmod(path) => self.synchronize(path),
+                        Remove(path) => self.synchronize(path),
+                        Rename(path, anotherPath) => self.synchronize(path),
+                        Rescan => {}, 
+                        Error(error, option_path) => {
+                            info!("the path should be: {:?}", option_path.unwrap());
+                        }
+                    }
                     // fire off rsync 
                     // this is client side
                     // server should never invoke rsync
                     // purely client side driven, with mqtt updates from server
-                    info!("{:?}", event);
+                    
                 },
                 Err(e) => info!("watch error: {:?}", e),
             }
             std::thread::sleep(std::time::Duration::from_millis(10))
         }
+    }
+
+    fn synchronize(&mut self, path: PathBuf) {
+        // Path is parent to file being changed
+        std::process::Command::new("rsync")
+                              .arg("-a")
+                              .arg(&path)
+                              .arg("/mnt/c/Users/tony/Projects/sinkd_copy/")
+                              .spawn()
+                              .expect("rsync failed");
+
+        info!("{:?}", &path);
     }
 
 
