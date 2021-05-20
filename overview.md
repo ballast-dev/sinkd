@@ -2,45 +2,46 @@
 
 ## commands
 
-1. `add` # add folder
+1. `add` # add file/folder
 1. `adduser` # add user? 
 1. `ls` # list current watches
 1. `rm` # remove watch
 1. `rmuser` # remove user?
 1. `start` # start barge daemon
 1. `stop` # stop barge daemon
-
-The following will be invoked on the "server" computer aka **harbor**
-
-1. `harbor --dock` # to generate daemon on "server"
-1. `harbor start`
-1. `harbor stop`
-1. `harbor config` ?? maybe... 
+> 1. `config`
 
 ## New Approach
 
-`sinkd` is a multi-user program, so configurations will be loaded in `/etc`
+`sinkd` is a multi-user program, so configurations will be loaded in `/etc/sinkd.conf`
 
-- **Package** will have `/etc/sinkd/barge.conf` and `/etc/sinkd/harbor.conf` (TOML files)
-- `sinkd harbor` will control everything in the _harbor_
-  - harbor control will be specific to machine running 
-- `sinkd` will default to barge controls
-
-### barge.conf
-
-1. anchor_points (folders to sync)
-1. store ssh key in the `.ssh/` folder for authentication
-> NOTE: no need to store user permissions each 'barge' will run per user
-
-## harbor.conf
-
-1. users 
-1. anchor_points 
-  - with user authentication to r/w 
-  - single point can be shared by multiple users (how to handle this?)
+- both server configs and user configs for simplicity
+```toml
+[SERVER]
+paths: [
+  "path/one/..",
+  "path/two/.."
+]
+authorized_users: [
+  "user_one",
+  "user_two",
+  "..."
+]
 
 
-## Dynamic DNS
+[USER.user_one]
+interval = 5   # seconds to synchronize
+
+...
+```
+
+## /run/sinkd.pid
+daemon process to run, store pid 
+
+
+
+   
+#### Dynamic DNS
 
 This could provide a way to browse to the home site of sinkd. "blah.sinkd.co" Could possibly link against.
 

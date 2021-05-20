@@ -17,16 +17,19 @@ impl Config {
         }
     }
 
-    pub fn add_watch(&mut self, path: PathBuf, users: Vec<String>, interval: u32, excludes: Vec<String>) {
-        self.anchor_points.push(
-            AnchorPoint {
-                path,
-                users,
-                interval,
-                excludes,
-            }
-        );
-        
+    pub fn add_watch(
+        &mut self,
+        path: PathBuf,
+        users: Vec<String>,
+        interval: u32,
+        excludes: Vec<String>,
+    ) {
+        self.anchor_points.push(AnchorPoint {
+            path,
+            users,
+            interval,
+            excludes,
+        });
     }
 }
 
@@ -63,7 +66,6 @@ impl User {
     pub fn create() -> Vec<User> {
         vec![User::new()]
     }
-
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -74,13 +76,12 @@ pub struct AnchorPoint {
     pub excludes: Vec<String>,
 }
 
-
 impl AnchorPoint {
     pub fn new() -> AnchorPoint {
         AnchorPoint {
             path: PathBuf::from("invalid"),
             users: Vec::<String>::new(),
-            interval: 5, // defaults to 5 secs? 
+            interval: 5, // defaults to 5 secs?
             excludes: Vec::new(),
         }
     }
@@ -117,5 +118,4 @@ impl AnchorPoint {
     pub fn rm_user(&mut self, _user: &str) -> bool {
         return true;
     }
-
 }
