@@ -40,6 +40,7 @@ impl Caravel {
             match self.events.recv() {
                 Ok(event) => {
                     match event {
+                        // todo: maybe aggregate the calls under the parent folder, to minimize overhead
                         NoticeWrite(_) => {}, // do nothing
                         NoticeRemove(_) => {}, // do nothing for notices
                         Create(path) => self.synchronize(path),
@@ -61,35 +62,25 @@ impl Caravel {
         }
     }
 
-    fn synchronize(&mut self, parent_path: PathBuf) {
+    fn synchronize(&mut self, path: PathBuf) {
 
-        // let dest = // should be remote path pulled from config
+        //! need to pull excludes from config on loaded path
+        //! '/srv/sinkd/user' will have permissions of user (to prevent rsync errors)
 
-        let source_folder = &parent_path.parent().unwrap();
-        let dest_path = "/home/tony/lab/server/";
-        info!("source:{:?}, dest:{:?}", source_folder, dest_path);
-
-        // need to check path against .... do i? 
-        // debouncedevent gives me parent path
-        // Path is parent to file being changed
         let rsync_result = std::process::Command::new("rsync")
                               .arg("-a") // to archive 
                             //   .arg("--exclude=exclude*")
-                              .arg(source_folder)
+                              .arg(&path)
                               // current user is used 
-                              // '/srv/sinkd/user' will have permissions of user (to prevent rsync errors)
                             //   .arg("cerberus:/srv/sinkd/tony")
-                              .arg(dest_path)
+                              .arg("...pulled from config? ")
                               .spawn();
-                            //   .expect({
-                            //       error!("Cannot invoke rsync!");
-                            //       "rsync is not valid"
-                            //   });
         match rsync_result {
             Err(x) => {error!("{:?}", x);}
-            Ok(_) => { /* spawned ok */}
+            Ok(_) => { 
+                info!("Called rsync with source: {:?}", &path);
+            }
         }
-        info!("{:?}", &parent_path);
     }
 
 
