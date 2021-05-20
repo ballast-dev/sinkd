@@ -2,6 +2,7 @@
 
 ## commands
 
+1. deploy // need to install `sinkd` on server
 1. add
 1. adduser
 1. ls

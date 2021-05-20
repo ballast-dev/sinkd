@@ -31,35 +31,52 @@ pub enum DaemonType {
     Barge,
     Harbor,
 }
+// deploy
+// 1. add
+// 1. adduser
+// 1. ls
+// 1. rm
+// 1. rmuser
+// 1. start
+// 1. stop
 
 pub fn build_cli() -> App<'static, 'static> {
     App::new("sinkd")
-        .version("0.1.0")
-        .about("deployable cloud, drop anchor and go")
-        .subcommand(SubCommand::with_name("deploy")
-            .about("enable daemon, pushes edits to given IP")
-            .arg(Arg::with_name("IP")
-                .required(true)
-                .help("IPv4 address, ssh access required")
-            )
-            .help("sets up sinkd server on remote computer")
-        )
+        .version(env!("CARGO_PKG_VERSION"))
+        .about("deployable cloud")
+        // NOTE: possibly have user install sinkd on server...
+        //       other option is to push configs over to server to enable harbor
+        //       ease of use is critical, vote to push configs
+        // .subcommand(SubCommand::with_name("deploy")
+        //     .about("enable daemon, pushes edits to given IP")
+        //     .arg(Arg::with_name("IP")
+        //         .required(true)
+        //         .help("IPv4 address, ssh access required")
+        //     )
+        //     .help("sets up sinkd server on remote computer")
+        // )
         .subcommand(SubCommand::with_name("add")
-            .about("adds folder/file to watch list")
-            .arg(Arg::with_name("FILE")
+            .about("adds path to watch list")
+            .arg(Arg::with_name("PATH")
                 .required(true)
-                .help("sinkd starts watching folder/file")
+                .help("sinkd starts watching path")
             )
-            .help("usage: sinkd anchor [OPTION] FILE\n\
+            .help("usage: sinkd add FILE [OPTIONS]\n\
                 lets sinkd become 'aware' of file or folder location provided")
+        )
+        .subcommand(SubCommand::with_name("adduser")
+            .about("add user to watch")
+            .arg(Arg::with_name("[USER, ...]")
+            .required(true)
+            .help("sinkd adduser USER")
         )
         .subcommand(SubCommand::with_name("ls")
             .alias("list")
             .arg(Arg::with_name("PATH")
                 .required(false)
-                .help("list watched files and directories from supplied PATH")
+                .help("list watched files and directories")
             )
-            .help("list currently watched directories")
+            .help("list currently watched files from given PATH")
         )
         .subcommand(SubCommand::with_name("rm")
             .alias("remove")
@@ -67,26 +84,29 @@ pub fn build_cli() -> App<'static, 'static> {
             .arg(Arg::with_name("PATH")
                 .required(true)
             )
-            .help("usage: sinkd remove PATH")
+            .help("usage: sinkd rm PATH")
         )
-        // daemon should be started and refreshed automagically
+        .subcommand(SubCommand::with_name("rmuser")
+            .about("removes user from watch")
+            .arg(Arg::with_name("USER")
+                .required(true)
+            )
+            .help("usage: sinkd rmuser USER")
+        )
+        .subcommand(SubCommand::with_name("start")
+            .about("starts the daemon")
+        )
         .subcommand(SubCommand::with_name("stop")
             .about("stops daemon")
         )
-        .subcommand(SubCommand::with_name("refresh")
-            .about("stops and starts the daemon (updates config)")
-        )
-        .subcommand(SubCommand::with_name("adduser")
-            .about("add user to watch")
-            .arg(Arg::with_name("[USER...]")
-            .required(true)
-            .help("sinkd recruit USER DIRECTORY")
+        .subcommand(SubCommand::with_name("hoist")
+            .about("stops and starts the daemon (rescans config)")
         )
     )
 }
 
-/** localhost file syncing separate daemons */
-pub fn anchor(daemon_type: DaemonType, file: String) -> bool {
+
+pub fn add(daemon_type: DaemonType, file: String) -> bool {
 
     match daemon_type {
         DaemonType::Barge => {
@@ -103,16 +123,16 @@ pub fn anchor(daemon_type: DaemonType, file: String) -> bool {
     }
 }
 
-pub fn recruit(users: Vec<&str>) {
+pub fn adduser(users: Vec<&str>) {
     println!("add {:?} to list of users who have permission to watch the directory",
              users)
 }
 
-pub fn add() {
-    println!("add folder to watch list")
+pub fn add(my_str: &str) {
+    
 }
-
 pub fn list() {
+    // list all current files loaded
     println!("print out list of all watched folders")
 }
 
@@ -131,8 +151,6 @@ pub fn remove() {
 
 // the same daemon should run on both machines ( in the same place )
 pub fn underway(daemon_type: DaemonType) {
-    // 1 parse config 
-    // 2 put running rust code
     match daemon_type {
         DaemonType::Barge => println!("starting barge"),
         DaemonType::Harbor => println!("starting harbor"),
