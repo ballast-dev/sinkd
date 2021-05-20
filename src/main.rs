@@ -12,8 +12,8 @@
  // more verbose, but allows easier editing, and at times more advanced options, or the possibility
  // to generate arguments dynamically.
 extern crate clap;
-
-mod barge;
+extern crate notify;
+extern crate yaml_rust;
 
 use clap::{Arg, App, SubCommand};
 use std::env;

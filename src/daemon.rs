@@ -1,17 +1,43 @@
 /**
- * B A R G E 
- *
- * --- 
- *
- * Client side of sinkd
- * will hook into anchor and fail if anchor is not there
- * 
- * be able to start and stop daemon 
- * this binary will be invoked in usr directory i.e. /usr/local/bin
+ * rsync daemon wrapper
+ * will create all essentials for rsync daemon on server machine
  */
-extern crate notify;
-extern crate yaml_rust;
 
+use notify::{Watcher, RecursiveMode, watcher};
+use yaml_rust::{YamlLoader, YamlEmitter};
+
+use std::sync::mpsc::channel;
+use std::time::Duration;
+use std::env;
+
+/**
+ * B A R G E 
+ * --- 
+ * Client side of sinkd
+ * 
+ * set up vector of paths to watch parsed from sinkd.conf
+ * `sinkd anchor FOLDER` will append to sinkd.conf
+ * continuous loop listening for file events in given dirs
+ * once file event happens call rsync. 
+ * rsync daemon should pick up the call
+ * 
+ * __feature enhancement__
+ * `atoll` will be a set of watched events 
+ * under a set of known users
+ * 
+ * 
+ * H A R B O R 
+ * ---
+ * Server side of sinkd
+ * 
+ * harbor initialized with IP
+ * rsync daemon initialization (with custom config)
+ * harbor will be `rsync` wrapper (ssh authentication)
+ * Needs to be invoked at boot once installed (inetd?)
+ * keep the server on /srv/sinkd/
+ * rsync daemon should pick up the calls
+ * 
+ */
 use notify::{Watcher, RecursiveMode, watcher};
 use yaml_rust::{YamlLoader, YamlEmitter};
 
@@ -20,10 +46,43 @@ use std::time::Duration;
 use std::env;
 use std::path::PathBuf;
 
+
+/* -----------
+ * H A R B O R
+ * ----------- 
+ */
+
+pub struct Harbor {
+    config: String  // parsed yaml from /etc/sinkd.conf
+}
+
+impl Harbor {
+    pub fn init_rsyncd() {
+        // initialize the rsync daemon 
+        // `rsync --daemon`
+        // read the special config shipped with sinkd
+        // `sinkd deploy 10.0.0.1` should call this function
+
+        // the directory to store sinkd data is /srv/sinkd
+    }
+
+    fn parse_config() -> bool {
+        // make sure to have permission to read config file
+        return true
+    }
+}
+
+
+/* ---------
+ * B A R G E
+ * ---------
+ */
+
 pub struct AnchorPoint {
     // directory to watch
     path: PathBuf,
     interval: u32,  // cycle time to check changes
+    // watches: Vec<Watcher>   // how to instantiate
 }
 
 impl AnchorPoint {
@@ -55,52 +114,10 @@ impl Barge {
         return true;
     }
 
-    /**
-     * upon edit of configuration restart the daemon
-     */
-    pub fn watch(&mut self, file_to_watch: &str, interval: u32) -> bool {
-
-        self.anchor_points.push(AnchorPoint::from(file_to_watch, interval));
-        // anchor point can either be a file or a folder
-
-        // need to start daemon from config file
-        // need to parse json
-        // set up json within /etc/sinkd.json
-
-
-        // serde already does json
-
-        // Create a channel to receive the events.
-        let (tx, rx) = channel();
-
-        // Create a watcher object, delivering debounced events.
-        // The notification back-end is selected based on the platform.
-        let mut watcher = watcher(tx, Duration::from_secs(1)).unwrap();
-
-        // Add a path to be watched. All files and directories at that path and
-        // below will be monitored for changes.
-        let result = watcher.watch(file_to_watch, RecursiveMode::Recursive);
-        match result {
-            Err(_) => {
-                println!("path not found, unable to set watcher");
-                std::process::exit(1);
-            },
-
-            Ok(_) => ()
-        }
-
-    // TODO: to spawn in in background
-        loop {
-            match rx.recv() {
-            Ok(event) => println!("{:?}", event),
-            Err(e) => println!("watch error: {:?}", e),
-            }
-        }
-    }
 
 
     // to tell daemon to reparse its configuration file
-    pub fn update_daemon() {
+    pub fn update() {
         // parse config file
     }
 
@@ -155,6 +172,61 @@ impl Barge {
         // }
         // println!("{}", out_str);
     true
+    }
+    /**
+     * upon edit of configuration restart the daemon
+     * 
+     * sinkd anchor FOLDER -i | --interval SECS
+     */
+    pub fn watch(&mut self, file_to_watch: &str, interval: u32) -> bool {
+
+        self.anchor_points.push(AnchorPoint::from(file_to_watch, interval));
+        // anchor point can either be a file or a folder
+
+        // 1 - open yaml file (/etc/sinkd.conf)
+        // 2 - deserialize
+        // 3 - append new FOLDER 
+        // 4 - write new yaml
+        // 5 - restart daemon (harbor)
+
+        // Create a channel to receive the events.
+        let (tx, rx) = channel();
+
+        // Create a watcher object, delivering debounced events.
+        // The notification back-end is selected based on the platform.
+        let mut watcher = watcher(tx, Duration::from_secs(1)).unwrap();
+
+        // Add a path to be watched. All files and directories at that path and
+        // below will be monitored for changes.
+        let result = watcher.watch(file_to_watch, RecursiveMode::Recursive);
+        match result {
+            Err(_) => {
+                println!("path not found, unable to set watcher");
+                std::process::exit(1);
+            },
+
+            Ok(_) => ()
+        }
+
+    // TODO: to spawn in in background
+        loop {
+            match rx.recv() {
+            Ok(event) => println!("{:?}", event),
+            Err(e) => println!("watch error: {:?}", e),
+            }
+        }
+    }
+
+    /*
+    * 
+    *  
+    */
+    pub fn run() {
+
+    }
+
+    pub fn stop() {
+
     }
 }
 
