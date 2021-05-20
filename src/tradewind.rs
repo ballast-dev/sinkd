@@ -31,7 +31,10 @@ impl Caravel {
     
     // infinite loop unless broken by interrupt
     pub fn daemon(&mut self) {
-        self.load_conf();
+        if !self.load_conf() {
+            error!("Daemon did not start, unable to load configuration");
+            return;
+        }
         self.set_watchers();
         loop {
             match self.events.recv() {
@@ -56,7 +59,7 @@ impl Caravel {
 
         match fs::read_to_string("/etc/sinkd.conf") {
             Err(error) => {
-                info!("unable to open file '{}'", error);
+                info!("unable to open /etc/sinkd.conf, {}", error);
                 return false;
             }
             Ok(output) => {

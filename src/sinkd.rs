@@ -53,8 +53,8 @@ pub fn start() {
 
     match daemonize.start() {
         Ok(_) => {
+            info!("about to start daemon...");
             Caravel::new().daemon();
-            println!("sinkd started")
         },
         Err(e) => eprintln!("sinkd did not start (already running?), {}", e),
     }

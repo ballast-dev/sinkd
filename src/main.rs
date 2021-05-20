@@ -6,7 +6,7 @@ extern crate toml;
 extern crate serde_derive;
 #[macro_use]
 extern crate log;
-// extern crate libc;
+extern crate libc;
 extern crate paho_mqtt;
 
 
@@ -96,6 +96,7 @@ pub fn build_sinkd() -> App<'static, 'static> {
 #[allow(dead_code)]
 fn main() {
 
+    // rigging::TimeStamp::show();
     shiplog::ShipLog::init();
     // mqtt::listen();
     // std::process::exit(0);
@@ -116,28 +117,10 @@ fn main() {
         sinkd::adduser(matches.values_of("USER").unwrap().collect());
     }
 
-    if let Some(_) = matches.subcommand_matches("ls") {
-        sinkd::list();
-    }
-
-    if let Some(_) = matches.subcommand_matches("rm") {
-        sinkd::remove();
-    }
-
-    if let Some(_) = matches.subcommand_matches("start") {
-        sinkd::start();
-    }
-
-    if let Some(_) = matches.subcommand_matches("stop") {
-        sinkd::stop();
-    }
-    
-    if let Some(_) = matches.subcommand_matches("restart") {
-        sinkd::restart();
-    }
-
-    if let Some(_) = matches.subcommand_matches("log") {
-        sinkd::log();
-    }
-
+    if let Some(_) = matches.subcommand_matches("ls")      { sinkd::list(); }
+    if let Some(_) = matches.subcommand_matches("rm")      { sinkd::remove(); }
+    if let Some(_) = matches.subcommand_matches("start")   { sinkd::start(); }
+    if let Some(_) = matches.subcommand_matches("stop")    { sinkd::stop(); }
+    if let Some(_) = matches.subcommand_matches("restart") { sinkd::restart(); }
+    if let Some(_) = matches.subcommand_matches("log")     { sinkd::log(); }
 }

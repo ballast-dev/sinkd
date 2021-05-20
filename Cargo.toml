@@ -19,8 +19,7 @@ daemonize = "0.4.1"
 # "std" is to enable set_boxed_logger
 log = { version = "0.4.11", features = ["std"] }
 paho-mqtt = "0.8.0"
-
-# libc = "0.2.80"
+libc = "0.2.81"
 # paho-mqtt-sys = { version = "0.4", path = "paho-mqtt-sys", default-features=false }
 # futures = { version = "0.3", features = ["compat"] }
 # futures-timer = "3.0.2"
