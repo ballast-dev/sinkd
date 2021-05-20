@@ -34,7 +34,10 @@ impl log::Log for ShipLog {
 
     fn log(&self, record: &Record) {
         if self.enabled(record.metadata()) {
-            writeln!(&self.file, "{} >> {}", record.level(), record.args()).expect("couldn't write to log file");
+            writeln!(&self.file, "{}[{}]{}",
+                     ropework::get_timestamp("%T"), 
+                     record.level(), 
+                     record.args()).expect("couldn't write to log file");
         }
     }
 

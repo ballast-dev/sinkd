@@ -57,16 +57,24 @@ impl Caravel {
         self.config.users.clear();
         self.config.anchorages.clear();
 
+        let mut retval = false;
         match fs::read_to_string("/etc/sinkd.conf") {
             Err(error) => {
-                info!("unable to open /etc/sinkd.conf, {}", error);
-                return false;
+                error!("unable to open /etc/sinkd.conf, {}", error);
             }
             Ok(output) => {
-                self.config = toml::from_str(&output).expect("couldn't parse toml");
-                return true;
+                match toml::from_str(&output) {
+                    Err(error) => {
+                        error!("couldn't parse '/etc/sinkd.conf' {}", error);
+                    }, 
+                    Ok(toml_parsed) => {
+                        self.config = toml_parsed; 
+                        retval = true;
+                    }
+                }
             }
         }
+        return retval;
     }
 
     fn set_watchers(&mut self) {
