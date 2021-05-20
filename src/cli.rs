@@ -15,11 +15,11 @@ pub fn build_cli() -> App<'static, 'static> {
     App::new("sinkd")
         .about("deployable cloud")
         .version(env!("CARGO_PKG_VERSION"))
-        // .arg(Arg::with_name("daemon")
-        //     .short("d")
-        //     .long("daemon")
-        //     .hidden(true) // reentry point to spawn daemon for barge
-        // )
+        .arg(Arg::with_name("daemon")  // for debugging
+            .short("d")
+            .long("daemon")
+            .hidden(true) // reentry point to spawn daemon for barge
+        )
         .arg(Arg::with_name("harbor")
             .short("r")
             .long("harbor")
@@ -155,9 +155,11 @@ pub fn remove() {
 
 
 // the same daemon should run on both machines ( in the same place )
-pub fn underway(daemon_type: DaemonType) {
-    match daemon_type {
-        DaemonType::Barge => println!("starting barge"),
-        DaemonType::Harbor => println!("starting harbor"),
-    }
+pub fn daemon() {
+    // Spawns in shell, stays in shell
+    // match daemon_type {
+    //     DaemonType::Barge => println!("starting barge"),
+    //     DaemonType::Harbor => println!("starting harbor"),
+    // }
+    Barge::new().daemon()
 }

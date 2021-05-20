@@ -33,14 +33,13 @@ impl Barge {
     
     // infinite loop unless broken by interrupt
     pub fn daemon(&mut self) {
-        println!("barge::daemon!!");
         self.load_conf();
         self.set_watchers();
         loop {
             match self.events.recv() {
                 Ok(event) => {
                     // handle event
-                    println!("{:?}", event);
+                    println!("{:?}", event); // for debugging
                 },
                 Err(e) => println!("watch error: {:?}", e),
             }
@@ -50,7 +49,6 @@ impl Barge {
 
 
     fn load_conf(&mut self) -> bool {
-        // config file located in /etc/sinkd.conf
 
         if !self.deployed { // initialize
             self.config.owner.key.clear();
@@ -59,24 +57,16 @@ impl Barge {
             self.config.anchor_points.clear();
         }
 
-        let toml_str;
-        match fs::read_to_string("/etc/sinkd/sinkd.conf") {
+        match fs::read_to_string("/etc/sinkd.conf") {
             Err(error) => {
                 println!("unable to open file '{}'", error);
                 return false;
             }
             Ok(output) => {
-                toml_str = output.clone();
+                self.config = toml::from_str(&output).expect("couldn't parse toml");
+                return true;
             }
         }
-
-        self.config = toml::from_str(&toml_str[..]).expect("couldn't parse toml");
-        return true;
-        // println!("{:#?}", decoded);
-
-        // for watch in &decoded.anchor_points {
-        //     println!("{:?}, {:?}, {:?}, {:?}", watch.path, watch.users, watch.interval, watch.excludes);
-        // }
     }
 
     fn set_watchers(&mut self) {

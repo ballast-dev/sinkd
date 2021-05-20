@@ -52,4 +52,8 @@ fn main() {
         cli::restart();
     }
 
+    if matches.is_present("daemon") {
+        cli::daemon();
+    }
+
 }
