@@ -37,7 +37,7 @@ impl Caravel {
             match self.events.recv() {
                 Ok(event) => {
                     // handle event
-                    println!("{:?}", event); // for debugging
+                    info!("{:?}", event);
                 },
                 Err(e) => println!("watch error: {:?}", e),
             }

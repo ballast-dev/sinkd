@@ -22,9 +22,6 @@ fn on_connect_failure(cli: &mqtt::AsyncClient, _msgid: u16, rc: i32) {
     cli.reconnect_with_callbacks(on_connect_success, on_connect_failure);
 }
 
-
-
-
 fn callme() {
     println!("callback invoked!");
 }

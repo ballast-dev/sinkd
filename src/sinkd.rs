@@ -104,7 +104,12 @@ pub fn remove() {
 
 
 pub fn log() {
-    info!("hello log");
-    warn!("warning");
-    error!("oops");
+    // info!("hello log");
+    // warn!("warning");
+    // error!("oops");
+    // shows the log 
+     
+    let sinkd_path = ropework::get_sinkd_path();
+    let log_path = sinkd_path.join("log");
+    print!("{}", fs::read_to_string(log_path).expect("couldn't read log file, check permissions"));
 }

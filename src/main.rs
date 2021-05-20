@@ -93,23 +93,12 @@ pub fn build_sinkd() -> App<'static, 'static> {
 }
 
 
-//extern {
-//    fn double_input(input: libc::c_int) -> libc::c_int;
-//}
-
-//fn main() {
-    //let input = 4;
-    //let output = unsafe { double_input(input) };
-    //println!("{} * 2 = {}", input, output);
-//}
-
-
 #[allow(dead_code)]
 fn main() {
 
     shiplog::ShipLog::init();
-    mqtt::listen();
-    std::process::exit(0);
+    // mqtt::listen();
+    // std::process::exit(0);
 
     let matches = build_sinkd().get_matches();
     
