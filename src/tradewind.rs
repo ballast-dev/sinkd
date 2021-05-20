@@ -60,19 +60,21 @@ impl Caravel {
         }
     }
 
-    fn synchronize(&mut self, path: PathBuf) {
+    fn synchronize(&mut self, parent_path: PathBuf) {
+
+        // let dest = // should be remote path pulled from config
 
         // need to check path against .... do i? 
         // debouncedevent gives me parent path
         // Path is parent to file being changed
         std::process::Command::new("rsync")
                               .arg("-a") // to archive 
-                              .arg(&path)
-                              .arg("/mnt/c/Users/tony/Projects/sinkd_copy/")
+                              .arg(&parent_path)
+                              .arg("tony@cerberus:/srv/sinkd/")
                               .spawn()
                               .expect("rsync failed");
 
-        info!("{:?}", &path);
+        info!("{:?}", &parent_path);
     }
 
 

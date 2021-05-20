@@ -13,6 +13,7 @@ pub trait FormedAnchor {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
+    pub server_addr: String,
     pub users: Vec<User>,
     pub anchorages: Vec<Anchorage>,
 }
@@ -20,6 +21,7 @@ pub struct Config {
 impl Config{
     pub fn new() -> Config {
         Config {
+            server_addr: String::new(),
             users: User::create(),
             anchorages: vec![Anchorage::new()],
         }
