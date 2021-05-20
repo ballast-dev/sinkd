@@ -17,6 +17,8 @@ mod utils;
 mod shiplog;
 mod sinkd;
 mod mqtt;
+mod setup;
+mod server;
 
 use clap::*;
 
@@ -38,7 +40,6 @@ pub fn build_sinkd() -> App<'static, 'static> {
             .usage("sinkd init [--client | --server]")
         )
         .subcommand(App::new("add")
-            .alias("anchor")
             .about("Adds PATH to watch list")
             .arg(Arg::with_name("PATH")
                 .required(true)
@@ -48,19 +49,8 @@ pub fn build_sinkd() -> App<'static, 'static> {
             .usage("usage: sinkd add FILE [FILE..]\n\
                 lets sinkd become 'aware' of file or folder location provided")
         )
-        .subcommand(App::new("adduser")
-            .alias("hire")
-            .about("Add USER to watch")
-            .arg(Arg::with_name("USER")
-                .required(true)
-                .multiple(true) // CAREFUL: this will consume other arguments
-                .help("sinkd adduser USER")
-            )
-            .usage("usage: sinkd adduser USER [USER..]")
-        )
         .subcommand(App::new("ls")
             .alias("list")
-            .alias("parley")
             .about("List currently watched files from given PATH")
             .arg(Arg::with_name("PATH")
                 // need to revisit, should user have explicit control
@@ -80,13 +70,6 @@ pub fn build_sinkd() -> App<'static, 'static> {
             )
             .help("usage: sinkd rm PATH")
         )
-        .subcommand(App::new("rmuser")
-            .about("Removes USER from watch")
-            .arg(Arg::with_name("USER")
-                .required(true)
-            )
-            .help("usage: sinkd rmuser USER")
-        )
         .subcommand(App::new("start")
             .about("Starts the daemon")
         )
@@ -104,7 +87,6 @@ pub fn build_sinkd() -> App<'static, 'static> {
             .multiple(true)
             .help("verbose output")
         )
-        // .help("sinkd \n help and shit\n----boom-sauce")
 }
 
 
@@ -131,11 +113,11 @@ fn main() {
                 //? need to setup up mqtt on server 
                 //? server will send out a broadcast every ten seconds 
                 //? of any updates
-                sinkd::setup_keys(verbosity, &host);
+                setup::setup_keys(verbosity, &host);
             } if let Some(host) = sub_match.value_of("CLIENT") {
                 //? client will rsync forward
                 //? mqtt subscribe for updates from server 
-                sinkd::setup_server(verbosity, &host);
+                setup::setup_server(verbosity, &host);
             }
         },
         ("add", Some(sub_match)) => {
@@ -146,9 +128,6 @@ fn main() {
                     println!("'{}' does not exist", path);
                 }
             }
-        },
-        ("adduser", Some(_)) => {
-            sinkd::adduser(matches.values_of("USER").unwrap().collect());
         },
         ("ls",      Some(_)) => { sinkd::list();},
         ("rm",      Some(_)) => { sinkd::remove();},

@@ -1,12 +1,13 @@
 // Common Utilities
 use std::fmt;
+use std::path;
 
-pub fn get_sinkd_path() -> std::path::PathBuf {
+pub fn get_sinkd_path() -> path::PathBuf {
     let user = env!("USER");
     let sinkd_path = if cfg!(target_os = "macos") {
-        std::path::Path::new("/Users").join(user).join(".sinkd")
+        path::Path::new("/Users").join(user).join(".sinkd")
     } else {
-        std::path::Path::new("/home").join(user).join(".sinkd")
+        path::Path::new("/home").join(user).join(".sinkd")
     };
     
     if !sinkd_path.exists() {

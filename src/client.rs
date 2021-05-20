@@ -1,23 +1,22 @@
-use crate::config::*;
-use notify::DebouncedEvent::*;
-use notify::{watcher, RecursiveMode, Watcher};
+use crate::config::{Config, Anchor};
+use notify::{DebouncedEvent, Watcher};
 use std::env;
 use std::path::PathBuf;
-use std::sync::mpsc::channel;
+use std::sync::mpsc;
 use std::time::Duration;
 use std::{error::Error, fs};
 
 pub struct Client {
     // multiple produce single consumer
     config: Config,
-    events: std::sync::mpsc::Receiver<notify::DebouncedEvent>, // single rx
-    send: std::sync::mpsc::Sender<notify::DebouncedEvent>,     // clone
+    events: mpsc::Receiver<notify::DebouncedEvent>, // single rx
+    send: mpsc::Sender<notify::DebouncedEvent>,     // clone
     watchers: Vec<notify::RecommendedWatcher>,
 }
 
 impl Client {
     pub fn new() -> Client {
-        let (tx, rx) = channel();
+        let (tx, rx) = mpsc::channel();
         Client {
             config: Config::new(),
             events: rx,
@@ -27,26 +26,30 @@ impl Client {
     }
 
     // infinite loop unless broken by interrupt
-    pub fn run(&mut self) {
+    pub fn init(&mut self) {
         if !self.load_conf() {
             error!("Client did not start, unable to load configuration");
             return;
         }
+        self.run();
+    }
+
+    pub fn run(&mut self) -> ! {
         self.set_watchers();
         loop {
             match self.events.recv() {
                 Ok(event) => {
                     match event {
                         // todo: maybe aggregate the calls under the parent folder, to minimize overhead
-                        NoticeWrite(_) => {}  // do nothing
-                        NoticeRemove(_) => {} // do nothing for notices
-                        Create(path) => self.synchronize(path),
-                        Write(path) => self.synchronize(path),
-                        Chmod(path) => self.synchronize(path),
-                        Remove(path) => self.synchronize(path),
-                        Rename(path, _) => self.synchronize(path),
-                        Rescan => {}
-                        Error(error, option_path) => {
+                        DebouncedEvent::NoticeWrite(_) => {}  // do nothing
+                        DebouncedEvent::NoticeRemove(_) => {} // do nothing for notices
+                        DebouncedEvent::Create(path) => self.synchronize(path),
+                        DebouncedEvent::Write(path) => self.synchronize(path),
+                        DebouncedEvent::Chmod(path) => self.synchronize(path),
+                        DebouncedEvent::Remove(path) => self.synchronize(path),
+                        DebouncedEvent::Rename(path, _) => self.synchronize(path),
+                        DebouncedEvent::Rescan => {},
+                        DebouncedEvent::Error(error, option_path) => {
                             info!(
                                 "What was the error? {:?}\n the path should be: {:?}",
                                 error.to_string(),
@@ -114,9 +117,9 @@ impl Client {
     fn set_watchers(&mut self) {
         for anchor in self.config.anchors.iter() {
             let interval = Duration::from_secs(anchor.interval.into());
-            let mut watcher = watcher(self.send.clone(), interval).expect("couldn't create watch");
+            let mut watcher = notify::watcher(self.send.clone(), interval).expect("couldn't create watch");
 
-            match watcher.watch(anchor.path.clone(), RecursiveMode::Recursive) {
+            match watcher.watch(anchor.path.clone(), notify::RecursiveMode::Recursive) {
                 Err(_) => {
                     warn!("unable to set watcher for: '{}'", anchor.path.display());
                     continue;
@@ -168,9 +171,8 @@ impl Client {
         });
 
         for watch in self.config.anchors.iter() {
-            let mut watcher =
-                watcher(self.send.clone(), Duration::from_secs(1)).expect("couldn't create watch");
-            let result = watcher.watch(watch.path.clone(), RecursiveMode::Recursive);
+            let mut watcher =  notify::watcher(self.send.clone(), Duration::from_secs(1)).expect("couldn't create watch");
+            let result = watcher.watch(watch.path.clone(), notify::RecursiveMode::Recursive);
 
             match result {
                 Err(_) => {

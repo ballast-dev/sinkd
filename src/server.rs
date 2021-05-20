@@ -1,1 +1,3 @@
-// Server side daemon
+/*
+Server side daemon
+*/
