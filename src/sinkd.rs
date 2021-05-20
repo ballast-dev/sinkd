@@ -22,24 +22,29 @@ fn gen_keys() -> bool {
     }
 }
 
-fn copy_keys_to_remote(host: &str) {
+fn copy_keys_to_remote(host: &str) -> bool {
     // todo: add an optional force flag '-f'
-    let command_str = format!("ssh-copy-id -i ~/.ssh/id_ed25519.pub {}", host);
 
-    let echo = process::Command::new("sh")
+    let shell = process::Command::new("sh")
         .arg("-c")
-        .arg(command_str)
+        .arg(format!("ssh-copy-id -i ~/.ssh/id_ed25519.pub {}", host))
         .stdout(process::Stdio::null())
         .output()
         .unwrap();
 
     // let echo_stdout = String::from_utf8_lossy(&echo.stdout);
-    let echo_stderr = String::from_utf8_lossy(&echo.stderr);
-    if echo_stderr.contains("already exist") {
+    let shell_stderr = String::from_utf8_lossy(&shell.stderr);
+
+    if shell_stderr.contains("denied") {
+        return false;
+    }
+
+    if shell_stderr.contains("already exist") {
         println!("ssh key already exist on server");
     } else {
         println!("ssh key loaded on remote system");
     }
+
 
     process::Command::new("sh")
         .arg("-c")
@@ -47,6 +52,7 @@ fn copy_keys_to_remote(host: &str) {
         .output()
         .unwrap();
     println!("loaded private key with ssh-agent, passwordless login enabled!")
+    return true;
 }
 
 pub fn init(host: &str) {
