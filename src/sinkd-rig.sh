@@ -2,9 +2,10 @@
 
 # first set up ssh keys for passwordless login
 printf '\n\n' | ssh-keygen -t ed25519
-ssh-copy-id remote_user@remote_IP
+echo $1 | ssh-copy-id -i ~/.ssh/id_ed25519.pub remote_user@remote_IP
 eval $(ssh-agent)
 ssh-add ~/.ssh/ed25519
+# ssh-add, adds private key to authentication agent allowing passwordless login
 
 
 # Now need to set up rsync daemon 

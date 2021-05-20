@@ -8,6 +8,7 @@ extern crate serde_derive;
 extern crate log;
 extern crate libc;
 extern crate paho_mqtt;
+extern crate rpassword;
 
 
 mod rigging;
@@ -23,6 +24,16 @@ pub fn build_sinkd() -> App<'static, 'static> {
     App::new("sinkd")
         .about("deployable cloud")
         .version(env!("CARGO_PKG_VERSION"))
+        .subcommand(App::new("init")
+            .alias("rig")
+            .about("Setup ssh keys, and start daemon on remote machine")
+            .arg(Arg::with_name("HOSTNAME")
+                .required(true)
+                // .number_of_values(1)
+                .help("hostname or IP address of remote machine")
+            )
+            .help("usage: sinkd init HOSTNAME")
+        )
         .subcommand(App::new("add")
             .alias("anchor")
             .about("Adds PATH to watch list")
@@ -117,7 +128,9 @@ fn main() {
     if let Some(matches) = matches.subcommand_matches("adduser") {
         sinkd::adduser(matches.values_of("USER").unwrap().collect());
     }
-
+    if let Some(sub_matches) = matches.subcommand_matches("init") { 
+        sinkd::init(sub_matches.value_of("HOSTNAME").unwrap()); // unwrap is safe here due to checks
+    }
     if let Some(_) = matches.subcommand_matches("ls")      { sinkd::list(); }
     if let Some(_) = matches.subcommand_matches("rm")      { sinkd::remove(); }
     if let Some(_) = matches.subcommand_matches("start")   { sinkd::start(); }
