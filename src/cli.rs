@@ -157,7 +157,6 @@ pub fn start() {
 
     match daemonize.start() {
         Ok(_) => {
-            println!("started daemon!");
             Barge::new().daemon();
         },
         Err(e) => eprintln!("Error Daemonize, {}", e),
@@ -166,14 +165,42 @@ pub fn start() {
 
 pub fn stop() {
     println!("stopping daemon");
-
-    let sinkd_pid: String = String::from_utf8_lossy(&std::fs::read("/run/sinkd.pid").unwrap()).parse().unwrap();
-    // need to keep pid of barge process in separate file
-    std::process::Command::new("kill")
-                           .arg("-15")
-                           .arg(sinkd_pid)
-                           .output()
-                           .expect("ERROR couldn't kill daemon");
+    let pid_path = crate::io::get_sinkd_path().join("pid");
+    match std::fs::read(&pid_path) {
+        Err(err) => {
+            eprintln!("Error stoping sinkd, {}", err);
+            return;
+        },
+        Ok(contents) => {
+            let pid_str = String::from_utf8_lossy(&contents);
+            
+            match pid_str.parse::<u32>() {
+                Err(e2) => {
+                    eprintln!("Unable to parse contents, {}", e2);
+                    // return;
+                },
+                Ok(pid) => {
+                    println!("killing process {}", &pid);
+                    std::process::Command::new("kill")
+                                           .arg("-15")
+                                           .arg(pid_str.as_ref())
+                                           .output()
+                                           .expect("ERROR couldn't kill daemon");
+                }
+            }
+        }
+    }
+    match std::fs::write(&pid_path, "") {
+        Err(err) => eprintln!("couldn't clear pid in ~/.sinkd/pid\n{}", err),
+        Ok(()) =>   println!("cleared pid")
+    }
+    // let sinkd_pid: String = String::from_utf8_lossy(&std::fs::read(pid_path).unwrap()).parse().unwrap();
+    // // need to keep pid of barge process in separate file
+    // std::process::Command::new("kill")
+    //                        .arg("-15")
+    //                        .arg(sinkd_pid)
+    //                        .output()
+    //                        .expect("ERROR couldn't kill daemon");
 }
 
 pub fn restart() {
