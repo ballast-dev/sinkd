@@ -40,34 +40,33 @@ impl Caravel {
             match self.events.recv() {
                 Ok(event) => {
                     match event {
-                        NoticeWrite(path) => self.synchronize(path),
-                        NoticeRemove(path) => self.synchronize(path),
+                        NoticeWrite(_) => {}, // do nothing
+                        NoticeRemove(_) => {}, // do nothing for notices
                         Create(path) => self.synchronize(path),
                         Write(path) => self.synchronize(path),
                         Chmod(path) => self.synchronize(path),
                         Remove(path) => self.synchronize(path),
-                        Rename(path, anotherPath) => self.synchronize(path),
+                        Rename(path, _) => self.synchronize(path),
                         Rescan => {}, 
                         Error(error, option_path) => {
-                            info!("the path should be: {:?}", option_path.unwrap());
+                            info!("What was the error? {:?}\n the path should be: {:?}", error.to_string(), option_path.unwrap());
                         }
                     }
-                    // fire off rsync 
-                    // this is client side
-                    // server should never invoke rsync
-                    // purely client side driven, with mqtt updates from server
                     
                 },
-                Err(e) => info!("watch error: {:?}", e),
+                Err(e) => info!("Received DebouncedEvent error: {:?}", e),
             }
             std::thread::sleep(std::time::Duration::from_millis(10))
         }
     }
 
     fn synchronize(&mut self, path: PathBuf) {
+
+        // need to check path against .... do i? 
+        // debouncedevent gives me parent path
         // Path is parent to file being changed
         std::process::Command::new("rsync")
-                              .arg("-a")
+                              .arg("-a") // to archive 
                               .arg(&path)
                               .arg("/mnt/c/Users/tony/Projects/sinkd_copy/")
                               .spawn()

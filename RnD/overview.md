@@ -43,23 +43,14 @@ With package elevation:
 # /____/ /_/  /_/ /_//_/|_| \__,_/     \___/ \____//_/ /_//_/    /_/  _\__, /  
 #                                                                     /____/   
 
-Interval = 5 # in seconds
-
-[[Users]]
-name = "bob"
-ssh_pubkey = "" # From ssh-keygen on server
-
-[[Users]]
-name = "tony"
-ssh_pubkey = ""
-
-[[AnchorPoint]]
-tld = "top/level/dir" # recursive 
-users = ["bob", ..]
-excludes = ["dir1", "dir2"]
-
-...
 ```
+
+## Folder Structure between Client and Server
+
+| client side | server side |
+| ----------- | ----------- |
+| `/absolute/path/to/stuff` | `/opt/sinkd/[user]/absolute/path/to/stuff` |
+
 
    
 #### Dynamic DNS
