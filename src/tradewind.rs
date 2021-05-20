@@ -36,10 +36,13 @@ impl Caravel {
         loop {
             match self.events.recv() {
                 Ok(event) => {
-                    // handle event
+                    // fire off rsync 
+                    // this is client side
+                    // server should never invoke rsync
+                    // purely client side driven, with mqtt updates from server
                     info!("{:?}", event);
                 },
-                Err(e) => println!("watch error: {:?}", e),
+                Err(e) => info!("watch error: {:?}", e),
             }
             std::thread::sleep(std::time::Duration::from_millis(10))
         }
@@ -53,7 +56,7 @@ impl Caravel {
 
         match fs::read_to_string("/etc/sinkd.conf") {
             Err(error) => {
-                println!("unable to open file '{}'", error);
+                info!("unable to open file '{}'", error);
                 return false;
             }
             Ok(output) => {
@@ -70,12 +73,12 @@ impl Caravel {
 
             match watcher.watch(anchorage.path.clone(), RecursiveMode::Recursive) {
                 Err(_) => {
-                    println!("{:<30} not found, unable to set watcher", anchorage.path.display());
+                    warn!("unable to set watcher for: '{}'", anchorage.path.display());
                     continue;
                 },
                 Ok(_) => {
                     self.parrots.push(watcher); // transfers ownership
-                    println!("pushed a Parrot, for this dir => {}", anchorage.path.display());
+                    info!("pushed a Parrot for: '{}'", anchorage.path.display());
                 }
             }
 
@@ -83,17 +86,16 @@ impl Caravel {
     }
 
     fn conf_append(&mut self, file_to_watch: String, users: Vec<String>, interval: u32, excludes: Vec<String>) {
-        let new_watch = Anchorage {
+        // need to clear the vector, or upon initialization
+        self.config.anchorages.push( Anchorage {
             path: PathBuf::from(file_to_watch),
             users,
             interval,
             excludes,
-        };
-        // need to clear the vector, or upon initialization
-        self.config.anchorages.push(new_watch);
+        });
         let new_overlook = toml::to_string_pretty(&self.config);
 
-        println!("__conf append__\n{:?}", new_overlook);
+        info!("__conf append__\n{:?}", new_overlook);
     }
 
     /**
@@ -103,7 +105,7 @@ impl Caravel {
      * sinkd anchor FOLDER [-i | --interval] SECS
      */
     pub fn anchor(&mut self, mut file_to_watch: String, interval: u32, excludes: Vec<String>) {
-        println!("anchoring...");
+        info!("anchoring...");
         if &file_to_watch == "." {
             file_to_watch = env::current_dir().unwrap().to_string_lossy().to_string();
         }
@@ -123,17 +125,17 @@ impl Caravel {
 
             match result {
                 Err(_) => {
-                    println!("{:<30} not found, unable to set watcher", watch.path.display());
+                    info!("{:<30} not found, unable to set watcher", watch.path.display());
                     continue;
                 },
                 Ok(_) => {
                     self.parrots.push(watcher); // transfers ownership
-                    println!("pushed a Parrot, for this dir => {}", watch.path.display());
+                    info!("pushed a Parrot, for this dir => {}", watch.path.display());
                 }
             }
 
         }
-        println!("anchor points is this -->{:?}", self.config.anchorages);
+        info!("anchor points is this -->{:?}", self.config.anchorages);
 
     }
 

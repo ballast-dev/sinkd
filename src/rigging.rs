@@ -3,33 +3,40 @@
 // Serialized structures from Configuration
 use std::path::PathBuf;
 
+pub trait BuildAnchor {
+    fn add_watch(&mut self, path: PathBuf, users: Vec<String>, interval: u32, excludes: Vec<String>);
+}
+
+pub trait FormedAnchor {
+    fn add_watch(&mut self, anchorage: Anchorage);
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
     pub users: Vec<User>,
     pub anchorages: Vec<Anchorage>,
 }
 
-impl Config {
+impl Config{
     pub fn new() -> Config {
         Config {
             users: User::create(),
             anchorages: vec![Anchorage::new()],
         }
     }
+}
 
-    pub fn add_watch(
-        &mut self,
-        path: PathBuf,
-        users: Vec<String>,
-        interval: u32,
-        excludes: Vec<String>,
-    ) {
-        self.anchorages.push(Anchorage {
-            path,
-            users,
-            interval,
-            excludes,
-        });
+
+// method overloading... 
+impl BuildAnchor for Config {
+    fn add_watch(&mut self, path: PathBuf, users: Vec<String>, interval: u32, excludes: Vec<String>) {
+        self.anchorages.push(Anchorage::from(path, users, interval, excludes));
+    }
+}
+
+impl FormedAnchor for Config {
+    fn add_watch(&mut self, anchorage: Anchorage) {
+        self.anchorages.push(anchorage);
     }
 }
 
@@ -67,6 +74,15 @@ impl Anchorage {
             users: Vec::<String>::new(),
             interval: 5, // defaults to 5 secs?
             excludes: Vec::new(),
+        }
+    }
+
+    pub fn from(path: PathBuf, users: Vec<String>, interval: u32, excludes: Vec<String>) -> Anchorage {
+        Anchorage {
+            path, 
+            users,
+            interval,
+            excludes
         }
     }
 
