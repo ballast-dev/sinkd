@@ -30,54 +30,61 @@ fn main() {
     let matches = App::new("sinkd")
                         .version("0.1.0")
                         .about("deployable cloud, drop anchor and go")
+                        // can't get around the fact need to runn install 
+                        // script on the server...
                         .subcommand(SubCommand::with_name("deploy")
-                            .about("deploys sinkd to given IP")
+                            .about("enable daemon, pushes edits to given IP")
                             .arg(Arg::with_name("IP")
                                 .required(true)
                                 .help("IPv4 address, ssh access required")
                             )
                             .help("sets up sinkd server on remote computer")
                         )
-                        .subcommand(SubCommand::with_name("anchor")
+                        .subcommand(SubCommand::with_name("add")
                             .about("adds folder/file to watch list")
                             .arg(Arg::with_name("FILE")
                                 .required(true)
                                 .help("sinkd starts watching folder/file")
                             )
                             .help("usage: sinkd anchor [OPTION] FILE\n\
-                                   lets sinkd become `aware` of file or folder location provided")
+                                   lets sinkd become 'aware' of file or folder location provided")
                         )
-                        .subcommand(SubCommand::with_name("parley")
-                            // really nice printout
-                            .about("list watched dirs")
+                        .subcommand(SubCommand::with_name("list")
+                            .alias("ls")
+                            .arg(Arg::with_name("PATH")
+                                .required(false)
+                                .help("list watched files and directories from supplied PATH")
+                            )
+                            .help("list currently watched directories")
                         )
-                        .subcommand(SubCommand::with_name("brig")
+                        .subcommand(SubCommand::with_name("remove")
+                            .alias("rm")
                             .about("removes PATH from list of watched directories")
-                            .help("usage: sinkd brig PATH")
+                            .arg(Arg::with_name("PATH")
+                                .required(true)
+                            )
+                            .help("usage: sinkd remove PATH")
                         )
-                        .subcommand(SubCommand::with_name("underway")
-                            .about("starts local daemon to watch over files|folders")
-                            .help("no option necessary, spawns daemon locally")
+
+                        // daemon should be started and refreshed automagically
+
+                        .subcommand(SubCommand::with_name("stop")
+                            .about("stops daemon")
                         )
-                        .subcommand(SubCommand::with_name("snag")
-                            .about("stops the sinkd daemon")
-                        )
-                        .subcommand(SubCommand::with_name("oilskins")
+                        .subcommand(SubCommand::with_name("refresh")
                             .about("stops and starts the daemon (updates config)")
                         )
                         .subcommand(SubCommand::with_name("recruit")
+                            .alias("adduser")
                             .about("add user to watch")
                             .help("sinkd recruit USER DIRECTORY")
                         )
                         .get_matches();
 
-// Gets a value for config if supplied by user, or defaults to "default.conf"
-//  let config = matches.value_of("config").unwrap_or("default.conf");
-//  println!("Value for config: {}", config);
 
     if let Some(matches) = matches.subcommand_matches("deploy") {
         
-        let ip = matches.value_of("IP").unwrap();
+        let ip = matches.value_of("IP").unwrap_or("localhost");
         let valid_ip = Regex::new(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$").unwrap(); 
 
         if valid_ip.is_match(ip) {
@@ -99,16 +106,25 @@ fn main() {
         }
     }
     
-    if let Some(matches) = matches.subcommand_matches("underway") {
+    if let Some(matches) = matches.subcommand_matches("deploy") {
         cli::underway(cli::DaemonType::Barge);
     }
 
-    if let Some(matches) = matches.subcommand_matches("snag") {
-        cli::snag();
+    if let Some(matches) = matches.subcommand_matches("add") {
+        cli::add();
     }
 
-    if let Some(matches) = matches.subcommand_matches("oilskins") {
-        cli::oilskins();
+    if let Some(matches) = matches.subcommand_matches("list") {
+        cli::list();
     }
+
+    if let Some(matches) = matches.subcommand_matches("remove") {
+        cli::remove();
+    }
+
+    if let Some(matches) = matches.subcommand_matches("stop") {
+        cli::stop();
+    }
+
 
 }

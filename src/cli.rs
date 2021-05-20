@@ -19,6 +19,7 @@ pub fn deploy(ip: &str) -> bool {
     // starts the daemon remotely (If not already deployed)
     // ssh into another machine
     // and start the sinkd daemon
+    println!("Deployed!");
     return true // able to start daemon on another computer
 }
 //
@@ -32,7 +33,7 @@ pub enum DaemonType {
 }
 
 /** localhost file syncing separate daemons */
-pub fn anchor(daemon_type: DaemonType ,file: String) -> bool {
+pub fn anchor(daemon_type: DaemonType, file: String) -> bool {
 
     match daemon_type {
         DaemonType::Barge => {
@@ -50,34 +51,36 @@ pub fn anchor(daemon_type: DaemonType ,file: String) -> bool {
 }
 
 pub fn recruit(user: &str) {
-    // add user to list of users who have permission to watch the directory
-
+    println!("add user to list of users who have permission to watch the directory")
 }
 
-pub fn parley() {
-    // print out all sinkd folders
+pub fn add() {
+    println!("add folder to watch list")
 }
 
-pub fn brig() {
-    // ncurses TUI that shows all folders with progress bar on the bottom
-    // repeat for every char "-\|/#"
+pub fn list() {
+    println!("print out list of all watched folders")
 }
+
+pub fn stop() {
+    println!("stopping daemon")
+}
+
+pub fn refresh() {
+    println!("refreshing")
+}
+
+pub fn remove() {
+    println!("remove files and folders")
+}
+
 
 // the same daemon should run on both machines ( in the same place )
-pub fn underway(daemon_type: DaemonType ) {
+pub fn underway(daemon_type: DaemonType) {
     // 1 parse config 
     // 2 put running rust code
     match daemon_type {
         DaemonType::Barge => println!("starting barge"),
         DaemonType::Harbor => println!("starting harbor"),
     }
-}
-
-// stops the server
-pub fn snag() {
-}
-
-// calls stop then start (restart)
-pub fn oilskins() {
-
 }
