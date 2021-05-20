@@ -165,6 +165,10 @@ fn main() {
         ("stop",    Some(_)) => { sinkd::stop();},
         ("restart", Some(_)) => { sinkd::restart()},
         ("log",     Some(_)) => { sinkd::log()},
-        _ => { println!("invalid command, try -h for options"); }
+        _ => {
+            use ropework::*;
+            print_fancyln("deploy the anchor matey!", Attrs::INVERSE, Colors::YELLOW); 
+            println!("invalid command, try -h for options"); 
+        }
     }
 }

@@ -7,6 +7,7 @@
 look at [sinkd-rig.sh](../sinkd-rig.sh)
 
 # sinkd stop harbor
+_why the echo $1?_ 
 ```bash
 ssh [user@]host << EOF
 echo $1 | sudo kill -15 $(cat /run/rsync.pid)
