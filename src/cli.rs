@@ -3,9 +3,11 @@
  */
 use crate::daemon::barge::Barge;
 use crate::daemon::harbor::Harbor;
+use crate::hawser;
 use daemonize::Daemonize;
 use clap::*;
 use std::fs;
+
 
 
 pub enum DaemonType {
@@ -91,11 +93,16 @@ pub fn build_cli() -> App<'static, 'static> {
         .subcommand(App::new("restart")
             .about("Restarts sinkd, reloading configuration")
         )
+        .subcommand(App::new("log")
+            .about("test out logging")
+        )
  
 }
 
 
 pub fn add(daemon_type: DaemonType, file: String) -> bool {
+
+    // info!(target: "sinkd add event", "thing being added {:?}", file);
 
     match daemon_type {
         DaemonType::Barge => {
@@ -129,7 +136,7 @@ pub fn list() {
 pub fn start() {
     // USER is an environment variable for *nix systems
     // NOTE: no intention to be used on windows
-    let sinkd_path = crate::io::get_sinkd_path();
+    let sinkd_path = hawser::get_sinkd_path();
     let pid_path = sinkd_path.join("pid");
 
     if !pid_path.exists() { // then create file
@@ -164,7 +171,7 @@ pub fn start() {
 }
 
 pub fn stop() {
-    let pid_path = crate::io::get_sinkd_path().join("pid");
+    let pid_path = hawser::get_sinkd_path().join("pid");
     match std::fs::read(&pid_path) {
         Err(err) => {
             eprintln!("Error stoping sinkd, {}", err);
@@ -214,4 +221,10 @@ pub fn daemon() {
     //     DaemonType::Harbor => println!("starting harbor"),
     // }
     Barge::new().daemon()
+}
+
+pub fn log() {
+    info!("hello log");
+    warn!("warning");
+    error!("oops");
 }

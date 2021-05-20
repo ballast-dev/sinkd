@@ -2,13 +2,14 @@
 
 ## commands
 
-1. `add` # add file/folder
-1. `adduser` # add user? 
-1. `ls` # list current watches
-1. `rm` # remove watch
-1. `rmuser` # remove user?
-1. `start` # start barge daemon
-1. `stop` # stop barge daemon
+1. `add/anchor` # add file/folder
+1. `adduser/hire` # add user? 
+1. `ls/parley` # list current watches
+1. `rm/brig` # remove watch
+1. `rmuser/fire` # remove user?
+1. `start/deploy` # start barge daemon
+1. `stop/snag` # stop barge daemon
+1. `restart/oilskins` # start & stop (updates config)
 > 1. `config`
 
 ## New Approach

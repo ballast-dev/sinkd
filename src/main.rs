@@ -4,15 +4,18 @@ extern crate regex;
 extern crate toml;
 #[macro_use]
 extern crate serde_derive;
+#[macro_use]
+extern crate log;
+// #![feature(const_fn)]
 
 
 use std::path::Path;
 // use std::process::exit as exit;
 
 mod cli;
-mod io;
 mod daemon;
 mod defs;
+mod hawser;
 
 #[allow(dead_code)]
 fn main() {
@@ -51,6 +54,10 @@ fn main() {
     
     if let Some(_) = matches.subcommand_matches("restart") {
         cli::restart();
+    }
+
+    if let Some(_) = matches.subcommand_matches("log") {
+        cli::log();
     }
 
     if matches.is_present("daemon") {

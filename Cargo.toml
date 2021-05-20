@@ -12,6 +12,7 @@ serde = "1.0.117"
 serde_derive = "1.0.117"
 toml = "0.5.7"
 daemonize = "0.4.1"
+log = "0.4.11"
 
 # [build-dependencies]
 # clap = "2.33.0"
