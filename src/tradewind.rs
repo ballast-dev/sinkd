@@ -69,10 +69,16 @@ impl Caravel {
         // Path is parent to file being changed
         std::process::Command::new("rsync")
                               .arg("-a") // to archive 
+                              .arg("--exclude=exclude*")
                               .arg(&parent_path)
-                              .arg("tony@cerberus:/srv/sinkd/")
+                              // current user is used 
+                              // '/srv/sinkd/user' will have permissions of user (to prevent rsync errors)
+                              .arg("cerberus:/srv/sinkd/tony")
                               .spawn()
-                              .expect("rsync failed");
+                              .expect({
+                                  error!("Cannot invoke rsync!");
+                                  "rsync is not valid"
+                              });
 
         info!("{:?}", &parent_path);
     }
