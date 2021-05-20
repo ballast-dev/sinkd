@@ -11,7 +11,7 @@ pub fn get_sinkd_path() -> path::PathBuf {
     };
     
     if !sinkd_path.exists() {
-        match std::fs::create_dir(&sinkd_path) {
+        match std::fs::create_dir_all(&sinkd_path) {
             Err(why) => println!("cannot create {:?}, {:?}", sinkd_path, why.kind()),
             Ok(_) => {},
         }

@@ -18,9 +18,9 @@ mod sinkd;
 mod mqtt;
 mod setup;
 mod server;
+mod test;
 
 use clap::*;
-use config::SysConfig;
 
 pub fn build_sinkd() -> App<'static, 'static> {
     App::new("sinkd")
@@ -28,7 +28,7 @@ pub fn build_sinkd() -> App<'static, 'static> {
         .version(env!("CARGO_PKG_VERSION"))
         .subcommand(App::new("init")
             .display_order(1)
-            .about("Setup sinkd on client and server")
+            .about("Setup sinkd on client or server")
             .arg(Arg::with_name("CLIENT")
                 .long("client")
                 .help("initialize sinkd daemon on client")
@@ -94,38 +94,6 @@ pub fn build_sinkd() -> App<'static, 'static> {
         )
 }
 
-#[test]
-fn config() {
-    let sys_config: SysConfig = match config::get_sys_config() {
-        Ok(sys_config) => { sys_config },
-        Err(err) => {
-            panic!("/etc/sinkd.conf ERROR {}", err);
-        }
-    };
-    for user in sys_config.users {
-        let _cfg = format!("/home/{}/.config/sinkd.conf", user);
-        match std::fs::read_to_string(&_cfg) {
-            Ok(_) => {
-                println!("going to user {}", &user);
-                match config::get_user_config(&user) {
-                    Ok(_) => {},
-                    Err(e) => {
-                        panic!("Error {}, {}", &_cfg, e)
-                    }
-                }
-            },
-            Err(_) => { 
-                eprintln!("configuration not loaded for {}", &user) 
-            }
-        }
-    }
-}
-
-#[test]
-fn dummy() {
-    println!("sucess?");
-}
-
 
 #[allow(dead_code)]
 fn main() {
@@ -172,10 +140,6 @@ fn main() {
         ("stop",    Some(_)) => { sinkd::stop();},
         ("restart", Some(_)) => { sinkd::restart()},
         ("log",     Some(_)) => { sinkd::log()},
-        _ => {
-            use utils::*;
-            print_fancyln("deploy the anchor matey!", Attrs::INVERSE, Colors::YELLOW); 
-            println!("invalid command, try -h for options"); 
-        }
+        _ => {}
     }
 }

@@ -169,8 +169,6 @@ impl Client {
         //     interval,
         //     excludes,
         // });
-
-        // for watch in self.config.anchors.iter() {
         //     let mut watcher =  notify::watcher(self.send.clone(), Duration::from_secs(1)).expect("couldn't create watch");
         //     let result = watcher.watch(watch.path.clone(), notify::RecursiveMode::Recursive);
 
