@@ -4,7 +4,7 @@
 # Sinkd daemon
 # will synchronize two folders
 # will be invoked on the terminal
-import os
+import subprocess
 
 
 local_folder = "/path/to/local_folder"
@@ -21,8 +21,12 @@ def request():
     remote_folder = input("And the remote folder you want to anchor to: ")
 
 def load_configs (folder_loc):
-    set_config = "mkdir " + folder_loc + ".sinkd/"
-    os.system(set_config)
+    if (folder_loc):
+        # set the last character to '/'
+    cfg_dir = folder_loc + ".sinkd/"
+    # mk_cfg_dir = "mkdir " + cfg_dir
+    subprocess.run(["mkdir", cfg_dir])
+    subprocess.run(["touch", cfg_dir + "config"])
 
 def display(arg):
     print(arg)
@@ -35,3 +39,18 @@ load_configs(local_folder)
 
 #bash_command = "echo YAY!"
 #os.system(bash_command)
+
+
+
+########## How to pipe with subprocess.
+# # print 'Hello World' to stdout
+# command1 = ['echo']
+# command1.append('Hello World')
+# process1 = subprocess.Popen(command1,stdout=subprocess.PIPE)
+#
+# # Find 'hello' in the input and print that match to stdout
+# command2 = ['grep']
+# command2.append('-o')
+# command2.append('-i')
+# command2.append('hello')
+# process2 = subprocess.Popen(command2,stdin=process1.stdout,stdout=subprocess.PIPE)

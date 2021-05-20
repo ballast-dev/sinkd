@@ -35,8 +35,15 @@ Do you want to host your files on your own server? We do too. Sinkd is a deploya
 5. Secure Shell and Secure File Transfer Protocol for Security
 
 ___
-`rsync` will be the transfer lib
+## Other thoughts
+#### Model View Controller Design
+Restructure the `web/` side of the app to be modular
+* view = html/css _separate folder?_
+* model = `db/username` and mysql database
+* controller = `main.php` **user event driven**
 
-`inotify` is the kernel call to notify the OS of changes to folders
+#### Daemon
+* `rsync` will be the transfer lib
+* `inotify` is the kernel call to notify the OS of changes to folders
 
 (Written By): Tony Bright
