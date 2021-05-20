@@ -10,6 +10,7 @@ Intro:
 Do you want to host your files on your own server?
 We do too. Sinkd is a deployable cloud!
 Just give it two folder paths (local and remote) and **drop anchor**
+```
                               _-_
                              |(_)|
                               |||
