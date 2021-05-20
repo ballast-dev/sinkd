@@ -26,7 +26,7 @@ pub fn build_sinkd() -> App<'static, 'static> {
         .version(env!("CARGO_PKG_VERSION"))
         .subcommand(App::new("setup")
             .display_order(1)
-            .alias("rig")
+            .visible_alias("rig")
             .about("Setup sinkd on local and remote")
             .arg(Arg::with_name("SETUP_KEYS")
                 .short("k")
@@ -114,6 +114,11 @@ pub fn build_sinkd() -> App<'static, 'static> {
         .subcommand(App::new("log")
             .about("test out logging")
         )
+        .arg(Arg::with_name("verbose")
+            .short("v")
+            .multiple(true)
+            .help("verbose output")
+        )
 }
 
 
@@ -127,12 +132,19 @@ fn main() {
     // std::process::exit(0);
 
     let matches = build_sinkd().get_matches();
+    let mut verbosity: u8 = 0;
+    match matches.occurrences_of("verbose") {
+        1 => verbosity = 1, // informationation
+        2 => verbosity = 2, // 
+        3 => verbosity = 3,
+        _ => ()
+    }
     
     if let Some(sub_matches) = matches.subcommand_matches("setup") { 
         if let Some(host) = sub_matches.value_of("SETUP_KEYS") {
-            sinkd::setup_keys(&host);
+            sinkd::setup_keys(verbosity, &host);
         } if let Some(host) = sub_matches.value_of("SETUP_SERVER") {
-            sinkd::setup_server(&host);
+            sinkd::setup_server(verbosity, &host);
         }
     }
     

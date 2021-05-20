@@ -9,17 +9,22 @@ fn gen_keys() -> bool {
         .stdout(process::Stdio::null())
         .arg("-c")
         .arg("printf '\n\n' | ssh-keygen -t dsa")  // will *not* overwrite 
-        .output();
-    match shell {
-        Err(x) => {
-            println!("unable to generate ssh keys, is ssh installed?\n{:?}", x.to_string());
-            return false;
-        }
-        Ok(_) => {
-            println!("generated key for current user");
-            return true;
-        }
+        .output()
+        .unwrap();
+
+    let shell_stderr = String::from_utf8_lossy(&shell.stderr);
+
+    if shell_stderr.contains("not found") {
+        println!("command not found: ssh-keygen, is ssh installed?");
+        return false;
     }
+
+    if shell_stderr.contains("already exist") {
+        println!("keys already have been generated");
+    } else {
+        println!("generated key for current user");
+    }
+    return true;
 }
 
 fn copy_keys_to_remote(host: &str) -> bool {
@@ -47,13 +52,21 @@ fn copy_keys_to_remote(host: &str) -> bool {
     }
 
 
-    process::Command::new("sh")
+    let shell = process::Command::new("sh")
         .arg("-c")
         .arg("eval $(ssh-agent) && ssh-add ~/.ssh/id_ed25519")
         .output()
         .unwrap();
-    println!("loaded private key with ssh-agent, passwordless login enabled!");
-    return true;
+        
+    let shell_stderr = String::from_utf8_lossy(&shell.stderr);
+    
+    if shell_stderr.contains("not found") {
+        println!("command not found: ssh-eval, is ssh installed?");
+        return false;
+    } else {
+        println!("loaded private key with ssh-agent, passwordless login enabled!");
+        return true;
+    }
 }
 
 fn set_up_rsync_daemon(host: &str, pass: &str) {
@@ -81,20 +94,32 @@ ENDCONF
     EOF
     "#, host, pass, pass, pass, pass, connections, pass);
 
-    process::Command::new("sh")
+    let shell = process::Command::new("sh")
     .arg("-c")
     .arg(command_str)
     .stdout(process::Stdio::null())
     .output()
     .unwrap();
+
+    let shell_stderr = String::from_utf8_lossy(&shell.stderr);
+    
+    if shell_stderr.contains("not found") {
+        println!("command not found: ssh-eval, is ssh installed?");
+    } else if shell_stderr.contains("denied") {
+        println!("access denied on remote, bad password?")
+    } else {
+        println!("loaded private key with ssh-agent, passwordless login enabled!");
+        //~ Did it!
+    }
+
 }
 
-pub fn setup_server(host: &str) {
+pub fn setup_server(verbosity: u8, host: &str) {
     let pass = rpassword::prompt_password_stdout("setting up daemon on server...\npassword: ").unwrap();
     set_up_rsync_daemon(&host, &pass);
 }
 
-pub fn setup_keys(host: &str) {
+pub fn setup_keys(verbosity: u8, host: &str) {
     if gen_keys() {
         if copy_keys_to_remote(host) {
            
