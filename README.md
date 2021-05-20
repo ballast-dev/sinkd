@@ -9,13 +9,7 @@ Intro:
 
 Do you want to host your files on your own server?
 We do too. Sinkd is a deployable cloud!
-Just give it two folder paths (local and remote) and you are good to go!
-Just ...
-make sure you have access to both machines (write permissions)
-and then
-
-**drop anchor**
-```
+Just give it two folder paths (local and remote) and **drop anchor**
                               _-_
                              |(_)|
                               |||
@@ -66,5 +60,3 @@ Restructure the `web/` side of the app to be modular
 #### Daemon
 * `rsync` will be the transfer lib
 * `inotify` is the kernel call to notify the OS of changes to folders
-
-(Written By): Tony Bright
