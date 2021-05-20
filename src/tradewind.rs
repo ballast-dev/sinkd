@@ -48,10 +48,8 @@ impl Caravel {
 
     fn load_conf(&mut self) -> bool {
 
-        self.config.owner.key.clear();
-        self.config.owner.name.clear();
         self.config.users.clear();
-        self.config.anchor_points.clear();
+        self.config.anchorages.clear();
 
         match fs::read_to_string("/etc/sinkd.conf") {
             Err(error) => {
@@ -66,18 +64,18 @@ impl Caravel {
     }
 
     fn set_watchers(&mut self) {
-        for watch in self.config.anchor_points.iter() {
-            let mut watcher = watcher(self.send.clone(), Duration::from_secs(1)).expect("couldn't create watch");
-            let result = watcher.watch(watch.path.clone(), RecursiveMode::Recursive);
+        for anchorage in self.config.anchorages.iter() {
+            let interval = Duration::from_secs(anchorage.interval.into());
+            let mut watcher = watcher(self.send.clone(), interval).expect("couldn't create watch");
 
-            match result {
+            match watcher.watch(anchorage.path.clone(), RecursiveMode::Recursive) {
                 Err(_) => {
-                    println!("{:<30} not found, unable to set watcher", watch.path.display());
+                    println!("{:<30} not found, unable to set watcher", anchorage.path.display());
                     continue;
                 },
                 Ok(_) => {
                     self.parrots.push(watcher); // transfers ownership
-                    println!("pushed a Parrot, for this dir => {}", watch.path.display());
+                    println!("pushed a Parrot, for this dir => {}", anchorage.path.display());
                 }
             }
 
@@ -92,7 +90,7 @@ impl Caravel {
             excludes,
         };
         // need to clear the vector, or upon initialization
-        self.config.anchor_points.push(new_watch);
+        self.config.anchorages.push(new_watch);
         let new_overlook = toml::to_string_pretty(&self.config);
 
         println!("__conf append__\n{:?}", new_overlook);
@@ -110,7 +108,7 @@ impl Caravel {
             file_to_watch = env::current_dir().unwrap().to_string_lossy().to_string();
         }
         self.load_conf();  // not sure if daemon should already be running
-        self.config.anchor_points.push(
+        self.config.anchorages.push(
             Anchorage {
                 path: PathBuf::from(file_to_watch.clone()),
                 users: Vec::new(), // need to pass empty vec
@@ -119,7 +117,7 @@ impl Caravel {
             }
         );
 
-        for watch in self.config.anchor_points.iter() {
+        for watch in self.config.anchorages.iter() {
             let mut watcher = watcher(self.send.clone(), Duration::from_secs(1)).expect("couldn't create watch");
             let result = watcher.watch(watch.path.clone(), RecursiveMode::Recursive);
 
@@ -135,7 +133,7 @@ impl Caravel {
             }
 
         }
-        println!("anchor points is this -->{:?}", self.config.anchor_points);
+        println!("anchor points is this -->{:?}", self.config.anchorages);
 
     }
 

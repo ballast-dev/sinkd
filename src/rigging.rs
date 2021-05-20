@@ -5,17 +5,15 @@ use std::path::PathBuf;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
-    pub owner: Owner,
     pub users: Vec<User>,
-    pub anchor_points: Vec<Anchorage>,
+    pub anchorages: Vec<Anchorage>,
 }
 
 impl Config {
     pub fn new() -> Config {
         Config {
-            owner: Owner::new(),
             users: User::create(),
-            anchor_points: vec![Anchorage::new()],
+            anchorages: vec![Anchorage::new()],
         }
     }
 
@@ -26,7 +24,7 @@ impl Config {
         interval: u32,
         excludes: Vec<String>,
     ) {
-        self.anchor_points.push(Anchorage {
+        self.anchorages.push(Anchorage {
             path,
             users,
             interval,
@@ -35,34 +33,18 @@ impl Config {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Owner {
-    pub name: String,
-    pub key: String,
-}
-
-impl Owner {
-    pub fn new() -> Owner {
-        Owner {
-            name: String::from("new_owner"),
-            key: String::from("owner_key"),
-        }
-    }
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct User {
     pub name: String,
-    pub address: String,
-    pub ssh_key: String,
+    pub host: String,
 }
 
 impl User {
     pub fn new() -> User {
         User {
-            name: String::from("new_user_name"),
-            address: String::from("new_user_addr"),
-            ssh_key: String::from("new_user_key"),
+            name: String::from("new_username"),
+            host: String::from("new_hostname"),
         }
     }
     pub fn create() -> Vec<User> {
@@ -114,10 +96,17 @@ impl Anchorage {
     }
 
     pub fn add_user(&mut self, _user: &str) -> bool {
+        // if (users.count == 0) implicity means to share the anchorage
+        // moves the folder from: server_root/opt/sinkd/user/anchorage
+        //                  to:   server_root/opt/sinkd/share/anchorage
+        // should probably lock it down to certain group `sinkd` 
         return true;
     }
 
     pub fn rm_user(&mut self, _user: &str) -> bool {
+        // if (users.count == 0) implicity means to un-share the anchorage
+        // moves the folder from: server_root/opt/sinkd/share/anchorage
+        //                  to:   server_root/opt/sinkd/user/anchorage
         return true;
     }
 }
