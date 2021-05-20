@@ -127,46 +127,55 @@ impl Anchorage {
     }
 }
 
-pub struct TimeStamp;
-use libc;
-use std::ffi::CString;
-extern {
-    fn strftime(s: *mut libc::c_char, max: libc::size_t, format: *const libc::c_char, tm: *mut libc::tm) -> libc::size_t;
-}
 
-
-use libc::c_char;
+use libc::{c_char, c_uint};
 use std::ops::Deref;
-use std::ffi::CStr;
+use std::ffi::{CStr, CString};
+use std::convert::TryInto;
 
 extern "C" {
-    fn hello() -> *const c_char;
-    fn goodbye(s: *const c_char);
+    // fn hello() -> *const c_char;
+    // fn goodbye(s: *const c_char);
+    fn get_timestamp(ret_str: *mut c_char, size: c_uint, fmt_str: *const c_char);
 }
 
-struct Greeting {
-    message: *const c_char,
-}
 
-impl Drop for Greeting {
-    fn drop(&mut self) {
-        unsafe {
-            goodbye(self.message);
-        }
-    }
-}
+pub fn set_timestamp(dest: &mut String, fmt_str: &mut str) {
+    let size: u32 = fmt_str.len().try_into().unwrap();
+    let ret_str = CString::new(vec![]).unwrap();
+    let ret_ptr: *mut c_char = ret_str.clone().into_raw();
 
-impl Greeting {
-    fn new() -> Greeting {
-        Greeting { message: unsafe { hello() } }
-    }
-}
+    let _fmt_str = CString::new(fmt_str.as_bytes()).unwrap();
+    unsafe { get_timestamp(ret_ptr, size, _fmt_str.as_ptr()); }
+    dest = ret_str.as_c_str().to_str().unwrap().into_ok();
+ }
 
-impl Deref for Greeting {
-    type Target = str;
 
-    fn deref<'a>(&'a self) -> &'a str {
-        let c_str = unsafe { CStr::from_ptr(self.message) };
-        c_str.to_str().unwrap()
-    }
-}
+
+
+// struct Greeting {
+//     message: *const c_char,
+// }
+
+// impl Drop for Greeting {
+//     fn drop(&mut self) {
+//         unsafe {
+//             goodbye(self.message);
+//         }
+//     }
+// }
+
+// impl Greeting {
+//     fn new() -> Greeting {
+//         Greeting { message: unsafe { hello() } }
+//     }
+// }
+
+// impl Deref for Greeting {
+//     type Target = str;
+
+//     fn deref<'a>(&'a self) -> &'a str {
+//         let c_str = unsafe { CStr::from_ptr(self.message) };
+//         c_str.to_str().unwrap()
+//     }
+// }
