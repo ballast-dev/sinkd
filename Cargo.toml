@@ -1,2 +1,2 @@
 [workspace]
-members = ["anchor", "barge"]
+members = ["harbor", "barge"]

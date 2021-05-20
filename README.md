@@ -1,52 +1,42 @@
-
-### > R O U G H  D R A F T <
-
 # Sinkd
 ##### Everything and the kitchen sink
 ### deployable cloud, when you want, where you want
-___
-Intro:
-
+## Intro:
 Do you want to host your files on your own server?
 We do too. Sinkd is a deployable cloud!
-Just give it two folder paths (local and remote) and **drop anchor**
 
-**~~~~~~~~~~~~~~~~~> anchor and deploy <~~~~~~~~~~~~~~~~~~~~**
+### Harbor Steps (Server)
+1. make sure ssh keys are set up, manual or automatic?
+1. create folder on server machine ~/sinkd/
+1. two subfolders (on server)
+  - `harbor/` root folder location
+  - `.git/` (feature enhancement) for versioning and back up (_git-lfs needed_)
+1. invoke rsync daemon on port 9816 (tb). 
+1. incorporate this into `init.d/` to initialize at boot
+__Feature Enhancement__  
+To aide in set up
+  - GUI
+  - TUI (ncurses lib in rust) 
 
-rsync between two directories over specialize port 9816 
-using mqtt to handle notify messages between folders
-invoke inotify on linux to retreive folder actions. 
-Or maybe a boolean since last write. 
-
-run rsync as a daemon underneath the hood. delta algorithm
-has been proven. Maybe cron job the folder ? once a minute? 
-use as many threads (thread pool!), maybe multiprocess
-
-`sinkd deploy 192.168.1.1`
-1) create folder in user chosen location
-2) invoke rsync daemon watching the folder. 
-3) have the anchor running forever waiting for connection loop{}
-4) vessel (client) will be worked upon, push up to anchor
-5) make sure within user space (no passwords needed) except pre known
+### Barge Steps (Client)
+  - Need to setup a configuration file that is parsed upon invocation
+  - name the file sinkd.json (_checkout yaml-rust_)
+1. user specifies location of `sinkd` folder. 
+1. `sinkd` will run user-wide, and operate on loaded directories within it's configuration 
+1. upon "anchoring" the folder sinkd will become aware and watch for events
+1. upon event change, invoke rsync
+1. maybe set a config value to limit file syncing to a known cycle ( 1sec - 1hr ) 
 
 
-first thing sinkd needs to know about two folder locations
-I think I need two binaries 'daemon'=>'anchor' and 'client'=>'barge'
-anchor should run as the server on another machine (asynchronous) 
+## Command Line Interface
+  - `sinkd deploy IP` creates harbor on server
+  - `sinkd anchor DIRECTORY` creates DIRECTORY on harbor (server file location)
+    - loads DIRECTORY in sinkd.json (top-level)
+    - possibility of multiple directories inside harbor folder
 
-Update to daemon -> incorporate this into `init.d/` daemons that initialize at boot
+## Will use SSH key-based authentication
+For security and authentication, use an ssh tunnel for file transfers
 
-## Anchor/Daemon
-  - this will comand line driven (GUI will come later)
-  - rsync can be invoked as a daemon, wrap this up to be a running job in rust
-  - set up folder for sinkd, (user defined)  
-  - `inotify` is the kernel call to notify the OS of changes to folders
-
-## Barge/Client
-  - loads up folder to hook into the daemon running on the anchor point 
-  - changes will be invoked on the barge, then transferred to anchor
-  - ...
-___
 ## Other thoughts
 #### Model View Controller Design
 Restructure the `web/` side of the app to be modular
