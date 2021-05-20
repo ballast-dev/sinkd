@@ -13,7 +13,7 @@ use notify::{Watcher, RecursiveMode, watcher};
 use std::sync::mpsc::channel;
 use std::time::Duration;
 
-fn main() {
+fn barge() {
     // Create a channel to receive the events.
     let (tx, rx) = channel();
 

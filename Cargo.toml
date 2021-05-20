@@ -1,2 +1,9 @@
-[workspace]
-members = ["harbor", "barge"]
+[package]
+name = "sinkd"
+version = "0.1.0"
+authors = ["Tony <tbright@sandel.com>"]
+edition = "2018"
+
+[dependencies]
+clap = "2.32.0"
+notify = "4.0.7"

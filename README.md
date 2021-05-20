@@ -33,6 +33,9 @@ To aide in set up
   - `sinkd anchor DIRECTORY` creates DIRECTORY on harbor (server file location)
     - loads DIRECTORY in sinkd.json (top-level)
     - possibility of multiple directories inside harbor folder
+  - `sinkd start` starts daemon
+  - `sinkd stop` stops daemon
+  - `sinkd restart` restarts daemon
 
 ## Will use SSH key-based authentication
 For security and authentication, use an ssh tunnel for file transfers
