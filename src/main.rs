@@ -24,7 +24,7 @@ pub fn build_sinkd() -> App<'static, 'static> {
     App::new("sinkd")
         .about("deployable cloud")
         .version(env!("CARGO_PKG_VERSION"))
-        .subcommand(App::new("init")
+        .subcommand(App::new("setup-keys")
             .alias("rig")
             .about("Setup ssh keys, and start daemon on remote machine")
             .arg(Arg::with_name("HOSTNAME")
@@ -128,8 +128,8 @@ fn main() {
     if let Some(matches) = matches.subcommand_matches("adduser") {
         sinkd::adduser(matches.values_of("USER").unwrap().collect());
     }
-    if let Some(sub_matches) = matches.subcommand_matches("init") { 
-        sinkd::init(sub_matches.value_of("HOSTNAME").unwrap()); // unwrap is safe here due to checks
+    if let Some(sub_matches) = matches.subcommand_matches("setup-keys") { 
+        sinkd::setup_keys(sub_matches.value_of("HOSTNAME").unwrap()); // unwrap is safe here due to checks
     }
     if let Some(_) = matches.subcommand_matches("ls")      { sinkd::list(); }
     if let Some(_) = matches.subcommand_matches("rm")      { sinkd::remove(); }

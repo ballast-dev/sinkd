@@ -51,16 +51,53 @@ fn copy_keys_to_remote(host: &str) -> bool {
         .arg("eval $(ssh-agent) && ssh-add ~/.ssh/id_ed25519")
         .output()
         .unwrap();
-    println!("loaded private key with ssh-agent, passwordless login enabled!")
+    println!("loaded private key with ssh-agent, passwordless login enabled!");
     return true;
 }
 
-pub fn init(host: &str) {
-    if gen_keys() {
-        // let pass = rpassword::prompt_password_stdout("setting ssh-keys on remote...\npassword: ").unwrap();
-        copy_keys_to_remote(host);
+fn set_up_rsync_daemon(pass: &str) {
+    let connections = 5;
+    process::Command::new("sh")
+    .arg("-c")
+    .arg(format!(r#"ssh tony@hydra << EOF
+local HISTSIZE=0  
+echo {} | sudo -Sk mkdir /srv/sinkd
+echo {} | sudo -Sk groupadd sinkd 
+echo {} | sudo -Sk chgrp sinkd /srv/sinkd
+echo {} | sudo -Sk tee /etc/rsyncd.conf << ENDCONF
+uid = nobody
+gid = nobody
+use chroot = no
+max connections = {}
+syslog facility = local5
+pid file = /run/rsyncd.pid
 
-        
+[sinkd]
+    path = /srv/sinkd
+    read only = false
+    #gid = $GROUP
+
+# HEREDOC is the way 
+
+ENDCONF
+echo {} | sudo -Sk rsync --daemon
+EOF
+"#, pass, pass, pass, pass, connections, pass))
+    .stdout(process::Stdio::null())
+    .output()
+    .unwrap();
+}
+
+pub fn start_remote() {
+    let pass = rpassword::prompt_password_stdout("setting up daemon on server...\npassword: ").unwrap();
+    set_up_rsync_daemon(&pass);
+}
+
+pub fn setup_keys(host: &str) {
+    if gen_keys() {
+        if copy_keys_to_remote(host) {
+           
+        }
     }
     
     // let mut du_output_child = Command::new("du")
