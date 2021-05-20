@@ -7,6 +7,7 @@ use daemonize::Daemonize;
 use clap::*;
 use std::fs;
 
+
 pub enum DaemonType {
     Barge,
     Harbor,
@@ -126,20 +127,10 @@ pub fn list() {
  * Need to set up logging keep everything local to home directory ~/
  */
 pub fn start() {
-    let user = env!("USER");
-    let home_dir = if cfg!(target_os = "macos") {
-        std::path::Path::new("/Users").join(user)
-    } else {
-        std::path::Path::new("/home").join(user)
-    };    
-    let sinkd_path = home_dir.join(".sinkd");
-    println!("{:?}", sinkd_path);
-    match fs::create_dir(&sinkd_path) {
-        Err(why) => println!("cannot create dir => {:?}", why.kind()),
-        Ok(_) => {},
-    }
+    // USER is an environment variable for *nix systems
+    // NOTE: no intention to be used on windows
+    let sinkd_path = crate::io::get_sinkd_path();
     let pid_path = sinkd_path.join("pid");
-    // fs::create_dir(path).unwrap_or(println!("uh oh....")); // already created return empty unit
 
     // need to use correct path ~ is not interpretted
     let pid_file = fs::File::open(&pid_path).unwrap_or(
@@ -150,8 +141,6 @@ pub fn start() {
     permissions.set_readonly(false);
     fs::set_permissions(&pid_path, permissions).expect("cannot set permission");
     
-    println!("daemonize?");
-
     let daemonize = Daemonize::new()
         .pid_file(pid_path);
         ///// is the rest needed? having the pid within the users directory prevents ownership issues

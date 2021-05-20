@@ -10,6 +10,7 @@ use std::path::Path;
 // use std::process::exit as exit;
 
 mod cli;
+mod io;
 mod daemon;
 mod defs;
 
