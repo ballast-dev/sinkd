@@ -1,4 +1,15 @@
 #!/bin/bash
+
+# first set up ssh keys for passwordless login
+printf '\n\n' | ssh-keygen -t ed25519
+ssh-copy-id remote_user@remote_IP
+eval $(ssh-agent)
+ssh-add ~/.ssh/ed25519
+
+
+# Now need to set up rsync daemon 
+# priviledge acces is required for setup 
+# password is required but will be gathered from user 
 CONNECTIONS=14
 GROUP='sinkd'
 
