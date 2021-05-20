@@ -3,6 +3,7 @@
 * ---------
 */
 use std::fs;
+use std::env;
 use notify::{Watcher, RecursiveMode, watcher};
 use std::sync::mpsc::channel;
 use std::time::Duration;
@@ -124,12 +125,16 @@ impl Barge {
     }
 
     /**
-     * upon edit of overlookuration restart the daemon
+     * upon edit of overlook
+     * restart the daemon
      * 
      * sinkd anchor FOLDER [-i | --interval] SECS
      */
-    pub fn anchor(&mut self, file_to_watch: String, interval: u32, excludes: Vec<String>) -> bool {
-
+    pub fn anchor(&mut self, mut file_to_watch: String, interval: u32, excludes: Vec<String>) -> bool {
+        
+        if &file_to_watch == "." {
+            file_to_watch = env::current_dir().unwrap().to_string_lossy().to_string();
+        }
         self.load_conf();  // not sure if daemon should already be running
         self.overlook.anchor_points.push(
             AnchorPoint {
@@ -143,17 +148,6 @@ impl Barge {
         // restart daemon ???
 
 
-        // self.overlook.users.push(
-        //     User {
-        //         name: String::from("new_guy"),
-        //         address: String::from("atlantis"),
-        //         ssh_key: String::from("some_key"),
-        //     }
-        // );
-
-        // self.conf_append(file_to_watch, users, interval, excludes);
-
-
         // Create a channel to receive the events.
 
         // Create a watcher object, delivering debounced events.
@@ -164,11 +158,11 @@ impl Barge {
         for watch in self.overlook.anchor_points.iter() {
             let (tx, rx) = channel();
             let mut watcher = watcher(tx, Duration::from_secs(1)).expect("couldn't create watch");
-            let result = watcher.watch(file_to_watch.clone(), RecursiveMode::Recursive);
+            let result = watcher.watch(watch.path.clone(), RecursiveMode::Recursive);
 
             match result {
                 Err(_) => {
-                    println!("path not found, unable to set watcher");
+                    println!("{:<30} not found, unable to set watcher", watch.path.display());
                     continue;
                 },
 
@@ -181,7 +175,7 @@ impl Barge {
             //         watcher: watcher.clone() 
             //     } 
             // );
-            println!("pushed a Parrot, for this dir => {}", file_to_watch);
+            println!("pushed a Parrot, for this dir => {}", watch.path.display());
 
         }
         println!("anchor points is this -->{:?}", self.overlook.anchor_points);
