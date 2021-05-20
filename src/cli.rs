@@ -3,7 +3,7 @@
  */
 use crate::daemon::barge::Barge;
 use crate::daemon::harbor::Harbor;
-
+use clap::*;
 
 //
 // D E P L O Y 
@@ -19,7 +19,7 @@ pub fn deploy(ip: &str) -> bool {
     // starts the daemon remotely (If not already deployed)
     // ssh into another machine
     // and start the sinkd daemon
-    println!("Deployed!");
+    println!("Deployed to {}!", ip);
     return true // able to start daemon on another computer
 }
 //
@@ -30,6 +30,59 @@ pub fn deploy(ip: &str) -> bool {
 pub enum DaemonType {
     Barge,
     Harbor,
+}
+
+pub fn build_cli() -> App<'static, 'static> {
+    App::new("sinkd")
+        .version("0.1.0")
+        .about("deployable cloud, drop anchor and go")
+        .subcommand(SubCommand::with_name("deploy")
+            .about("enable daemon, pushes edits to given IP")
+            .arg(Arg::with_name("IP")
+                .required(true)
+                .help("IPv4 address, ssh access required")
+            )
+            .help("sets up sinkd server on remote computer")
+        )
+        .subcommand(SubCommand::with_name("add")
+            .about("adds folder/file to watch list")
+            .arg(Arg::with_name("FILE")
+                .required(true)
+                .help("sinkd starts watching folder/file")
+            )
+            .help("usage: sinkd anchor [OPTION] FILE\n\
+                lets sinkd become 'aware' of file or folder location provided")
+        )
+        .subcommand(SubCommand::with_name("ls")
+            .alias("list")
+            .arg(Arg::with_name("PATH")
+                .required(false)
+                .help("list watched files and directories from supplied PATH")
+            )
+            .help("list currently watched directories")
+        )
+        .subcommand(SubCommand::with_name("rm")
+            .alias("remove")
+            .about("removes PATH from list of watched directories")
+            .arg(Arg::with_name("PATH")
+                .required(true)
+            )
+            .help("usage: sinkd remove PATH")
+        )
+        // daemon should be started and refreshed automagically
+        .subcommand(SubCommand::with_name("stop")
+            .about("stops daemon")
+        )
+        .subcommand(SubCommand::with_name("refresh")
+            .about("stops and starts the daemon (updates config)")
+        )
+        .subcommand(SubCommand::with_name("adduser")
+            .about("add user to watch")
+            .arg(Arg::with_name("[USER...]")
+            .required(true)
+            .help("sinkd recruit USER DIRECTORY")
+        )
+    )
 }
 
 /** localhost file syncing separate daemons */
@@ -50,8 +103,9 @@ pub fn anchor(daemon_type: DaemonType, file: String) -> bool {
     }
 }
 
-pub fn recruit(user: &str) {
-    println!("add user to list of users who have permission to watch the directory")
+pub fn recruit(users: Vec<&str>) {
+    println!("add {:?} to list of users who have permission to watch the directory",
+             users)
 }
 
 pub fn add() {

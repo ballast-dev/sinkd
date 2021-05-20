@@ -27,61 +27,10 @@ mod defs;
 
 #[allow(dead_code)]
 fn main() {
-    let matches = App::new("sinkd")
-                        .version("0.1.0")
-                        .about("deployable cloud, drop anchor and go")
-                        // can't get around the fact need to runn install 
-                        // script on the server...
-                        .subcommand(SubCommand::with_name("deploy")
-                            .about("enable daemon, pushes edits to given IP")
-                            .arg(Arg::with_name("IP")
-                                .required(true)
-                                .help("IPv4 address, ssh access required")
-                            )
-                            .help("sets up sinkd server on remote computer")
-                        )
-                        .subcommand(SubCommand::with_name("add")
-                            .about("adds folder/file to watch list")
-                            .arg(Arg::with_name("FILE")
-                                .required(true)
-                                .help("sinkd starts watching folder/file")
-                            )
-                            .help("usage: sinkd anchor [OPTION] FILE\n\
-                                   lets sinkd become 'aware' of file or folder location provided")
-                        )
-                        .subcommand(SubCommand::with_name("list")
-                            .alias("ls")
-                            .arg(Arg::with_name("PATH")
-                                .required(false)
-                                .help("list watched files and directories from supplied PATH")
-                            )
-                            .help("list currently watched directories")
-                        )
-                        .subcommand(SubCommand::with_name("remove")
-                            .alias("rm")
-                            .about("removes PATH from list of watched directories")
-                            .arg(Arg::with_name("PATH")
-                                .required(true)
-                            )
-                            .help("usage: sinkd remove PATH")
-                        )
-
-                        // daemon should be started and refreshed automagically
-
-                        .subcommand(SubCommand::with_name("stop")
-                            .about("stops daemon")
-                        )
-                        .subcommand(SubCommand::with_name("refresh")
-                            .about("stops and starts the daemon (updates config)")
-                        )
-                        .subcommand(SubCommand::with_name("recruit")
-                            .alias("adduser")
-                            .about("add user to watch")
-                            .help("sinkd recruit USER DIRECTORY")
-                        )
-                        .get_matches();
-
-
+    let matches = cli::build_cli().get_matches();
+    // need a build.rs file for compile time generation
+    // matches.gen_completions("sinkd_gen", clap::Shell::Zsh, "/home/tony/");
+            
     if let Some(matches) = matches.subcommand_matches("deploy") {
         
         let ip = matches.value_of("IP").unwrap_or("localhost");
@@ -124,6 +73,10 @@ fn main() {
 
     if let Some(matches) = matches.subcommand_matches("stop") {
         cli::stop();
+    }
+
+    if let Some(matches) = matches.subcommand_matches("recruit") {
+        cli::recruit(matches.values_of("USER").unwrap().collect());
     }
 
 
