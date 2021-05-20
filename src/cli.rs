@@ -132,14 +132,13 @@ pub fn start() {
     let sinkd_path = crate::io::get_sinkd_path();
     let pid_path = sinkd_path.join("pid");
 
-    // need to use correct path ~ is not interpretted
-    let pid_file = fs::File::open(&pid_path).unwrap_or(
-        fs::File::create(&pid_path).expect("Unable to create file")
-    );
-    let metadata = pid_file.metadata().unwrap();
-    let mut permissions = metadata.permissions();
-    permissions.set_readonly(false);
-    fs::set_permissions(&pid_path, permissions).expect("cannot set permission");
+    if !pid_path.exists() { // then create file
+        let pid_file = fs::File::create(&pid_path).expect("unable to create pid file, permissions?");
+        let metadata = pid_file.metadata().unwrap();
+        let mut permissions = metadata.permissions();
+        permissions.set_readonly(false);
+        fs::set_permissions(&pid_path, permissions).expect("cannot set permission");
+    }
     
     let daemonize = Daemonize::new()
         .pid_file(pid_path);
@@ -158,13 +157,13 @@ pub fn start() {
     match daemonize.start() {
         Ok(_) => {
             Barge::new().daemon();
+            println!("sinkd started")
         },
-        Err(e) => eprintln!("Error Daemonize, {}", e),
+        Err(e) => eprintln!("sinkd did not start (already running?), {}", e),
     }
 }
 
 pub fn stop() {
-    println!("stopping daemon");
     let pid_path = crate::io::get_sinkd_path().join("pid");
     match std::fs::read(&pid_path) {
         Err(err) => {
@@ -176,8 +175,9 @@ pub fn stop() {
             
             match pid_str.parse::<u32>() {
                 Err(e2) => {
-                    eprintln!("Unable to parse contents, {}", e2);
-                    // return;
+                    eprintln!("sinkd not running?");
+                    eprintln!("{}", e2);
+                    return;
                 },
                 Ok(pid) => {
                     println!("killing process {}", &pid);
@@ -192,15 +192,8 @@ pub fn stop() {
     }
     match std::fs::write(&pid_path, "") {
         Err(err) => eprintln!("couldn't clear pid in ~/.sinkd/pid\n{}", err),
-        Ok(()) =>   println!("cleared pid")
+        Ok(()) =>   println!("stopped sinkd daemon")
     }
-    // let sinkd_pid: String = String::from_utf8_lossy(&std::fs::read(pid_path).unwrap()).parse().unwrap();
-    // // need to keep pid of barge process in separate file
-    // std::process::Command::new("kill")
-    //                        .arg("-15")
-    //                        .arg(sinkd_pid)
-    //                        .output()
-    //                        .expect("ERROR couldn't kill daemon");
 }
 
 pub fn restart() {

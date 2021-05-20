@@ -4,10 +4,13 @@ pub fn get_sinkd_path() -> std::path::PathBuf {
         std::path::Path::new("/Users").join(user).join(".sinkd")
     } else {
         std::path::Path::new("/home").join(user).join(".sinkd")
-    };    
-    match std::fs::create_dir(&sinkd_path) {
-        Err(why) => println!("cannot create dir => {:?}", why.kind()),
-        Ok(_) => {},
+    };
+    
+    if !sinkd_path.exists() {
+        match std::fs::create_dir(&sinkd_path) {
+            Err(why) => println!("cannot create {:?}, {:?}", sinkd_path, why.kind()),
+            Ok(_) => {},
+        }
     }
     return sinkd_path;
 } 
