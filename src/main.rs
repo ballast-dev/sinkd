@@ -1,16 +1,6 @@
-
-### > R O U G H  D R A F T <
-
-# Sinkd
-##### Everything and the kitchen sink
-### deployable cloud, when you want, where you want
-___
-Intro:
-
-Do you want to host your files on your own server?
-We do too. Sinkd is a deployable cloud!
-Just give it two folder paths (local and remote) and **drop anchor**
-
+/**
+ * -- sinkd
+ * 
  * ~~~~~~~~~~~~~~~~~> anchor and deploy <~~~~~~~~~~~~~~~~~~~~
  * 
  * rsync between two directories over specialize port 9816 
@@ -28,18 +18,10 @@ Just give it two folder paths (local and remote) and **drop anchor**
  * 3) have the anchor running forever waiting for connection loop{}
  * 4) vessel (client) will be worked upon, push up to anchor
  * 5) make sure within user space (no passwords needed) except pre known
+ */
 
 
-  - Update to daemon -> incorporate this into `init.d/` daemons that initialize at boot
+fn main() {
+    println!("Sinkd, bring everything with you and the kitchen sink");
 
-___
-## Other thoughts
-#### Model View Controller Design
-Restructure the `web/` side of the app to be modular
-* view = html/css _separate folder?_
-* model = `db/username` and mysql database
-* controller = `main.php` **user event driven**
-
-#### Daemon
-* `rsync` will be the transfer lib
-* `inotify` is the kernel call to notify the OS of changes to folders
+}

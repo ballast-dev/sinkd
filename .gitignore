@@ -1,3 +1,2 @@
-#Python virtual environment
-env/
-.bash_history
+/target
+**/*.rs.bk

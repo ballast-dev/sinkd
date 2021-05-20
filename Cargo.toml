@@ -1,0 +1,6 @@
+[package]
+name = "sinkd"
+version = "0.1.0"
+authors = ["Tony <tbright@sandel.com>"]
+
+[dependencies]
