@@ -1,4 +1,4 @@
-use std::fs;
+use std::{error::Error, fs};
 use std::env;
 use notify::{Watcher, RecursiveMode, watcher};
 use notify::DebouncedEvent::*;
@@ -56,7 +56,8 @@ impl Caravel {
                 },
                 Err(e) => info!("Received DebouncedEvent error: {:?}", e),
             }
-            std::thread::sleep(std::time::Duration::from_millis(10))
+            // TODO: to sleep on interval pulled from configuration
+            // std::thread::sleep(std::time::Duration::from_secs(1));
         }
     }
 
@@ -64,22 +65,30 @@ impl Caravel {
 
         // let dest = // should be remote path pulled from config
 
+        let source_folder = &parent_path.parent().unwrap();
+        let dest_path = "/home/tony/lab/server/";
+        info!("source:{:?}, dest:{:?}", source_folder, dest_path);
+
         // need to check path against .... do i? 
         // debouncedevent gives me parent path
         // Path is parent to file being changed
-        std::process::Command::new("rsync")
+        let rsync_result = std::process::Command::new("rsync")
                               .arg("-a") // to archive 
-                              .arg("--exclude=exclude*")
-                              .arg(&parent_path)
+                            //   .arg("--exclude=exclude*")
+                              .arg(source_folder)
                               // current user is used 
                               // '/srv/sinkd/user' will have permissions of user (to prevent rsync errors)
-                              .arg("cerberus:/srv/sinkd/tony")
-                              .spawn()
-                              .expect({
-                                  error!("Cannot invoke rsync!");
-                                  "rsync is not valid"
-                              });
-
+                            //   .arg("cerberus:/srv/sinkd/tony")
+                              .arg(dest_path)
+                              .spawn();
+                            //   .expect({
+                            //       error!("Cannot invoke rsync!");
+                            //       "rsync is not valid"
+                            //   });
+        match rsync_result {
+            Err(x) => {error!("{:?}", x);}
+            Ok(_) => { /* spawned ok */}
+        }
         info!("{:?}", &parent_path);
     }
 
