@@ -36,11 +36,14 @@ pub enum DaemonType {
 
 /** localhost file syncing separate daemons */
 pub fn anchor(file: &str) -> bool {
-    println!("appending '{}' to watch files", file);    
+    println!("appending '{}' to watch files", file);   
+    let mut barge = Barge::new(); 
+    barge.anchor(file, 1, Vec::new()); 
     return true // able to watch directory
 }
 
-pub fn timoneer(user: &str) {
+pub fn recruit(user: &str) {
+    // add user to list of users who have permission to watch the directory
 
 }
 

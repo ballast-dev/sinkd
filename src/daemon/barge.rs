@@ -88,6 +88,7 @@ impl Overlook {
 pub struct Barge {
     deployed: bool,
     overlook: Overlook,
+    config: String,
 }
 
 impl Barge {
@@ -96,6 +97,7 @@ impl Barge {
         Barge {
             deployed: true,
             overlook: Overlook::new(),
+            config: String::from("nada")
         }
     }
 
@@ -134,29 +136,21 @@ impl Barge {
         // }
     }
 
-    fn load_conf(&self) -> bool {
+
+    fn load_conf() -> bool {
         // config file located in /etc/sinkd.conf
 
-        let read_status = fs::read_to_string("/etc/sinkd/sinkd.conf");
+        let read_result = fs::read_to_string("/etc/sinkd.conf");
         let mut conf = String::new();
-        match read_status {
-            Err(e) => println!("unable to open file '{}'", e),
-            Ok(o) => {
-                conf = o.clone();
+        match read_result {
+            Err(error) => println!("unable to open file '{}'", error),
+            Ok(output) => {
+                conf = output.clone();
             }
         }
 
         println!("conf ==>> {}", conf);
 
-    //     let s =
-    // "
-    // foo:
-    //     - list1
-    //     - list2
-    // bar:
-    //     - 1
-    //     - 2.0
-    // ";
     //     let docs = YamlLoader::load_from_str(s).unwrap();
 
     //     // Multi document support, doc is a yaml::Yaml
@@ -180,21 +174,26 @@ impl Barge {
         //     emitter.dump(doc).unwrap(); // dump the YAML object to a String
         // }
         // println!("{}", out_str);
-    true
+        true // did it
     }
+
     /**
      * upon edit of configuration restart the daemon
      * 
-     * sinkd anchor FOLDER -i | --interval SECS
+     * sinkd anchor FOLDER [-i | --interval] SECS
      */
-    fn anchor(&mut self, file_to_watch: &str, interval: u32, excludes: Vec<String>) -> bool {
-        let this_user_name = "found this username somehow";
+    pub fn anchor(&mut self, file_to_watch: &str, interval: u32, excludes: Vec<String>) -> bool {
+
+        println!("anchor?");
+        
+        let this_user_name = "Johnny Goodboy Tyler";
         self.overlook.patrol.push(
-            AnchorPoint::from( this_user_name,
-                               PathBuf::from(file_to_watch),
-                               interval,
-                               excludes)
+            AnchorPoint::from(this_user_name,
+                              PathBuf::from(file_to_watch),
+                              interval,
+                              excludes)
         );
+
         // anchor point can either be a file or a folder
 
         // 1 - open yaml file (/etc/sinkd.conf)
@@ -202,13 +201,15 @@ impl Barge {
         // 3 - append new FOLDER 
         // 4 - write new yaml
         // 5 - restart daemon (harbor)
+        Barge::load_conf();
+
 
         // Create a channel to receive the events.
         let (tx, rx) = channel();
 
         // Create a watcher object, delivering debounced events.
         // The notification back-end is selected based on the platform.
-        let mut watcher = watcher(tx, Duration::from_secs(1)).unwrap();
+        let mut watcher = watcher(tx, Duration::from_secs(1)).expect("couldn't create watch");
 
         // Add a path to be watched. All files and directories at that path and
         // below will be monitored for changes.
