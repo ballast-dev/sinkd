@@ -1,14 +1,14 @@
-## //////////////////////\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
-## ----------- R O U G H  D R A F T ---------------
-## \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\//////////////////////
+### //////////////////////\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+### -----------> R O U G H  D R A F T <---------------
+### \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\//////////////////////
 
 # Sinkd
 ##### Everything and the kitchen sink
 ### deployable cloud, when you want, where you want
-
+___
 Intro:
 
-Do you want to host your files on your own server? We do too. Sinkd is a deployable cloud just give it two folder paths (local and remote) and you are good to go! Just make sure you have access to both machines (write permissions) and **drop anchor**
+Do you want to host your files on your own server? We do too. Sinkd is a deployable cloud! Just give it two folder paths (local and remote) and you are good to go! Just make sure you have access to both machines (write permissions) and then **drop anchor**
 
 1. Script will start
 
