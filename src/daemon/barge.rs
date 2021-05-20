@@ -188,15 +188,13 @@ impl Barge {
      * sinkd anchor FOLDER -i | --interval SECS
      */
     fn anchor(&mut self, file_to_watch: &str, interval: u32, excludes: Vec<String>) -> bool {
-        let user_name = "found this username somehow";
-        // self.anchor_points.push(
-        //     AnchorPoint::from(
-        //         user_name,
-        //         self.overlook.patrol[0].path =  PathBuf::from(file_to_watch), // get index of patrol
-        //         interval,
-        //         excludes, 
-        //     )
-        // );
+        let this_user_name = "found this username somehow";
+        self.overlook.patrol.push(
+            AnchorPoint::from( this_user_name,
+                               PathBuf::from(file_to_watch),
+                               interval,
+                               excludes)
+        );
         // anchor point can either be a file or a folder
 
         // 1 - open yaml file (/etc/sinkd.conf)
