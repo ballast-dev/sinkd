@@ -78,21 +78,24 @@ impl Client {
             .arg("-a") // to archive
             //   .arg("--exclude=exclude*")
             .arg(&path)
-            // current user is used
-            //   .arg("cerberus:/srv/sinkd/tony")
-            .arg("...pulled from config? ")
+            // TODO check for current user
+            //.arg("cerberus:/srv/sinkd/tony")
+            .arg(&self.config.sys.server_addr)
             .spawn();
         match rsync_result {
             Err(x) => {
                 error!("{:?}", x);
             }
             Ok(_) => {
-                info!("Called rsync with source: {:?}", &path);
+                info!("Called rsync src:{}  ->  dest:{}", 
+                      &path.display(), 
+                      &self.config.sys.server_addr);
             }
         }
     }
 
     fn set_watchers(&mut self) {
+
         for anchor in self.config.sys.shares.iter() {
             let interval = Duration::from_secs(anchor.interval.into());
             let mut watcher = notify::watcher(self.send.clone(), interval).expect("couldn't create watch");
@@ -108,62 +111,26 @@ impl Client {
                 }
             }
         }
-    }
 
-    // fn conf_append(
-    //     &mut self,
-    //     file_to_watch: String,
-    //     users: Vec<String>,
-    //     interval: u32,
-    //     excludes: Vec<String>,
-    // ) {
-    //     // need to clear the vector, or upon initialization
-    //     self.config.anchors.push(Anchor {
-    //         path: PathBuf::from(file_to_watch),
-    //         users,
-    //         interval,
-    //         excludes,
-    //     });
-    //     let new_overlook = toml::to_string_pretty(&self.config);
+        for usr_cfg in &self.config.users {
+            // Client runs for all users
+            for anchor in &usr_cfg.1.anchors {
+                let interval = Duration::from_secs(anchor.interval.into());
+                let mut watcher = notify::watcher(self.send.clone(), interval).expect("couldn't create watch");
 
-    //     info!("__conf append__\n{:?}", new_overlook);
-    // }
-
-    /**
-     * upon edit of config
-     * restart the daemon
-     *
-     * sinkd anchor FOLDER [-i | --interval] SECS
-     */
-    pub fn anchor(&mut self, mut file_to_watch: String, interval: u32, excludes: Vec<String>) {
-        info!("anchoring...");
-        if &file_to_watch == "." {
-            file_to_watch = env::current_dir().unwrap().to_string_lossy().to_string();
+                match watcher.watch(anchor.path.clone(), notify::RecursiveMode::Recursive) {
+                    Err(_) => {
+                        warn!("unable to set watcher for: '{}'", anchor.path.display());
+                        continue;
+                    }
+                    Ok(_) => {
+                        self.watchers.push(watcher); // transfers ownership
+                        info!("set watcher for: '{}'", anchor.path.display());
+                    }
+                }
+            }
         }
-        // self.load_conf(); // not sure if daemon should already be running
-        // self.config.anchors.push(Anchor {
-        //     path: PathBuf::from(file_to_watch.clone()),
-        //     users: Vec::new(), // need to pass empty vec
-        //     interval,
-        //     excludes,
-        // });
-        //     let mut watcher =  notify::watcher(self.send.clone(), Duration::from_secs(1)).expect("couldn't create watch");
-        //     let result = watcher.watch(watch.path.clone(), notify::RecursiveMode::Recursive);
 
-        //     match result {
-        //         Err(_) => {
-        //             info!(
-        //                 "{:<30} not found, unable to set watcher",
-        //                 watch.path.display()
-        //             );
-        //             continue;
-        //         }
-        //         Ok(_) => {
-        //             self.watchers.push(watcher); // transfers ownership
-        //             info!("pushed a Parrot, for this dir => {}", watch.path.display());
-        //         }
-        //     }
-        // }
-        // info!("anchor points is this -->{:?}", self.config.anchors);
     }
+
 }

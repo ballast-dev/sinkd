@@ -1,4 +1,4 @@
-use crate::utils;
+use crate::{config, utils};
 use crate::client::Client;
 use daemonize::Daemonize;
 use std::{fs, u8};
@@ -23,7 +23,18 @@ pub fn add(file: &str) -> bool {
 }
 
 pub fn list() {
-    println!("print out list of all watched folders")
+    //TODO need to list system shares
+    let user = env!("USER");
+    match config::Config::get_user_config(user) {
+        Ok(usr_cfg) => {
+            for anchor in &usr_cfg.anchors {
+                println!("{}", anchor.path.display());
+            }
+        },
+        Err(e) => {
+            eprintln!("{}", e)
+        }
+    }
 }
 
 /**

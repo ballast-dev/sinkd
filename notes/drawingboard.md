@@ -49,6 +49,9 @@ With package elevation:
 - setup `sinkd` group 
 - create `/usr/lib/systemd/system/sinkd.service` 
 
+`sudo useradd -r -g sinkd sinkd` adds user sinkd and assigns group sinkd as well 
+`newgrp` to login to new group
+
 ```txt
 [Unit]
 Description=(description of your program)
