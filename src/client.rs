@@ -4,7 +4,7 @@ use std::env;
 use std::path::PathBuf;
 use std::sync::mpsc;
 use std::time::Duration;
-use std::{error::Error, fs};
+use std::fs;
 
 pub struct Client {
     // multiple produce single consumer
@@ -27,10 +27,10 @@ impl Client {
 
     // infinite loop unless broken by interrupt
     pub fn init(&mut self) {
-        if !self.load_conf() {
-            error!("Client did not start, unable to load configuration");
-            return;
-        }
+        // if !self.load_conf() {
+        //     error!("Client did not start, unable to load configuration");
+        //     return;
+        // }
         self.run();
     }
 
@@ -92,30 +92,30 @@ impl Client {
         }
     }
 
-    fn load_conf(&mut self) -> bool {
-        self.config.users.clear();
-        self.config.anchors.clear();
+    // fn load_conf(&mut self) -> bool {
+    //     self.config.users.clear();
+    //     self.config.anchors.clear();
 
-        let mut retval = false;
-        match fs::read_to_string("/etc/sinkd.conf") {
-            Err(error) => {
-                error!("unable to open /etc/sinkd.conf, {}", error);
-            }
-            Ok(output) => match toml::from_str(&output) {
-                Err(error) => {
-                    error!("couldn't parse '/etc/sinkd.conf' {}", error);
-                }
-                Ok(toml_parsed) => {
-                    self.config = toml_parsed;
-                    retval = true;
-                }
-            },
-        }
-        return retval;
-    }
+    //     let mut retval = false;
+    //     match fs::read_to_string("/etc/sinkd.conf") {
+    //         Err(error) => {
+    //             error!("unable to open /etc/sinkd.conf, {}", error);
+    //         }
+    //         Ok(output) => match toml::from_str(&output) {
+    //             Err(error) => {
+    //                 error!("couldn't parse '/etc/sinkd.conf' {}", error);
+    //             }
+    //             Ok(toml_parsed) => {
+    //                 self.config = toml_parsed;
+    //                 retval = true;
+    //             }
+    //         },
+    //     }
+    //     return retval;
+    // }
 
     fn set_watchers(&mut self) {
-        for anchor in self.config.anchors.iter() {
+        for anchor in self.config.sys.shares.iter() {
             let interval = Duration::from_secs(anchor.interval.into());
             let mut watcher = notify::watcher(self.send.clone(), interval).expect("couldn't create watch");
 
@@ -132,24 +132,24 @@ impl Client {
         }
     }
 
-    fn conf_append(
-        &mut self,
-        file_to_watch: String,
-        users: Vec<String>,
-        interval: u32,
-        excludes: Vec<String>,
-    ) {
-        // need to clear the vector, or upon initialization
-        self.config.anchors.push(Anchor {
-            path: PathBuf::from(file_to_watch),
-            users,
-            interval,
-            excludes,
-        });
-        let new_overlook = toml::to_string_pretty(&self.config);
+    // fn conf_append(
+    //     &mut self,
+    //     file_to_watch: String,
+    //     users: Vec<String>,
+    //     interval: u32,
+    //     excludes: Vec<String>,
+    // ) {
+    //     // need to clear the vector, or upon initialization
+    //     self.config.anchors.push(Anchor {
+    //         path: PathBuf::from(file_to_watch),
+    //         users,
+    //         interval,
+    //         excludes,
+    //     });
+    //     let new_overlook = toml::to_string_pretty(&self.config);
 
-        info!("__conf append__\n{:?}", new_overlook);
-    }
+    //     info!("__conf append__\n{:?}", new_overlook);
+    // }
 
     /**
      * upon edit of config
@@ -162,32 +162,32 @@ impl Client {
         if &file_to_watch == "." {
             file_to_watch = env::current_dir().unwrap().to_string_lossy().to_string();
         }
-        self.load_conf(); // not sure if daemon should already be running
-        self.config.anchors.push(Anchor {
-            path: PathBuf::from(file_to_watch.clone()),
-            users: Vec::new(), // need to pass empty vec
-            interval,
-            excludes,
-        });
+        // self.load_conf(); // not sure if daemon should already be running
+        // self.config.anchors.push(Anchor {
+        //     path: PathBuf::from(file_to_watch.clone()),
+        //     users: Vec::new(), // need to pass empty vec
+        //     interval,
+        //     excludes,
+        // });
 
-        for watch in self.config.anchors.iter() {
-            let mut watcher =  notify::watcher(self.send.clone(), Duration::from_secs(1)).expect("couldn't create watch");
-            let result = watcher.watch(watch.path.clone(), notify::RecursiveMode::Recursive);
+        // for watch in self.config.anchors.iter() {
+        //     let mut watcher =  notify::watcher(self.send.clone(), Duration::from_secs(1)).expect("couldn't create watch");
+        //     let result = watcher.watch(watch.path.clone(), notify::RecursiveMode::Recursive);
 
-            match result {
-                Err(_) => {
-                    info!(
-                        "{:<30} not found, unable to set watcher",
-                        watch.path.display()
-                    );
-                    continue;
-                }
-                Ok(_) => {
-                    self.watchers.push(watcher); // transfers ownership
-                    info!("pushed a Parrot, for this dir => {}", watch.path.display());
-                }
-            }
-        }
-        info!("anchor points is this -->{:?}", self.config.anchors);
+        //     match result {
+        //         Err(_) => {
+        //             info!(
+        //                 "{:<30} not found, unable to set watcher",
+        //                 watch.path.display()
+        //             );
+        //             continue;
+        //         }
+        //         Ok(_) => {
+        //             self.watchers.push(watcher); // transfers ownership
+        //             info!("pushed a Parrot, for this dir => {}", watch.path.display());
+        //         }
+        //     }
+        // }
+        // info!("anchor points is this -->{:?}", self.config.anchors);
     }
 }

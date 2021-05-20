@@ -10,7 +10,6 @@ extern crate libc;
 extern crate paho_mqtt;
 extern crate rpassword;
 
-
 mod config;
 mod client;
 mod utils;
@@ -41,6 +40,11 @@ pub fn build_sinkd() -> App<'static, 'static> {
         )
         .subcommand(App::new("add")
             .about("Adds PATH to watch list")
+            .arg(Arg::with_name("SHARE")
+                .short("s")
+                .long("share")
+                .help("add watch for multiple users")
+            )
             .arg(Arg::with_name("PATH")
                 .required(true)
                 .multiple(true) // CAREFUL: this will consume other arguments
@@ -87,6 +91,18 @@ pub fn build_sinkd() -> App<'static, 'static> {
             .multiple(true)
             .help("verbose output")
         )
+}
+
+#[test]
+fn load_configs() {
+    match config::get_sys_config() {
+        Ok(sys_config) => {
+            println!("oh yeah, loaded sysconfig\n{:?}", sys_config)
+        },
+        Err(err) => {
+            panic!("uh oh, check config! {}", err);
+        }
+    }
 }
 
 
