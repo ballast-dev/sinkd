@@ -3,7 +3,6 @@ use std::env;
 use notify::{Watcher, RecursiveMode, watcher};
 use std::sync::mpsc::channel;
 use std::time::Duration;
-use std::process::exit as exit;
 use std::path::PathBuf;
 use crate::rigging::*;
 
