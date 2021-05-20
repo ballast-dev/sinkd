@@ -1,83 +1,12 @@
-/**
- * rsync daemon wrapper
- * will create all essentials for rsync daemon on server machine
- */
-
-use notify::{Watcher, RecursiveMode, watcher};
-use yaml_rust::{YamlLoader, YamlEmitter};
-
-use std::sync::mpsc::channel;
-use std::time::Duration;
-use std::env;
-
-/**
- * B A R G E 
- * --- 
- * Client side of sinkd
- * 
- * set up vector of paths to watch parsed from sinkd.conf
- * `sinkd anchor FOLDER` will append to sinkd.conf
- * continuous loop listening for file events in given dirs
- * once file event happens call rsync. 
- * rsync daemon should pick up the call
- * 
- * __feature enhancement__
- * `atoll` will be a set of watched events 
- * under a set of known users
- * 
- * 
- * H A R B O R 
- * ---
- * Server side of sinkd
- * 
- * harbor initialized with IP
- * rsync daemon initialization (with custom config)
- * harbor will be `rsync` wrapper (ssh authentication)
- * Needs to be invoked at boot once installed (inetd?)
- * keep the server on /srv/sinkd/
- * rsync daemon should pick up the calls
- * 
- */
-use notify::{Watcher, RecursiveMode, watcher};
-use yaml_rust::{YamlLoader, YamlEmitter};
-
-use std::sync::mpsc::channel;
-use std::time::Duration;
-use std::env;
-use std::path::PathBuf;
-
-
-/* -----------
- * H A R B O R
- * ----------- 
- */
-
-// need to make a sinkd group for permissions
-pub struct Harbor {
-    config: String  // parsed yaml from /etc/sinkd.conf
-}
-
-impl Harbor {
-    pub fn init_rsyncd() {
-        // initialize the rsync daemon 
-        // `rsync --daemon`
-        // read the special config shipped with sinkd
-        // `sinkd deploy 10.0.0.1` should call this function
-
-        // the directory to store sinkd data is /srv/sinkd
-    }
-
-    fn parse_config() -> bool {
-        // make sure to have permission to read config file
-        return true
-    }
-}
-
-
 /* ---------
- * B A R G E
- * ---------
- */
+* B A R G E
+* ---------
+*/
+use std::fs;
+use std::path::PathBuf;
+use notify::{Watcher, RecursiveMode, watcher};
+use std::sync::mpsc::channel;
+use std::time::Duration;
 
 pub struct AnchorPoint {
     // directory to watch
@@ -105,9 +34,17 @@ impl AnchorPoint {
 
 pub struct Barge {
     anchor_points: Vec<AnchorPoint>,
+    config: String,
 }
 
 impl Barge {
+
+    pub fn new() -> Barge {
+        Barge {
+            anchor_points: Vec::new(),
+            config: String::new(), 
+        }
+    }
 
     pub fn load_config() -> bool {
         // config should always be located in /etc/sinkd.conf
@@ -137,8 +74,19 @@ impl Barge {
         // }
     }
 
-    pub fn parse_conf() -> bool {
+    pub fn parse_conf(&self) -> bool {
         // config file located in /etc/sinkd.conf
+
+        let read_status = fs::read_to_string("/etc/sinkd/sinkd.conf");
+        let mut conf = String::new();
+        match read_status {
+            Err(e) => println!("unable to open file '{}'", e),
+            Ok(o) => {
+                conf = o.clone();
+            }
+        }
+
+        println!("conf ==>> {}", conf);
 
     //     let s =
     // "
@@ -237,7 +185,7 @@ impl Barge {
 
 /************************************
  ************* N O T E S ************
- ************************************/
+************************************/
 
 // pub fn load_arc(arc: &mut Arc) {
 //     /*

@@ -24,7 +24,7 @@ use std::process::exit as exit;
 use regex::Regex;
 
 mod cli;
-
+mod daemon;
 
 #[allow(dead_code)]
 fn main() {
@@ -45,7 +45,8 @@ fn main() {
                                 .required(true)
                                 .help("sinkd starts watching folder/file")
                             )
-                            .help("lets sinkd become `aware` of file or folder location provided")
+                            .help("usage: sinkd anchor [OPTION] FILE\n\
+                                   lets sinkd become `aware` of file or folder location provided")
                         )
                         .subcommand(SubCommand::with_name("start")
                             .about("starts the daemon")
