@@ -1,4 +1,4 @@
-# ![image](sinkd-logo.png)
+# ![image](logo/sinkd_txt.png)
 
 _**Everything and the kitchen sink**_  
 
