@@ -5,24 +5,22 @@ use std::sync::mpsc::channel;
 use std::time::Duration;
 use std::process::exit as exit;
 use std::path::PathBuf;
-use crate::defs::*;
+use crate::rigging::*;
 
 
-pub struct Barge {
+pub struct Caravel {
     // multiple produce single consumer
-    deployed: bool,
     config: Config,
     events: std::sync::mpsc::Receiver<notify::DebouncedEvent>, // single rx 
     send: std::sync::mpsc::Sender<notify::DebouncedEvent>, // clone
     parrots: Vec<notify::RecommendedWatcher>,
 }
 
-impl Barge {
+impl Caravel {
 
-    pub fn new() -> Barge {
+    pub fn new() -> Caravel {
         let (tx, rx) = channel();
-        Barge {
-            deployed: false,
+        Caravel {
             config: Config::new(),
             events: rx,
             send: tx,
@@ -50,12 +48,10 @@ impl Barge {
 
     fn load_conf(&mut self) -> bool {
 
-        if !self.deployed { // initialize
-            self.config.owner.key.clear();
-            self.config.owner.name.clear();
-            self.config.users.clear();
-            self.config.anchor_points.clear();
-        }
+        self.config.owner.key.clear();
+        self.config.owner.name.clear();
+        self.config.users.clear();
+        self.config.anchor_points.clear();
 
         match fs::read_to_string("/etc/sinkd.conf") {
             Err(error) => {
@@ -89,7 +85,7 @@ impl Barge {
     }
 
     fn conf_append(&mut self, file_to_watch: String, users: Vec<String>, interval: u32, excludes: Vec<String>) {
-        let new_watch = AnchorPoint {
+        let new_watch = Anchorage {
             path: PathBuf::from(file_to_watch),
             users,
             interval,
@@ -115,7 +111,7 @@ impl Barge {
         }
         self.load_conf();  // not sure if daemon should already be running
         self.config.anchor_points.push(
-            AnchorPoint {
+            Anchorage {
                 path: PathBuf::from(file_to_watch.clone()),
                 users: Vec::new(), // need to pass empty vec
                 interval,

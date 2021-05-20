@@ -1,11 +1,13 @@
-/// Serialized structures from Configuration
+// Definitions for sinkd
+
+// Serialized structures from Configuration
 use std::path::PathBuf;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
     pub owner: Owner,
     pub users: Vec<User>,
-    pub anchor_points: Vec<AnchorPoint>,
+    pub anchor_points: Vec<Anchorage>,
 }
 
 impl Config {
@@ -13,7 +15,7 @@ impl Config {
         Config {
             owner: Owner::new(),
             users: User::create(),
-            anchor_points: vec![AnchorPoint::new()],
+            anchor_points: vec![Anchorage::new()],
         }
     }
 
@@ -24,7 +26,7 @@ impl Config {
         interval: u32,
         excludes: Vec<String>,
     ) {
-        self.anchor_points.push(AnchorPoint {
+        self.anchor_points.push(Anchorage {
             path,
             users,
             interval,
@@ -69,16 +71,16 @@ impl User {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct AnchorPoint {
+pub struct Anchorage {
     pub path: PathBuf,
     pub users: Vec<String>,
     pub interval: u32,
     pub excludes: Vec<String>,
 }
 
-impl AnchorPoint {
-    pub fn new() -> AnchorPoint {
-        AnchorPoint {
+impl Anchorage {
+    pub fn new() -> Anchorage {
+        Anchorage {
             path: PathBuf::from("invalid"),
             users: Vec::<String>::new(),
             interval: 5, // defaults to 5 secs?
