@@ -5,6 +5,7 @@ use crate::daemon::barge::Barge;
 use crate::daemon::harbor::Harbor;
 use daemonize::Daemonize;
 use clap::*;
+use std::fs;
 
 pub enum DaemonType {
     Barge,
@@ -120,17 +121,40 @@ pub fn list() {
     println!("print out list of all watched folders")
 }
 
+/**
+ * When sinkd is packaged should install /run/sinkd.pid file and make it writable the the sinkd group
+ * Need to set up logging keep everything local to home directory ~/
+ */
 pub fn start() {
-    // let stdout = File::create("/etc/sinkd/sinkd.out").unwrap();
-    // let stderr = File::create("/etc/sinkd/sinkd.err").unwrap();
-    // File::create("/run/sinkd.pid").expect("probably permissons"); // need to create file as a package
+    let user = env!("USER");
+    let home_dir = if cfg!(target_os = "macos") {
+        std::path::Path::new("/Users").join(user)
+    } else {
+        std::path::Path::new("/home").join(user)
+    };    
+    let path = home_dir.join(".sinkd");
+    println!("{:?}", path);
+    match fs::create_dir(path) {
+        Err(why) => println!("! {:?}", why.kind()),
+        Ok(_) => {},
+    }
+    // fs::create_dir(path).unwrap_or(println!("uh oh....")); // already created return empty unit
+
+    // need to use correct path ~ is not interpretted
+    let pid_file = fs::File::open("~/.sinkd/pid").unwrap_or(
+        fs::File::create("~/.sinkd/pid").expect("Unable to create file")
+    );
+    let metadata = pid_file.metadata().unwrap();
+    let mut permissions = metadata.permissions();
+    permissions.set_readonly(false);
+    fs::set_permissions("~/.sinkd/pid", permissions).expect("cannot set permission");      
 
     let daemonize = Daemonize::new()
-        .pid_file("/run/sinkd.pid"); // Every method except `new` and `start`
-        // .chown_pid_file(true)      // is optional, see `Daemonize` documentation
+        .pid_file("~/.sinkd/pid")
+        .chown_pid_file(true)      // is optional, see `Daemonize` documentation
         // .working_directory("/etc/sinkd/") // for default behaviour.
         // .user("nobody")
-        // .group("sinkd"); // Group name
+        .group("sinkd"); // Group name
         // .group(2)        // or group id.
         // .umask(0o777)    // Set umask, `0o027` by default.
         // .stdout(stdout)  // Redirect stdout to `/etc/sinkd/sinkd.out`.
@@ -142,7 +166,7 @@ pub fn start() {
         Ok(_) => {
             Barge::new().daemon();
         },
-        Err(e) => eprintln!("Error, {}", e),
+        Err(e) => eprintln!("Error Daemonize, {}", e),
     }
 }
 
