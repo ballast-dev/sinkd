@@ -2,78 +2,34 @@
 * B A R G E
 * ---------
 */
-// use crate::defs;
 use std::fs;
-use std::path::PathBuf;
 use notify::{Watcher, RecursiveMode, watcher};
 use std::sync::mpsc::channel;
 use std::time::Duration;
 use std::process::exit as exit;
+use std::path::PathBuf;
 use crate::defs::*;
 
-pub struct AnchorPoint {
-    // watcher: Vec<notify::INotifyWatcher>,
-    // directory to watch
-    allowed_users: Vec<String>, // other than owner
-    path: PathBuf,
-    interval: u32,  // cycle time to check changes
-    excludes: Vec<String>, 
-    // watches: Vec<Watcher>   // how to instantiate
-}
-
-impl AnchorPoint {
-
-    pub fn from(user_name: &str, path: PathBuf, interval: u32, excludes: Vec<String>) -> AnchorPoint {
-        let mut users: Vec<String> = Vec::new();
-        users.push(user_name.to_ascii_lowercase());
-        let anchor_point = AnchorPoint {
-            allowed_users: users.clone(),
-            path,
-            interval,
-            excludes,
-        };
-        return anchor_point;
-    }
-
-    pub fn set_path(&mut self, path: PathBuf) {
-        self.path = path;
-    }
-
-    pub fn get_path(&self) -> &PathBuf {
-        return &self.path;
-    }
-
-    pub fn set_interval(&mut self, interval: u32) {
-        self.interval = interval;
-    }
-
-    pub fn get_interval(&self) -> u32 {
-        return self.interval;
-    }
-
-    pub fn add_exclude(&mut self, path: PathBuf) -> bool {
-        let added: bool = true;
-        if added {
-            return true;
-        } else {
-            return false;
-        }
-    }
-
-    pub fn add_user(&mut self, user: &str) -> bool {
-        return true;
-    }
-
-    pub fn rm_user(&mut self, user: &str) -> bool {
-        return true;
-    }
-}
-
 // Command line interface
+pub struct Parrot {
+    pub tx: std::sync::mpsc::Sender<notify::DebouncedEvent>,
+    pub rx: std::sync::mpsc::Receiver<notify::DebouncedEvent>,
+    pub watcher: notify::RecommendedWatcher,
+}
+
+// impl Parrot {
+//     pub fn new() -> Parrot {
+//         Parrot {
+//             tx: std::sync::mpsc::Sender<notify::DebouncedEvent>::new(),
+            
+//         }
+//     }
+// }
 
 pub struct Barge {
     deployed: bool,
     overlook: Overlook,
+    parrots: Vec<Parrot>,
 }
 
 impl Barge {
@@ -81,7 +37,8 @@ impl Barge {
     pub fn new() -> Barge {
         Barge {
             deployed: false,
-            overlook: Overlook::new()
+            overlook: Overlook::new(),
+            parrots: Vec::new(),
         }
     }
 
@@ -128,7 +85,7 @@ impl Barge {
             self.overlook.owner.key.clear();
             self.overlook.owner.name.clear();
             self.overlook.users.clear();
-            self.overlook.watches.clear();
+            self.overlook.anchor_points.clear();
         }
 
         let toml_str;
@@ -146,24 +103,24 @@ impl Barge {
         return true;
         // println!("{:#?}", decoded);
 
-        // for watch in &decoded.watches {
+        // for watch in &decoded.anchor_points {
         //     println!("{:?}, {:?}, {:?}, {:?}", watch.path, watch.users, watch.interval, watch.excludes);
         // }
     }
 
 
     fn conf_append(&mut self, file_to_watch: String, users: Vec<String>, interval: u32, excludes: Vec<String>) {
-        let new_watch = Directory {
-            path: file_to_watch,
+        let new_watch = AnchorPoint {
+            path: PathBuf::from(file_to_watch),
             users,
             interval,
             excludes,
         };
         // need to clear the vector, or upon initialization
-        self.overlook.watches.push(new_watch);
+        self.overlook.anchor_points.push(new_watch);
         let new_overlook = toml::to_string_pretty(&self.overlook);
 
-        println!("{:?}", new_overlook);
+        println!("__conf append__\n{:?}", new_overlook);
     }
 
     /**
@@ -174,9 +131,9 @@ impl Barge {
     pub fn anchor(&mut self, file_to_watch: String, interval: u32, excludes: Vec<String>) -> bool {
 
         self.load_conf();  // not sure if daemon should already be running
-        self.overlook.watches.push(
-            Directory {
-                path: file_to_watch,
+        self.overlook.anchor_points.push(
+            AnchorPoint {
+                path: PathBuf::from(file_to_watch.clone()),
                 users: Vec::new(), // need to pass empty vec
                 interval,
                 excludes,
@@ -198,29 +155,48 @@ impl Barge {
 
 
         // Create a channel to receive the events.
-        let (tx, rx) = channel();
 
         // Create a watcher object, delivering debounced events.
         // The notification back-end is selected based on the platform.
-        let mut watcher = watcher(tx, Duration::from_secs(1)).expect("couldn't create watch");
+
+        // std::sync::mpsc::Sender<notify::DebouncedEvent>
+        // std::sync::mpsc::Receiver<notify::DebouncedEvent>
+        for watch in self.overlook.anchor_points.iter() {
+            let (tx, rx) = channel();
+            let mut watcher = watcher(tx, Duration::from_secs(1)).expect("couldn't create watch");
+            let result = watcher.watch(file_to_watch.clone(), RecursiveMode::Recursive);
+
+            match result {
+                Err(_) => {
+                    println!("path not found, unable to set watcher");
+                    continue;
+                },
+
+                Ok(_) => ()
+            }
+
+            // self.parrots.push( Parrot {
+            //         tx,  
+            //         rx, 
+            //         watcher: watcher.clone() 
+            //     } 
+            // );
+            println!("pushed a Parrot, for this dir => {}", file_to_watch);
+
+        }
+        println!("anchor points is this -->{:?}", self.overlook.anchor_points);
+
 
         // Add a path to be watched. All files and directories at that path and
         // below will be monitored for changes.
-        let result = watcher.watch(file_to_watch, RecursiveMode::Recursive);
-        match result {
-            Err(_) => {
-                println!("path not found, unable to set watcher");
-                std::process::exit(1);
-            },
-
-            Ok(_) => ()
-        }
 
     // TODO: to spawn in in background
         loop {
-            match rx.recv() {
-            Ok(event) => println!("{:?}", event),
-            Err(e) => println!("watch error: {:?}", e),
+            for parrot in self.parrots.iter() {
+                match parrot.rx.recv() {
+                    Ok(event) => println!("{:?}", event),
+                    Err(e) => println!("watch error: {:?}", e),
+                }
             }
         }
     }
