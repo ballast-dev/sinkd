@@ -22,7 +22,7 @@ Do you want to host your files on your own server? We do too. Sinkd is a deploya
 
     * folder locations will be `ln -s` symbolically linked to save space
 
-  * ```cpp
+  ```cpp
   while(running){
       if ( inotify() ){
           `rsync -vrt ~/path/to/local --rsh==ssh user@server.tld:~/path/to/remote/`
@@ -38,3 +38,5 @@ ___
 `rsync` will be the transfer lib
 
 `inotify` is the kernel call to notify the OS of changes to folders
+
+(Written By): Tony Bright
