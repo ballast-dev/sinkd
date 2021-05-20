@@ -133,24 +133,33 @@ use std::ops::Deref;
 use std::ffi::{CStr, CString};
 use std::convert::TryInto;
 
-extern "C" {
+
+extern {
     // fn hello() -> *const c_char;
     // fn goodbye(s: *const c_char);
-    fn get_timestamp(ret_str: *mut c_char, size: c_uint, fmt_str: *const c_char);
+    // fn timestamp(ret_str: *mut c_char, size: c_uint, fmt_str: *const c_char);
+    fn some_call(arg: libc::c_int) -> libc::c_int;
 }
 
 
-pub fn set_timestamp(dest: &mut String, fmt_str: &mut str) {
-    let size: u32 = fmt_str.len().try_into().unwrap();
-    let ret_str = CString::new(vec![]).unwrap();
-    let ret_ptr: *mut c_char = ret_str.clone().into_raw();
+// pub fn get_timestamp(fmt_str: &str) -> String {
+//     let size: u32 = fmt_str.len().try_into().unwrap();
+//     let ret_str = CString::new(vec![]).unwrap();
+//     let ret_ptr: *mut c_char = ret_str.clone().into_raw();
 
-    let _fmt_str = CString::new(fmt_str.as_bytes()).unwrap();
-    unsafe { get_timestamp(ret_ptr, size, _fmt_str.as_ptr()); }
-    dest = ret_str.as_c_str().to_str().unwrap().into_ok();
- }
+//     let _fmt_str = CString::new(fmt_str.as_bytes()).unwrap();
+//     unsafe { timestamp(ret_ptr, size, _fmt_str.as_ptr()); }
+//     return ret_str.as_c_str().to_str().unwrap().to_owned();
+//  }
 
+pub fn wrap(arg: i32) -> i32 {
+    unsafe { some_call(arg) }
+}
 
+pub fn get_timestamp(arg: &str) -> String {
+    println!("okay... {}", arg);
+    return "Yeah buddie".to_owned();
+}
 
 
 // struct Greeting {

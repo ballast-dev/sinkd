@@ -3,13 +3,17 @@
 #include <stdint.h>
 // #include <stdio.h>
 
-char const * get_timestamp(char * ret_str, uint32_t size, char const * fmt_str) {
+void timestamp(char * ret_str, uint32_t size, char const * fmt_str) {
     struct tm *time_val;
     time_t now;
     time(&now);
     time_val = localtime(&now); // load time info into time_val    
     strftime(ret_str, size, fmt_str, time_val); 
-    return ret_str;
+}
+
+int some_call(int arg) {
+    printf("you called me? with this: %d\n", arg);
+    return 42; // the answer to the universe is 42
 }
 
 // int main() {

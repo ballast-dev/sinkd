@@ -96,7 +96,10 @@ pub fn build_sinkd() -> App<'static, 'static> {
 #[allow(dead_code)]
 fn main() {
 
-    // rigging::TimeStamp::show();
+    // let ts = rigging::get_timestamp("%T");
+    let c = unsafe { rigging::wrap(123) };
+    println!("I called C! {}", c);
+
     shiplog::ShipLog::init();
     // mqtt::listen();
     // std::process::exit(0);
