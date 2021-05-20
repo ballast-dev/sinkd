@@ -20,6 +20,7 @@ daemonize = "0.4.1"
 log = { version = "0.4.14", features = ["std"] }
 paho-mqtt = "0.9.1"
 libc = "0.2.91"
+rpassword = "5.0.1"
 # paho-mqtt-sys = { version = "0.4", path = "paho-mqtt-sys", default-features=false }
 # futures = { version = "0.3", features = ["compat"] }
 # futures-timer = "3.0.2"
