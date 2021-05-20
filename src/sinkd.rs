@@ -40,7 +40,8 @@ fn copy_keys_to_remote(host: &str) -> bool {
     }
 
     if shell_stderr.contains("already exist") {
-        println!("ssh key already exist on server");
+        println!("ssh key already exist on server!");
+        return true;
     } else {
         println!("ssh key loaded on remote system");
     }
@@ -55,16 +56,14 @@ fn copy_keys_to_remote(host: &str) -> bool {
     return true;
 }
 
-fn set_up_rsync_daemon(pass: &str) {
+fn set_up_rsync_daemon(host: &str, pass: &str) {
     let connections = 5;
-    process::Command::new("sh")
-    .arg("-c")
-    .arg(format!(r#"ssh tony@hydra << EOF
-local HISTSIZE=0  
-echo {} | sudo -Sk mkdir /srv/sinkd
-echo {} | sudo -Sk groupadd sinkd 
-echo {} | sudo -Sk chgrp sinkd /srv/sinkd
-echo {} | sudo -Sk tee /etc/rsyncd.conf << ENDCONF
+    let command_str = format!(r#"ssh -t {} << EOF
+    local HISTSIZE=0  
+    echo {} | sudo -Sk mkdir /srv/sinkd
+    echo {} | sudo -Sk groupadd sinkd 
+    echo {} | sudo -Sk chgrp sinkd /srv/sinkd
+    echo {} | sudo -Sk tee /etc/rsyncd.conf << ENDCONF
 uid = nobody
 gid = nobody
 use chroot = no
@@ -77,20 +76,24 @@ pid file = /run/rsyncd.pid
     read only = false
     #gid = $GROUP
 
-# HEREDOC is the way 
+# HEREDOC 234 is the way 
 
 ENDCONF
-echo {} | sudo -Sk rsync --daemon
-EOF
-"#, pass, pass, pass, pass, connections, pass))
+    echo {} | sudo -Sk rsync --daemon
+    EOF
+    "#, host, pass, pass, pass, pass, connections, pass);
+
+    process::Command::new("sh")
+    .arg("-c")
+    .arg(command_str)
     .stdout(process::Stdio::null())
     .output()
     .unwrap();
 }
 
-pub fn start_remote() {
+pub fn setup_server(host: &str) {
     let pass = rpassword::prompt_password_stdout("setting up daemon on server...\npassword: ").unwrap();
-    set_up_rsync_daemon(&pass);
+    set_up_rsync_daemon(&host, &pass);
 }
 
 pub fn setup_keys(host: &str) {

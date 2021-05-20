@@ -24,15 +24,28 @@ pub fn build_sinkd() -> App<'static, 'static> {
     App::new("sinkd")
         .about("deployable cloud")
         .version(env!("CARGO_PKG_VERSION"))
-        .subcommand(App::new("setup-keys")
+        .subcommand(App::new("setup")
             .alias("rig")
-            .about("Setup ssh keys, and start daemon on remote machine")
-            .arg(Arg::with_name("HOSTNAME")
-                .required(true)
-                // .number_of_values(1)
-                .help("hostname or IP address of remote machine")
+            .about("Setup sinkd on local and remote")
+            .arg(Arg::with_name("SETUP_KEYS")
+                .short("k")
+                .long("keys")
+                .help("setup ssh-keys between local and remote machine")
+                .value_name("HOSTNAME")
+                .number_of_values(1)
+                .takes_value(true)
+                .help("HOSTNAME of remote machine can be IPADDR too")
             )
-            .help("usage: sinkd init HOSTNAME")
+            .arg(Arg::with_name("SETUP_SERVER")
+                .short("s")
+                .long("server")
+                .help("setup config and start daemon on server")
+                .value_name("HOSTNAME")
+                .number_of_values(1)
+                .takes_value(true)
+                .help("HOSTNAME of remote machine can be IPADDR too")
+            )
+            .usage("usage: sinkd setup [--keys, --server] HOSTNAME")
         )
         .subcommand(App::new("add")
             .alias("anchor")
@@ -42,18 +55,18 @@ pub fn build_sinkd() -> App<'static, 'static> {
                 .multiple(true) // CAREFUL: this will consume other arguments
                 .help("sinkd starts watching path")
             )
-            .help("usage: sinkd add FILE [FILE..]\n\
+            .usage("usage: sinkd add FILE [FILE..]\n\
                 lets sinkd become 'aware' of file or folder location provided")
         )
         .subcommand(App::new("adduser")
             .alias("hire")
             .about("Add USER to watch")
-            .arg(Arg::with_name("USER [USER..]")
+            .arg(Arg::with_name("USER")
                 .required(true)
                 .multiple(true) // CAREFUL: this will consume other arguments
                 .help("sinkd adduser USER")
             )
-            .help("usage: sinkd adduser USER")
+            .usage("usage: sinkd adduser USER [USER..]")
         )
         .subcommand(App::new("ls")
             .alias("list")
@@ -115,6 +128,14 @@ fn main() {
 
     let matches = build_sinkd().get_matches();
     
+    if let Some(sub_matches) = matches.subcommand_matches("setup") { 
+        if let Some(host) = sub_matches.value_of("SETUP_KEYS") {
+            sinkd::setup_keys(&host);
+        } if let Some(host) = sub_matches.value_of("SETUP_SERVER") {
+            sinkd::setup_server(&host);
+        }
+    }
+    
     if let Some(matches) = matches.subcommand_matches("add") {
         for path in matches.values_of("PATH").unwrap() {
             if std::path::Path::new(path).exists() {
@@ -127,9 +148,6 @@ fn main() {
     
     if let Some(matches) = matches.subcommand_matches("adduser") {
         sinkd::adduser(matches.values_of("USER").unwrap().collect());
-    }
-    if let Some(sub_matches) = matches.subcommand_matches("setup-keys") { 
-        sinkd::setup_keys(sub_matches.value_of("HOSTNAME").unwrap()); // unwrap is safe here due to checks
     }
     if let Some(_) = matches.subcommand_matches("ls")      { sinkd::list(); }
     if let Some(_) = matches.subcommand_matches("rm")      { sinkd::remove(); }
