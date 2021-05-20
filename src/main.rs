@@ -77,7 +77,6 @@ use std::env;
     // (as below), requesting just the name used, or both at the same time
     if let Some(matches) = matches.subcommand_matches("start") {
         // start the daemon
-        barge::start_daemon();
     }
 
     // more program logic goes here...

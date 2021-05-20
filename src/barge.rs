@@ -58,9 +58,10 @@ impl Barge {
     /**
      * upon edit of configuration restart the daemon
      */
-    pub fn watch(dir_to_watch: &str, interval: u32) -> bool {
+    pub fn watch(&mut self, file_to_watch: &str, interval: u32) -> bool {
 
-        let anchor_point = AnchorPoint::from(dir_to_watch, interval);
+        self.anchor_points.push(AnchorPoint::from(file_to_watch, interval));
+        // anchor point can either be a file or a folder
 
         // need to start daemon from config file
         // need to parse json
@@ -78,7 +79,7 @@ impl Barge {
 
         // Add a path to be watched. All files and directories at that path and
         // below will be monitored for changes.
-        let result = watcher.watch(dir_to_watch, RecursiveMode::Recursive);
+        let result = watcher.watch(file_to_watch, RecursiveMode::Recursive);
         match result {
             Err(_) => {
                 println!("path not found, unable to set watcher");
@@ -98,8 +99,30 @@ impl Barge {
     }
 
 
-    pub fn parse_yaml() -> bool {
-        //     let s =
+    // to tell daemon to reparse its configuration file
+    pub fn update_daemon() {
+        // parse config file
+    }
+
+    // infinite loop unless broken by interrupt
+    pub fn run_daemon() {
+        // listens to socket, waits for message
+
+        // while (true) {
+        //     if message.size > 1 {
+        //         text = message_read(message);
+        //         match text {
+        //             update => parse(),
+        //             file_change => sink(),
+        //         }
+        //     }
+        // }
+    }
+
+    pub fn parse_conf() -> bool {
+        // config file located in /etc/sinkd.conf
+
+    //     let s =
     // "
     // foo:
     //     - list1
