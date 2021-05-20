@@ -1,10 +1,10 @@
 /**
- * A N C H O R 
+ * B A R G E 
  *
- * ----
+ * --- 
  *
- * Server side of sinkd
- * creates folder and rsync daemon to watch upon
+ * Client side of sinkd
+ * will hook into anchor and fail if anchor is not there
  */
 
 fn main() {
