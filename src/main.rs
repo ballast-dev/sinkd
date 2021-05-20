@@ -8,8 +8,10 @@
  */
 extern crate clap;
 extern crate notify;
-extern crate yaml_rust;
 extern crate regex;
+extern crate toml;
+#[macro_use]
+extern crate serde_derive;
 
 
 use clap::{Arg, App, SubCommand};
@@ -20,6 +22,8 @@ use regex::Regex;
 
 mod cli;
 mod daemon;
+mod defs;
+
 
 #[allow(dead_code)]
 fn main() {

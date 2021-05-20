@@ -2,11 +2,14 @@
 * B A R G E
 * ---------
 */
+// use crate::defs;
 use std::fs;
 use std::path::PathBuf;
 use notify::{Watcher, RecursiveMode, watcher};
 use std::sync::mpsc::channel;
 use std::time::Duration;
+use std::process::exit as exit;
+use crate::defs::Config;
 
 pub struct AnchorPoint {
     // directory to watch
@@ -140,40 +143,19 @@ impl Barge {
     fn load_conf() -> bool {
         // config file located in /etc/sinkd.conf
 
-        let read_result = fs::read_to_string("/etc/sinkd.conf");
-        let mut conf = String::new();
-        match read_result {
+        let mut toml_str = String::new();
+        match fs::read_to_string("/etc/sinkd.conf") {
             Err(error) => println!("unable to open file '{}'", error),
-            Ok(output) => {
-                conf = output.clone();
-            }
+            Ok(output) => toml_str = output.clone(),
         }
 
-        println!("conf ==>> {}", conf);
+        let decoded: Config = toml::from_str(&toml_str[..]).expect("couldn't parse toml");
+        println!("{:#?}", decoded);
 
-    //     let docs = YamlLoader::load_from_str(s).unwrap();
+        for watch in &decoded.watches {
+            println!("{:?}, {:?}, {:?}, {:?}", watch.path, watch.users, watch.interval, watch.excludes);
+        }
 
-    //     // Multi document support, doc is a yaml::Yaml
-    //     let doc = &docs[0];
-
-    //     // Debug support
-    //     println!("{:?}", doc);
-
-    //     // Index access for map & array
-    //     assert_eq!(doc["foo"][0].as_str().unwrap(), "list1");
-    //     assert_eq!(doc["bar"][1].as_f64().unwrap(), 2.0);
-
-    //     // Chained key/array access is checked and won't panic,
-    //     // return BadValue if they are not exist.
-    //     assert!(doc["INVALID_KEY"][100].is_badvalue());
-
-        // // Dump the YAML object
-        // let mut out_str = String::new();
-        // {
-        //     let mut emitter = YamlEmitter::new(&mut out_str);
-        //     emitter.dump(doc).unwrap(); // dump the YAML object to a String
-        // }
-        // println!("{}", out_str);
         true // did it
     }
 
@@ -184,8 +166,6 @@ impl Barge {
      */
     pub fn anchor(&mut self, file_to_watch: &str, interval: u32, excludes: Vec<String>) -> bool {
 
-        println!("anchor?");
-        
         let this_user_name = "Johnny Goodboy Tyler";
         self.overlook.patrol.push(
             AnchorPoint::from(this_user_name,
