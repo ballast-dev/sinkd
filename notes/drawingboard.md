@@ -75,3 +75,17 @@ leveraging the heavy use of _hard-links_ able to remember deltas across snapshot
 Useful setup: https://romain.taprest.fr/posts/tech/backup-nextcloud
 
 Nice tip: https://gist.github.com/trendels/6582e95012f6c7fc6542
+
+
+# Roadmap for updating from server
+1. First, setup interval checking on client side 
+> situation to consider, even though interval checking will be less time than pushing updates
+> that still leaves the issue with what if an editor has had the contents modified **while open**
+> most editors will realize this with git and store a copy in memory before writing to disk 
+2. Interval checking is wasted cycles, and stateless 
+3. spinning up mqtt increases dependencies (but might have to be the path forward)
+4. **meta-data** could be the way
+  - in `.sinkd/meta` create list of top-level-folders with rolling numbers (for updating)
+  - every client has a fetch cycle that happens _before_ pushing updates
+5. could simply to just a **fetch-cycle** per alloted interval
+  - name the config entry `phone_home = 4` or `fetch_changes = 7`

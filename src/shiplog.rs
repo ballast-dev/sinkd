@@ -13,9 +13,11 @@ pub struct ShipLog { // big rope to moor ship to harbor
 impl ShipLog {
     pub fn new() -> Self {
         ShipLog {
-            file: OpenOptions::new().append(true).create(true)
-                                .open(ropework::get_sinkd_path().join("log"))
-                                .expect("couldn't create log file")
+            file: OpenOptions::new()
+                .append(true)
+                .create(true)
+                .open(ropework::get_sinkd_path().join("log"))
+                .expect("couldn't create log file")
         }
     }
 

@@ -122,7 +122,7 @@ pub fn setup_server(verbosity: u8, host: &str) {
 pub fn setup_keys(verbosity: u8, host: &str) {
     if gen_keys() {
         if copy_keys_to_remote(host) {
-           
+           //todo: add print_fancy "finished setup"
         }
     }
     

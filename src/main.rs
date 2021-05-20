@@ -130,7 +130,6 @@ fn main() {
     shiplog::ShipLog::init();
     // mqtt::listen();
     // std::process::exit(0);
-
     let matches = build_sinkd().get_matches();
     let mut verbosity: u8 = 0;
     match matches.occurrences_of("verbose") {
@@ -139,32 +138,33 @@ fn main() {
         3 => verbosity = 3,
         _ => ()
     }
-    
-    if let Some(sub_matches) = matches.subcommand_matches("setup") { 
-        if let Some(host) = sub_matches.value_of("SETUP_KEYS") {
-            sinkd::setup_keys(verbosity, &host);
-        } if let Some(host) = sub_matches.value_of("SETUP_SERVER") {
-            sinkd::setup_server(verbosity, &host);
-        }
-    }
-    
-    if let Some(matches) = matches.subcommand_matches("add") {
-        for path in matches.values_of("PATH").unwrap() {
-            if std::path::Path::new(path).exists() {
-                sinkd::add(path);
-            } else {
-                println!("'{}' does not exist", path);
+
+    match matches.subcommand() {
+        ("setup", Some(sub_match)) => {
+            if let Some(host) = sub_match.value_of("SETUP_KEYS") {
+                sinkd::setup_keys(verbosity, &host);
+            } if let Some(host) = sub_match.value_of("SETUP_SERVER") {
+                sinkd::setup_server(verbosity, &host);
             }
-        }
+        },
+        ("add", Some(sub_match)) => {
+            for path in sub_match.values_of("PATH").unwrap() {
+                if std::path::Path::new(path).exists() {
+                    sinkd::add(path);
+                } else {
+                    println!("'{}' does not exist", path);
+                }
+            }
+        },
+        ("adduser", Some(_)) => {
+            sinkd::adduser(matches.values_of("USER").unwrap().collect());
+        },
+        ("ls",      Some(_)) => { sinkd::list();},
+        ("rm",      Some(_)) => { sinkd::remove();},
+        ("start",   Some(_)) => { sinkd::start();},
+        ("stop",    Some(_)) => { sinkd::stop();},
+        ("restart", Some(_)) => { sinkd::restart()},
+        ("log",     Some(_)) => { sinkd::log()},
+        _ => { println!("invalid command, try -h for options"); }
     }
-    
-    if let Some(matches) = matches.subcommand_matches("adduser") {
-        sinkd::adduser(matches.values_of("USER").unwrap().collect());
-    }
-    if let Some(_) = matches.subcommand_matches("ls")      { sinkd::list(); }
-    if let Some(_) = matches.subcommand_matches("rm")      { sinkd::remove(); }
-    if let Some(_) = matches.subcommand_matches("start")   { sinkd::start(); }
-    if let Some(_) = matches.subcommand_matches("stop")    { sinkd::stop(); }
-    if let Some(_) = matches.subcommand_matches("restart") { sinkd::restart(); }
-    if let Some(_) = matches.subcommand_matches("log")     { sinkd::log(); }
 }
