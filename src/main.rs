@@ -24,6 +24,7 @@ use std::process::exit as exit;
 use regex::Regex;
 
 mod cli;
+use cli::DaemonType;
 mod daemon;
 
 #[allow(dead_code)]
@@ -38,6 +39,10 @@ fn main() {
                                 .help("IPv4 address, ssh access required")
                             )
                             .help("sets up sinkd server on remote computer")
+                        )
+                        .subcommand(SubCommand::with_name("init")
+                            .about("initialize sinkd\nstarts local daemon to watch over files|folders")
+                            .help("no option necessary, spawns daemon locally")
                         )
                         .subcommand(SubCommand::with_name("anchor")
                             .about("anchors folder/file location")
@@ -88,7 +93,7 @@ fn main() {
     }
     
     if let Some(matches) = matches.subcommand_matches("start") {
-        cli::start();
+        cli::start(DaemonType::Barge);
     }
 
     if let Some(matches) = matches.subcommand_matches("stop") {

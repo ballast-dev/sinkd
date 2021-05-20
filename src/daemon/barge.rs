@@ -10,57 +10,117 @@ use std::time::Duration;
 
 pub struct AnchorPoint {
     // directory to watch
+    allowed_users: Vec<String>, // other than owner
     path: PathBuf,
     interval: u32,  // cycle time to check changes
+    excludes: Vec<String>, 
     // watches: Vec<Watcher>   // how to instantiate
 }
 
 impl AnchorPoint {
 
-    pub fn from(path: &str, interval: u32) -> AnchorPoint {
-        let path_buf = PathBuf::from(path);
-        return AnchorPoint {
-            path: path_buf,
-            interval, 
-        }
+    pub fn from(user_name: &str, path: PathBuf, interval: u32, excludes: Vec<String>) -> AnchorPoint {
+        let mut users: Vec<String> = Vec::new();
+        users.push(user_name.to_ascii_lowercase());
+        let anchor_point = AnchorPoint {
+            allowed_users: users.clone(),
+            path,
+            interval,
+            excludes,
+        };
+        return anchor_point;
+    }
+
+    pub fn set_path(&mut self, path: PathBuf) {
+        self.path = path;
+    }
+
+    pub fn get_path(&self) -> &PathBuf {
+        return &self.path;
     }
 
     pub fn set_interval(&mut self, interval: u32) {
         self.interval = interval;
     }
+
+    pub fn get_interval(&self) -> u32 {
+        return self.interval;
+    }
+
+    pub fn add_exclude(&mut self, path: PathBuf) -> bool {
+        let added: bool = true;
+        if added {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    pub fn add_user(&mut self, user: &str) -> bool {
+        return true;
+    }
+
+    pub fn rm_user(&mut self, user: &str) -> bool {
+        return true;
+    }
+}
+
+// Configuration Holder
+struct Overlook {
+    owner: String,      // owner of the sinkd
+    patrol: Vec<AnchorPoint>,
+    keys: Vec<String>, // to hold ssh keys or future type 
+}
+
+impl Overlook {
+    pub fn new() -> Overlook {
+        return Overlook {
+            owner: String::new(),
+            patrol: Vec::new(),
+            keys: Vec::new(),
+        }
+    }
 }
 
 
+// Command line interface
 
 pub struct Barge {
-    anchor_points: Vec<AnchorPoint>,
-    config: String,
+    deployed: bool,
+    overlook: Overlook,
 }
 
 impl Barge {
 
     pub fn new() -> Barge {
         Barge {
-            anchor_points: Vec::new(),
-            config: String::new(), 
+            deployed: true,
+            overlook: Overlook::new(),
         }
     }
 
-    pub fn load_config() -> bool {
-        // config should always be located in /etc/sinkd.conf
-        // fs::read
-        return true;
+    pub fn start() {
+        // parse config
+        // start barge daemon
     }
-
-
 
     // to tell daemon to reparse its configuration file
-    pub fn update() {
-        // parse config file
+    pub fn restart() {
+        // stop
+        // start
     }
 
+    pub fn stop() {
+        // stop barge daemon
+        // garbage collect?
+    }
+
+
     // infinite loop unless broken by interrupt
-    pub fn run_daemon() {
+    fn run(&self) -> bool {
+
+        // spawn a thread and return condition
+        return true
         // listens to socket, waits for message
 
         // while (true) {
@@ -74,7 +134,7 @@ impl Barge {
         // }
     }
 
-    pub fn parse_conf(&self) -> bool {
+    fn load_conf(&self) -> bool {
         // config file located in /etc/sinkd.conf
 
         let read_status = fs::read_to_string("/etc/sinkd/sinkd.conf");
@@ -127,9 +187,16 @@ impl Barge {
      * 
      * sinkd anchor FOLDER -i | --interval SECS
      */
-    pub fn watch(&mut self, file_to_watch: &str, interval: u32) -> bool {
-
-        self.anchor_points.push(AnchorPoint::from(file_to_watch, interval));
+    fn anchor(&mut self, file_to_watch: &str, interval: u32, excludes: Vec<String>) -> bool {
+        let user_name = "found this username somehow";
+        // self.anchor_points.push(
+        //     AnchorPoint::from(
+        //         user_name,
+        //         self.overlook.patrol[0].path =  PathBuf::from(file_to_watch), // get index of patrol
+        //         interval,
+        //         excludes, 
+        //     )
+        // );
         // anchor point can either be a file or a folder
 
         // 1 - open yaml file (/etc/sinkd.conf)
@@ -166,17 +233,7 @@ impl Barge {
         }
     }
 
-    /*
-    * 
-    *  
-    */
-    pub fn run() {
 
-    }
-
-    pub fn stop() {
-
-    }
 }
 
 

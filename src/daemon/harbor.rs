@@ -21,4 +21,8 @@ impl Harbor {
         // make sure to have permission to read config file
         return true
     }
+
+    pub fn start() {
+
+    }
 }
