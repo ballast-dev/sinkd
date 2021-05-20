@@ -812,6 +812,7 @@ name = "sinkd"
 version = "0.1.0"
 dependencies = [
  "async-std",
+ "cc",
  "clap",
  "daemonize",
  "futures-util",

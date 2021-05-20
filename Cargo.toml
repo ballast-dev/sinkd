@@ -31,4 +31,4 @@ async-std = "1"
 
 # [build-dependencies]
 # clap = "2.33.0"
-# cc = { version = "1.0" }
+cc = { version = "1.0" }

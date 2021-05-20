@@ -134,47 +134,6 @@ extern {
     fn strftime(s: *mut libc::c_char, max: libc::size_t, format: *const libc::c_char, tm: *mut libc::tm) -> libc::size_t;
 }
 
-pub fn get_timestamp(fmt_str: &str) -> String {
-    let retval = String::new();
-    // create a char ptr to a vector 
-    let mut vector: Vec<libc::c_char> = Vec::new();
-    let slice = vector.as_mut_slice();
-    let char_ptr = slice.as_mut_ptr();
-
-    // convert u8 string to i8 string
-    let cstr = CString::new(fmt_str.to_owned()).unwrap();
-    let fmt_ptr: *const u8 = fmt_str.as_mut_ptr();
-
-    // let char_ptr: *mut Vec<libc::c_char> = Vec::new().as_mut_slice().as_mut_ptr();
-    unsafe {
-        // let tm = libc::tm { 
-        //     tm_sec: val, 
-        //     tm_min: val, 
-        //     tm_hour: val, 
-        //     tm_mday: val, 
-        //     tm_mon: val,
-        //     tm_year: val, 
-        //     tm_wday: val, 
-        //     tm_yday: val, 
-        //     tm_isdst: val, 
-        //     tm_gmtoff: val, 
-        //     tm_zone: val 
-        // }
-        // let tm = libc::tm;
-        // strftime(char_ptr, 20, fmt_ptr, tm);
-        return retval;
-    }
-}
-//impl TimeStamp {
-    //pub fn show() {
-        //let timestamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap();
-        //// return Duration... which I can't use
-        //let strftime = timestamp.format("%Y%m%d...%H:%M:%S");
-        //println!("{:?}", strftime);
-    //}
-//}
-
-
 
 use libc::c_char;
 use std::ops::Deref;
