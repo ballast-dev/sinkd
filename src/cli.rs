@@ -35,11 +35,21 @@ pub enum DaemonType {
 }
 
 /** localhost file syncing separate daemons */
-pub fn anchor(file: &str) -> bool {
-    println!("appending '{}' to watch files", file);   
-    let mut barge = Barge::new(); 
-    barge.anchor(file, 1, Vec::new()); 
-    return true // able to watch directory
+pub fn anchor(daemon_type: DaemonType ,file: &str) -> bool {
+
+    match daemon_type {
+        DaemonType::Barge => {
+            println!("appending '{}' to watch files", file);   
+            let mut barge = Barge::new(); 
+            barge.anchor(file, 1, Vec::new()); 
+            return true; // able to watch directory
+        },
+        DaemonType::Harbor => {
+            // stuff for server
+            println!("anchor in for harbor");
+            return true;
+        }
+    }
 }
 
 pub fn recruit(user: &str) {

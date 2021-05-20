@@ -85,11 +85,11 @@ fn main() {
     }
 
     if let Some(matches) = matches.subcommand_matches("anchor") {
-        println!("anchors away my boy!");
+        println!("anchors away!");
         let this_dir = matches.value_of("FILE").unwrap();
         
         if Path::new(this_dir).exists() {
-            cli::anchor(this_dir);
+            cli::anchor(cli::DaemonType::Barge, this_dir); // always a Barge from cli
         } else {
             println!("'{}' does not exist", this_dir);
         }
