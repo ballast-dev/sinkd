@@ -76,8 +76,6 @@ pid file = /run/rsyncd.pid
     read only = false
     #gid = $GROUP
 
-# HEREDOC 234 is the way 
-
 ENDCONF
     echo {} | sudo -Sk rsync --daemon
     EOF
