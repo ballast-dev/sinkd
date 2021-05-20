@@ -3,8 +3,7 @@
  */
 use crate::daemon::barge::Barge;
 use crate::daemon::harbor::Harbor;
-use std::io::Write;
-use std::fs::File;
+use daemonize::Daemonize;
 use clap::*;
 
 pub enum DaemonType {
@@ -16,11 +15,11 @@ pub fn build_cli() -> App<'static, 'static> {
     App::new("sinkd")
         .about("deployable cloud")
         .version(env!("CARGO_PKG_VERSION"))
-        .arg(Arg::with_name("daemon")
-            .short("d")
-            .long("daemon")
-            .hidden(true) // reentry point to spawn daemon for barge
-        )
+        // .arg(Arg::with_name("daemon")
+        //     .short("d")
+        //     .long("daemon")
+        //     .hidden(true) // reentry point to spawn daemon for barge
+        // )
         .arg(Arg::with_name("harbor")
             .short("r")
             .long("harbor")
@@ -73,6 +72,9 @@ pub fn build_cli() -> App<'static, 'static> {
         .subcommand(App::new("stop")
             .about("Stops daemon")
         )
+        .subcommand(App::new("restart")
+            .about("Restarts sinkd, reloading configuration")
+        )
  
 }
 
@@ -105,43 +107,46 @@ pub fn list() {
 }
 
 pub fn start() {
-    let daemon = std::process::Command::new("/home/tony/Projects/sinkd/target/debug/sinkd")
-                           .arg("--daemon")
-                           .spawn() // spawn in background
-                           .expect("ERROR couldn't start daemon");
-    // let file = File::create("/etc/sinkd-daemon.txt");
-    // let buffer = file.by_ref();
-    
-    // buffer.write_all("")
-}
+    // let stdout = File::create("/etc/sinkd/sinkd.out").unwrap();
+    // let stderr = File::create("/etc/sinkd/sinkd.err").unwrap();
+    // File::create("/run/sinkd.pid").expect("probably permissons"); // need to create file as a package
 
-pub fn daemon() {
-    Barge::new().daemon(); // never returns
+    let daemonize = Daemonize::new()
+        .pid_file("/run/sinkd.pid"); // Every method except `new` and `start`
+        // .chown_pid_file(true)      // is optional, see `Daemonize` documentation
+        // .working_directory("/etc/sinkd/") // for default behaviour.
+        // .user("nobody")
+        // .group("sinkd"); // Group name
+        // .group(2)        // or group id.
+        // .umask(0o777)    // Set umask, `0o027` by default.
+        // .stdout(stdout)  // Redirect stdout to `/etc/sinkd/sinkd.out`.
+        // .stderr(stderr)  // Redirect stderr to `/etc/sinkd/sinkd.err`.
+        // .exit_action(|| println!("something?"))
+        // .privileged_action(|| Barge::new().daemon());
+
+    match daemonize.start() {
+        Ok(_) => {
+            Barge::new().daemon();
+        },
+        Err(e) => eprintln!("Error, {}", e),
+    }
 }
 
 pub fn stop() {
     println!("stopping daemon");
 
-    std::process::Command::new("ps")
-                        .arg("-e")
-                        .arg("|")
-                        .arg("grep")
-                        .arg("sinkd");
-
+    let sinkd_pid: String = String::from_utf8_lossy(&std::fs::read("/run/sinkd.pid").unwrap()).parse().unwrap();
     // need to keep pid of barge process in separate file
     std::process::Command::new("kill")
                            .arg("-15")
-                           .arg("pid of process")
+                           .arg(sinkd_pid)
                            .output()
                            .expect("ERROR couldn't kill daemon");
 }
 
 pub fn restart() {
-    // stop the running daemon
-    // spawn the running daemon
-    // refresh the configuration
-    // NOTE: this should be called after every configuration change, maybe manual at first?
-    println!("refreshing")
+    stop();
+    start();
 }
 
 pub fn remove() {

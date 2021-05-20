@@ -33,7 +33,7 @@ impl Barge {
     
     // infinite loop unless broken by interrupt
     pub fn daemon(&mut self) {
-
+        println!("barge::daemon!!");
         self.load_conf();
         self.set_watchers();
         loop {
@@ -60,7 +60,7 @@ impl Barge {
         }
 
         let toml_str;
-        match fs::read_to_string("/etc/sinkd.conf") {
+        match fs::read_to_string("/etc/sinkd/sinkd.conf") {
             Err(error) => {
                 println!("unable to open file '{}'", error);
                 return false;
@@ -97,7 +97,6 @@ impl Barge {
 
         }
     }
-
 
     fn conf_append(&mut self, file_to_watch: String, users: Vec<String>, interval: u32, excludes: Vec<String>) {
         let new_watch = AnchorPoint {

@@ -16,7 +16,7 @@ mod defs;
 #[allow(dead_code)]
 fn main() {
     let matches = cli::build_cli().get_matches();
-            
+    
     if let Some(matches) = matches.subcommand_matches("add") {
         let path = String::from(matches.value_of("PATH").unwrap());
         println!("adding file!");
@@ -26,6 +26,10 @@ fn main() {
         } else {
             println!("'{}' does not exist", path);
         }
+    }
+    
+    if let Some(matches) = matches.subcommand_matches("adduser") {
+        cli::adduser(matches.values_of("USER").unwrap().collect());
     }
 
     if let Some(_) = matches.subcommand_matches("ls") {
@@ -43,13 +47,9 @@ fn main() {
     if let Some(_) = matches.subcommand_matches("stop") {
         cli::stop();
     }
-
-    if let Some(matches) = matches.subcommand_matches("adduser") {
-        cli::adduser(matches.values_of("USER").unwrap().collect());
-    }
-
-    if matches.occurrences_of("daemon") >= 1 {
-        cli::daemon();
+    
+    if let Some(_) = matches.subcommand_matches("restart") {
+        cli::restart();
     }
 
 }
