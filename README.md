@@ -1,62 +1,27 @@
 # ![image](sinkd-logo.png)
 
 _**Everything and the kitchen sink**_  
-> Deployable cloud, when you want, where you want  
-  ... sinkd, main font should be `moonhouse` all low case
 
-## Why makes sinkd different from other cloud providers
+## Deployable Cloud
 
-Do you want to host your files on your own server?
-We do too. `sinkd` is a deployable cloud!
+_True Privacy_  
+I believe your files should stay with you **always**.
+No third party eyes, no privacy policies, no tradeoffs. 
+Given the pleathora of cloud providers and the frequent 
+data breaches of large companies I created `sinkd` to 
+give the power back to the user. 
 
-### Harbor (Server)
+1. Wraps `rsync` into a user friendly way
+1. Physical access to your files
+1. Granular permissions per user  
+1. Data restore, backup utility
 
-> Harbor is where all your files are located, every ship comes into port
+## What about [rclone](https://rclone.org/)?
 
-1. make sure ssh keys are set up, manual or automatic?
-1. create folder on server machine ~/sinkd/
-1. two subfolders (on server)
-    - `harbor/` root folder location
-    - `.git/` (feature enhancement) for versioning and back up (_git-lfs needed_)
-1. invoke rsync daemon on port 9816 (tb).
-1. incorporate this into `init.d/` to initialize at boot  
+`rclone` is a fantastic application written in [Go](https://golang.org/). `sinkd` is written in [Rust](https://www.rust-lang.org) which is superior to **Go** in many ways. Also the goal of `rclone` is to use cloud data providers from the command line. The goal of `sinkd` is to **not** to use any cloud provider and keep everything _in house_. If the user wishes to allow access to the web that will be allowed but not enabled by default. 
 
-__Feature Enhancement__  
-To aide in set up
-    - GUI
-    - TUI (ncurses lib in rust)
+### Future - Feature Enhancements
 
-### Barge (Client)
-
-- Need to setup a configuration file that is parsed upon invocation
-- name the file sinkd.json (_checkout yaml-rust_)
-
-1. user specifies location of `sinkd` folder.
-1. `sinkd` will run user-wide, and operate on loaded directories within it's configuration
-1. upon "anchoring" the folder sinkd will become aware and watch for events
-1. upon event change, invoke rsync
-1. maybe set a config value to limit file syncing to a known cycle ( 1sec - 1hr )
-
-## Command Line Interface
-
-- `sinkd deploy IP` creates harbor on server
-- `sinkd anchor DIRECTORY` creates DIRECTORY on harbor (server file location)
-  - loads DIRECTORY in sinkd.json (top-level)
-  - possibility of multiple directories inside harbor folder
-- `sinkd start` starts daemon
-- `sinkd stop` stops daemon
-- `sinkd restart` restarts daemon
-
-## Will use SSH key-based authentication
-
-For security and authentication, use an ssh tunnel for file transfers
-
-### Other thoughts
-
-#### Model View Controller Design
-
-Restructure the `web/` side of the app to be modular
-
-- view = html/css _separate folder?_
-- model = `db/username` and mysql database
-- controller = `main.php` **user event driven**
+- enable `btrfs` on a virtual mount for added integrity
+- add encryption to file system
+- access from the interwebs 

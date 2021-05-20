@@ -21,7 +21,7 @@
 
 ## server (harbor)
 
-Listens to changes via rsync daemon, rsync:// on port "8466"
+Listens to changes via rsync daemon, rsync:// on port "8466" TB or "9816" tb 
 Accepts many running clients.
 
 ## client (barge)
