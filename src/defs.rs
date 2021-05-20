@@ -13,7 +13,7 @@ impl Config {
         Config {
             owner: Owner::new(),
             users: User::create(),
-            anchor_points: AnchorPoint::create(),
+            anchor_points: vec![AnchorPoint::new()],
         }
     }
 
@@ -85,9 +85,6 @@ impl AnchorPoint {
         }
     }
 
-    pub fn create() -> Vec<AnchorPoint> {
-        vec![AnchorPoint::new()]
-    }
     pub fn set_path(&mut self, path: PathBuf) {
         self.path = path;
     }

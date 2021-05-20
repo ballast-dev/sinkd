@@ -13,11 +13,13 @@
 The following will be invoked on the "server" computer aka **harbor**
 
 1. `harbor --dock` # to generate daemon on "server"
-1. `harbor 
+1. `harbor start`
+1. `harbor stop`
+1. `harbor config` ?? maybe... 
 
 ## New Approach
 
-`sinkd` is a multi-user program, so configurations will be loaded in /etc
+`sinkd` is a multi-user program, so configurations will be loaded in `/etc`
 
 - **Package** will have `/etc/sinkd/barge.conf` and `/etc/sinkd/harbor.conf` (TOML files)
 - `sinkd harbor` will control everything in the _harbor_
