@@ -96,9 +96,7 @@ pub fn build_sinkd() -> App<'static, 'static> {
 #[allow(dead_code)]
 fn main() {
 
-    // let ts = rigging::get_timestamp("%T");
-    let t = rigging::get_timestamp("%T");
-    println!("I called C! {}", t);
+    println!("Running sinkd at {}", rigging::get_timestamp("%Y%m%d-%T"));
 
     shiplog::ShipLog::init();
     // mqtt::listen();

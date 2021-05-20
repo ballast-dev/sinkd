@@ -129,65 +129,24 @@ impl Anchorage {
 
 
 use libc::{c_char, c_uint};
-use std::ops::Deref;
-use std::ffi::{CStr, CString};
-use std::convert::TryInto;
+use std::ffi::CString;
 
 
 extern {
-    // fn hello() -> *const c_char;
-    // fn goodbye(s: *const c_char);
     fn timestamp(ret_str: *mut c_char, size: c_uint, fmt_str: *const c_char);
-    fn some_call(arg: libc::c_int) -> libc::c_int;
 }
 
 
 pub fn get_timestamp(fmt_str: &str) -> String {
-    let size: u32 = fmt_str.len().try_into().unwrap();
     let ret_str = CString::new(Vec::with_capacity(25)).unwrap();
-    // let ret_ptr: *mut c_char = ret_str.clone().into_raw();
+    let ret_ptr: *mut c_char = ret_str.into_raw();
 
     let _fmt_str = CString::new(fmt_str.as_bytes()).unwrap();
+    let stamp: CString;
     unsafe { 
-        timestamp(ret_str.into_raw(), size, _fmt_str.as_ptr()); 
+        timestamp(ret_ptr, 25, _fmt_str.as_ptr()); 
+        stamp = CString::from_raw(ret_ptr);
     }
-    // return ret_str.as_c_str().to_str().unwrap().to_owned();
-    return String::from("dummy rust string")
+    let v = stamp.into_bytes();
+    return String::from_utf8_lossy(&v).into_owned();
  }
-
-// pub fn wrap(arg: i32) -> i32 {
-//     unsafe { some_call(arg) }
-// }
-
-// pub fn get_timestamp(arg: &str) -> String {
-//     println!("okay... {}", arg);
-//     return "Yeah buddie".to_owned();
-// }
-
-
-// struct Greeting {
-//     message: *const c_char,
-// }
-
-// impl Drop for Greeting {
-//     fn drop(&mut self) {
-//         unsafe {
-//             goodbye(self.message);
-//         }
-//     }
-// }
-
-// impl Greeting {
-//     fn new() -> Greeting {
-//         Greeting { message: unsafe { hello() } }
-//     }
-// }
-
-// impl Deref for Greeting {
-//     type Target = str;
-
-//     fn deref<'a>(&'a self) -> &'a str {
-//         let c_str = unsafe { CStr::from_ptr(self.message) };
-//         c_str.to_str().unwrap()
-//     }
-// }
