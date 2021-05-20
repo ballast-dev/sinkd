@@ -88,20 +88,21 @@ pub struct UserConfig {
 }
 
 #[allow(dead_code)]
+#[derive(PartialEq)]
 pub enum ConfigError {
     FileNotFound,
     InvalidSyntax(String),
     ReadOnly,
-    UserNotFound
+    NoUserFound
 }
 
 impl std::fmt::Display for ConfigError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match &*self {
-            ConfigError::FileNotFound       => write!(f, "FileNotFound"),
-            ConfigError::InvalidSyntax(err) => write!(f, "InvalidSyntax {}", err),
-            ConfigError::ReadOnly           => write!(f, "Readonly"),
-            ConfigError::UserNotFound       => write!(f, "UserNotFound"),
+            ConfigError::FileNotFound       => write!(f, "file not found"),
+            ConfigError::InvalidSyntax(err) => write!(f, "invalid syntax {}", err),
+            ConfigError::ReadOnly           => write!(f, "readonly"),
+            ConfigError::NoUserFound        => write!(f, "no user found"),
         }
     }
 }
@@ -130,9 +131,9 @@ impl Config {
             Err(e) => {
                 match e {
                     ConfigError::InvalidSyntax(syn) => {
-                        eprintln!("{}", syn)
+                        error!("{}", syn)
                     }, 
-                    _ => { eprintln!("{}", e) }
+                    _ => { error!("{}", e) }
                 }
                 return false;
             }
@@ -141,7 +142,7 @@ impl Config {
         match self.load_user_configs() {
             Ok(_) => { return true; }, // loaded both system and user
             Err(e) => {
-                eprintln!("{}", e);
+                error!("{}", e);
                 return false;
             }
         }
@@ -159,21 +160,22 @@ impl Config {
     }
 
     pub fn load_user_configs(&mut self) -> Result<(), ConfigError> {
+        let mut _user_loaded = false;
         for user in &self.sys.users {
-            let _cfg = format!("/home/{}/.config/sinkd.conf", user);
-            match std::fs::read_to_string(&_cfg) {
-                Ok(_) => {
-                    match Config::get_user_config(&user) {
-                        Ok(_usr_cfg) => { 
-                            &self.users.insert(user.clone(), _usr_cfg); 
-                            continue;
-                        },
-                        Err(e) => { return Err(e) }
-                    }
+            match Config::get_user_config(&user) {
+                Ok(_usr_cfg) => { 
+                    &self.users.insert(user.clone(), _usr_cfg); 
+                    _user_loaded = true;
+                    continue;
                 },
-                Err(_) => { return Err(ConfigError::UserNotFound) }
+                Err(_) => {
+                    warn!("user '{}' not found", user)
+                }
             }
         }
+        if !_user_loaded {
+            return Err(ConfigError::NoUserFound)
+        } 
         Ok(())
     }
 
