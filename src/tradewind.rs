@@ -70,7 +70,8 @@ impl Caravel {
         //~ --copy-links  (included with -a, copies where it points to)
         //~ --delete (must be a whole directory, no wildcards)
         //~ --delete-excluded (also delete excluded files)
-        //~ --max-size=SIZE (limit size of transfers)        
+        //~ --max-size=SIZE (limit size of transfers)      
+        //? ~!@#$%^&*()_+-=<>,./?\|[]{}0O  
 
         let rsync_result = std::process::Command::new("rsync")
                               .arg("-a") // to archive 
