@@ -3,6 +3,9 @@
  */
 use crate::daemon::barge::Barge;
 use crate::daemon::harbor::Harbor;
+
+
+
 //
 // D E P L O Y 
 //
@@ -13,10 +16,6 @@ use crate::daemon::harbor::Harbor;
  * just need to make sure one is not already deployed
  */
 
-pub enum DaemonType {
-    Barge,
-    Harbor,
-}
 pub fn deploy(ip: &str) -> bool {
     // starts the daemon remotely (If not already deployed)
     // ssh into another machine
@@ -27,41 +26,48 @@ pub fn deploy(ip: &str) -> bool {
 // E N D   D E P L O Y 
 //
 
+
+
+
+pub enum DaemonType {
+    Barge,
+    Harbor,
+}
+
 /** localhost file syncing separate daemons */
 pub fn anchor(file: &str) -> bool {
     println!("appending '{}' to watch files", file);    
     return true // able to watch directory
 }
 
-pub fn add_user(user: &str) {
+pub fn timoneer(user: &str) {
+
 }
 
-// insider function to enable local daemon
-fn init() {
-    // starts up the daemon locally
-    // if not initialized previously
-}
-pub fn list() {
+pub fn parley() {
     // print out all sinkd folders
 }
 
-pub fn status() {
+pub fn brig() {
     // ncurses TUI that shows all folders with progress bar on the bottom
     // repeat for every char "-\|/#"
 }
 
-pub fn start(daemon_type: DaemonType) {
+// the same daemon should run on both machines ( in the same place )
+pub fn underway(daemon_type: DaemonType ) {
+    // 1 parse config 
+    // 2 put running rust code
     match daemon_type {
-        Barge => Barge::start(),
-        Harbor => Harbor::start(),
-    }    
+        DaemonType::Barge => println!("starting barge"),
+        DaemonType::Harbor => println!("starting harbor"),
+    }
 }
 
-pub fn stop() {
-
+// stops the server
+pub fn snag() {
 }
 
-// calls stop then start 
-pub fn restart() {
+// calls stop then start (restart)
+pub fn oilskins() {
 
 }

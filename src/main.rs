@@ -24,7 +24,6 @@ use std::process::exit as exit;
 use regex::Regex;
 
 mod cli;
-use cli::DaemonType;
 mod daemon;
 
 #[allow(dead_code)]
@@ -40,12 +39,8 @@ fn main() {
                             )
                             .help("sets up sinkd server on remote computer")
                         )
-                        .subcommand(SubCommand::with_name("init")
-                            .about("initialize sinkd\nstarts local daemon to watch over files|folders")
-                            .help("no option necessary, spawns daemon locally")
-                        )
                         .subcommand(SubCommand::with_name("anchor")
-                            .about("anchors folder/file location")
+                            .about("adds folder/file to watch list")
                             .arg(Arg::with_name("LOCATION")
                                 .required(true)
                                 .help("sinkd starts watching folder/file")
@@ -53,14 +48,23 @@ fn main() {
                             .help("usage: sinkd anchor [OPTION] FILE\n\
                                    lets sinkd become `aware` of file or folder location provided")
                         )
-                        .subcommand(SubCommand::with_name("start")
-                            .about("starts the daemon")
+                        .subcommand(SubCommand::with_name("parley")
+                            // really nice printout
+                            .about("list watched dirs")
                         )
-                        .subcommand(SubCommand::with_name("stop")
-                            .about("stops the daemon")
+                        .subcommand(SubCommand::with_name("brig")
+                            .about("removes PATH from list of watched directories")
+                            .help("usage: sinkd brig PATH")
                         )
-                        .subcommand(SubCommand::with_name("restart")
-                            .about("stops and starts the daemon (update config)")
+                        .subcommand(SubCommand::with_name("underway")
+                            .about("starts local daemon to watch over files|folders")
+                            .help("no option necessary, spawns daemon locally")
+                        )
+                        .subcommand(SubCommand::with_name("snag")
+                            .about("stops the sinkd daemon")
+                        )
+                        .subcommand(SubCommand::with_name("oilskins")
+                            .about("stops and starts the daemon (updates config)")
                         )
                         .get_matches();
 
@@ -92,16 +96,16 @@ fn main() {
         }
     }
     
-    if let Some(matches) = matches.subcommand_matches("start") {
-        cli::start(DaemonType::Barge);
+    if let Some(matches) = matches.subcommand_matches("underway") {
+        cli::underway(cli::DaemonType::Barge);
     }
 
-    if let Some(matches) = matches.subcommand_matches("stop") {
-        cli::stop();
+    if let Some(matches) = matches.subcommand_matches("snag") {
+        cli::snag();
     }
 
-    if let Some(matches) = matches.subcommand_matches("restart") {
-        cli::restart();
+    if let Some(matches) = matches.subcommand_matches("oilskins") {
+        cli::oilskins();
     }
 
 }
