@@ -27,7 +27,7 @@ fn main() {
             println!("'{}' does not exist", path);
         }
     }
-    
+
     if let Some(_) = matches.subcommand_matches("ls") {
         cli::list();
     }
@@ -48,7 +48,7 @@ fn main() {
         cli::adduser(matches.values_of("USER").unwrap().collect());
     }
 
-    if let Some(_) = matches.value_of("daemon") {
+    if matches.occurrences_of("daemon") >= 1 {
         cli::daemon();
     }
 

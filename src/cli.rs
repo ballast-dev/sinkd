@@ -9,14 +9,6 @@ pub enum DaemonType {
     Barge,
     Harbor,
 }
-// deploy
-// 1. add
-// 1. adduser
-// 1. ls
-// 1. rm
-// 1. rmuser
-// 1. start
-// 1. stop
 
 pub fn build_cli() -> App<'static, 'static> {
     App::new("sinkd")
@@ -25,10 +17,15 @@ pub fn build_cli() -> App<'static, 'static> {
         .arg(Arg::with_name("daemon")
             .short("d")
             .long("daemon")
-            .hidden(true)
+            .hidden(true) // reentry point to spawn daemon for barge
+        )
+        .arg(Arg::with_name("harbor")
+            .short("r")
+            .long("harbor")
+            .help("Spawns sinkd server")
         )
         .subcommand(App::new("add")
-            .about("adds path to watch list")
+            .about("Adds PATH to watch list")
             .arg(Arg::with_name("PATH")
                 .required(true)
                 .help("sinkd starts watching path")
@@ -37,7 +34,7 @@ pub fn build_cli() -> App<'static, 'static> {
                 lets sinkd become 'aware' of file or folder location provided")
         )
         .subcommand(App::new("adduser")
-            .about("add user to watch")
+            .about("Add USER to watch")
             .arg(Arg::with_name("[USER, ...]")
                 .required(true)
                 .help("sinkd adduser USER")
@@ -46,32 +43,33 @@ pub fn build_cli() -> App<'static, 'static> {
         )
         .subcommand(App::new("ls")
             .alias("list")
+            .about("List currently watched files from given PATH")
             .arg(Arg::with_name("PATH")
                 .required(false)
                 .help("list watched files and directories")
             )
-            .help("list currently watched files from given PATH")
+            .help("usage: sinkd ls [PATH]")
         )
         .subcommand(App::new("rm")
             .alias("remove")
-            .about("removes PATH from list of watched directories")
+            .about("Removes PATH from list of watched directories")
             .arg(Arg::with_name("PATH")
                 .required(true)
             )
             .help("usage: sinkd rm PATH")
         )
         .subcommand(App::new("rmuser")
-            .about("removes user from watch")
+            .about("Removes USER from watch")
             .arg(Arg::with_name("USER")
                 .required(true)
             )
             .help("usage: sinkd rmuser USER")
         )
         .subcommand(App::new("start")
-            .about("starts the daemon")
+            .about("Starts the daemon")
         )
         .subcommand(App::new("stop")
-            .about("stops daemon")
+            .about("Stops daemon")
         )
  
 }
@@ -113,8 +111,8 @@ pub fn start() {
 }
 
 pub fn daemon() {
-    let mut barge = Barge::new();
-    barge.daemon(); // never returns
+    println!("running daemon!");
+    Barge::new().daemon(); // never returns
 }
 
 pub fn stop() {

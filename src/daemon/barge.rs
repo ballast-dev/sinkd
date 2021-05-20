@@ -35,7 +35,7 @@ impl Barge {
     pub fn daemon(&mut self) {
 
         self.load_conf();
-        
+        self.set_watchers();
         loop {
             match self.events.recv() {
                 Ok(event) => {
@@ -77,6 +77,25 @@ impl Barge {
         // for watch in &decoded.anchor_points {
         //     println!("{:?}, {:?}, {:?}, {:?}", watch.path, watch.users, watch.interval, watch.excludes);
         // }
+    }
+
+    fn set_watchers(&mut self) {
+        for watch in self.config.anchor_points.iter() {
+            let mut watcher = watcher(self.send.clone(), Duration::from_secs(1)).expect("couldn't create watch");
+            let result = watcher.watch(watch.path.clone(), RecursiveMode::Recursive);
+
+            match result {
+                Err(_) => {
+                    println!("{:<30} not found, unable to set watcher", watch.path.display());
+                    continue;
+                },
+                Ok(_) => {
+                    self.parrots.push(watcher); // transfers ownership
+                    println!("pushed a Parrot, for this dir => {}", watch.path.display());
+                }
+            }
+
+        }
     }
 
 
@@ -128,7 +147,6 @@ impl Barge {
                     self.parrots.push(watcher); // transfers ownership
                     println!("pushed a Parrot, for this dir => {}", watch.path.display());
                 }
-                // Ok(_) => ()
             }
 
         }
