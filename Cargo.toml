@@ -5,12 +5,12 @@ authors = ["Tony <tony@sinkd.co>"]
 edition = "2018"
 
 [dependencies]
-clap = "2.33.0"
+clap = "2.33.3"
 notify = "4.0.15"
-regex = "1.1.0"
-serde = "1.0.89"
-serde_derive = "1.0.89"
-toml = "0.4.10"
+regex = "1.4.2"
+serde = "1.0.117"
+serde_derive = "1.0.117"
+toml = "0.5.7"
 daemonize = "0.4.1"
 
 # [build-dependencies]
