@@ -43,15 +43,105 @@ impl AnchorPoint {
 
 
 
-/**
- * 
- */
-fn watch(dir_to_watch: &str, interval: u32) -> bool {
-    let anchor_point = AnchorPoint::from(dir_to_watch, interval);
-    // need to write to a config file
-    return true;
+pub struct Barge {
+    anchor_points: Vec<AnchorPoint>,
 }
 
+impl Barge {
+
+    pub fn load_config() -> bool {
+        // config should always be located in /etc/sinkd.conf
+        // fs::read
+        return true;
+    }
+
+    /**
+     * upon edit of configuration restart the daemon
+     */
+    pub fn watch(dir_to_watch: &str, interval: u32) -> bool {
+
+        let anchor_point = AnchorPoint::from(dir_to_watch, interval);
+
+        // need to start daemon from config file
+        // need to parse json
+        // set up json within /etc/sinkd.json
+
+
+        // serde already does json
+
+        // Create a channel to receive the events.
+        let (tx, rx) = channel();
+
+        // Create a watcher object, delivering debounced events.
+        // The notification back-end is selected based on the platform.
+        let mut watcher = watcher(tx, Duration::from_secs(1)).unwrap();
+
+        // Add a path to be watched. All files and directories at that path and
+        // below will be monitored for changes.
+        let result = watcher.watch(dir_to_watch, RecursiveMode::Recursive);
+        match result {
+            Err(_) => {
+                println!("path not found, unable to set watcher");
+                std::process::exit(1);
+            },
+
+            Ok(_) => ()
+        }
+
+    // TODO: to spawn in in background
+        loop {
+            match rx.recv() {
+            Ok(event) => println!("{:?}", event),
+            Err(e) => println!("watch error: {:?}", e),
+            }
+        }
+    }
+
+
+    pub fn parse_yaml() -> bool {
+        //     let s =
+    // "
+    // foo:
+    //     - list1
+    //     - list2
+    // bar:
+    //     - 1
+    //     - 2.0
+    // ";
+    //     let docs = YamlLoader::load_from_str(s).unwrap();
+
+    //     // Multi document support, doc is a yaml::Yaml
+    //     let doc = &docs[0];
+
+    //     // Debug support
+    //     println!("{:?}", doc);
+
+    //     // Index access for map & array
+    //     assert_eq!(doc["foo"][0].as_str().unwrap(), "list1");
+    //     assert_eq!(doc["bar"][1].as_f64().unwrap(), 2.0);
+
+    //     // Chained key/array access is checked and won't panic,
+    //     // return BadValue if they are not exist.
+    //     assert!(doc["INVALID_KEY"][100].is_badvalue());
+
+        // // Dump the YAML object
+        // let mut out_str = String::new();
+        // {
+        //     let mut emitter = YamlEmitter::new(&mut out_str);
+        //     emitter.dump(doc).unwrap(); // dump the YAML object to a String
+        // }
+        // println!("{}", out_str);
+    true
+    }
+}
+
+
+
+
+
+/************************************
+ ************* N O T E S ************
+ ************************************/
 
 // pub fn load_arc(arc: &mut Arc) {
 //     /*
@@ -93,80 +183,3 @@ fn watch(dir_to_watch: &str, interval: u32) -> bool {
 //         arc.repos.push(r);
 //     }
 // }
-
-fn load_config() -> bool {
-    // config should always be located in /etc/sinkd.conf
-    // fs::read
-    return true;
-}
-
-/**
- * upon edit of configuration restart the daemon
- */
-pub fn start_daemon() {
-
-    // need to start daemon from config file
-    // need to parse json
-    // set up json within /etc/sinkd.json
-
-    let s =
-"
-foo:
-    - list1
-    - list2
-bar:
-    - 1
-    - 2.0
-";
-    let docs = YamlLoader::load_from_str(s).unwrap();
-
-    // Multi document support, doc is a yaml::Yaml
-    let doc = &docs[0];
-
-    // Debug support
-    println!("{:?}", doc);
-
-    // Index access for map & array
-    assert_eq!(doc["foo"][0].as_str().unwrap(), "list1");
-    assert_eq!(doc["bar"][1].as_f64().unwrap(), 2.0);
-
-    // Chained key/array access is checked and won't panic,
-    // return BadValue if they are not exist.
-    assert!(doc["INVALID_KEY"][100].is_badvalue());
-
-    // Dump the YAML object
-    let mut out_str = String::new();
-    {
-        let mut emitter = YamlEmitter::new(&mut out_str);
-        emitter.dump(doc).unwrap(); // dump the YAML object to a String
-    }
-    println!("{}", out_str);
-
-    // serde already does json
-
-    // Create a channel to receive the events.
-    let (tx, rx) = channel();
-
-    // Create a watcher object, delivering debounced events.
-    // The notification back-end is selected based on the platform.
-    let mut watcher = watcher(tx, Duration::from_secs(1)).unwrap();
-
-    // Add a path to be watched. All files and directories at that path and
-    // below will be monitored for changes.
-    let result = watcher.watch("path/to/watch", RecursiveMode::Recursive);
-    match result {
-        Err(_) => {
-            println!("path not found, unable to set watcher");
-            std::process::exit(1);
-        },
-
-        Ok(_) => ()
-    }
-
-    loop {
-        match rx.recv() {
-           Ok(event) => println!("{:?}", event),
-           Err(e) => println!("watch error: {:?}", e),
-        }
-    }
-}
