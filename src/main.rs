@@ -11,69 +11,74 @@
  // This example demonstrates clap's full 'builder pattern' style of creating arguments which is
  // more verbose, but allows easier editing, and at times more advanced options, or the possibility
  // to generate arguments dynamically.
- extern crate clap;
- use clap::{Arg, App, SubCommand};
+extern crate clap;
+
+mod barge;
+
+use clap::{Arg, App, SubCommand};
+use std::env;
+
+
+
 
  fn main() {
-     let matches = App::new("sinkd")
-                           .version("0.1.0")
-                           .author("marketzero")
-                           .about("deployable cloud, drop anchor and go")
-                           .subcommand(SubCommand::with_name("deploy")
-                                .about("deploys anchor point to given IP")
-                                // .takes_value(true)
-                                .arg(Arg::with_name("IP"))
-                                .help("Sets the input file to use"))
-                                // .required(true)
-                                // .index(1)
-                           .arg(Arg::with_name("v")
-                                .short("v")
-                                .multiple(true)
-                                .help("Sets the level of verbosity"))
-                           .subcommand(SubCommand::with_name("test")
-                                       .about("controls testing features")
-                                       .version("1.3")
-                                       .author("Someone E. <someone_else@other.com>")
-                                       .arg(Arg::with_name("debug")
-                                           .short("d")
-                                           .help("print debug information verbosely")))
-                           .get_matches();
+    let matches = App::new("sinkd")
+                        .version("0.1.0")
+                        .about("deployable cloud, drop anchor and go")
+                        .subcommand(SubCommand::with_name("deploy")
+                            .about("deploys anchor point to given IP")
+                            .arg(Arg::with_name("IP")
+                                .required(true)
+                                .help("deploys sinkd daemon on given IP, ssh access required")
+                            )
+                        )
+                        .subcommand(SubCommand::with_name("anchor")
+                            .about("anchors folder/file location")
+                            .arg(Arg::with_name("FILE")
+                                .required(true)
+                                .help("sinkd starts watching folder/file")
+                            )
+                            .help("lets sinkd become `aware` of file or folder location provided")
+                        )
+                        .subcommand(SubCommand::with_name("start")
+                            .about("starts the daemon")
+                        )
+                        .subcommand(SubCommand::with_name("stop")
+                            .about("stops the daemon")
+                        )
+                        .subcommand(SubCommand::with_name("restart")
+                            .about("restarts the daemon")
+                        )
+                        .get_matches();
 
-     // Gets a value for config if supplied by user, or defaults to "default.conf"
-     let config = matches.value_of("config").unwrap_or("default.conf");
-     println!("Value for config: {}", config);
+// Gets a value for config if supplied by user, or defaults to "default.conf"
+//  let config = matches.value_of("config").unwrap_or("default.conf");
+//  println!("Value for config: {}", config);
 
-     if let Some(matches) = matches.subcommand_matches("deploy") {
-         println!("Using ip address {:?}", matches.value_of("IP"));
-         // if matches.value_of() {
-         //     println!("Printing debug info...");
-         // } else {
-         //     println!("Printing normally...");
-         // }
-     }
+    if let Some(matches) = matches.subcommand_matches("deploy") {
+        println!("Using ip address {:?}", matches.value_of("IP"));
+        // if matches.value_of() {
+        //     println!("Printing debug info...");
+        // } else {
+        //     println!("Printing normally...");
+        // }
+    }
 
-     // Calling .unwrap() is safe here because "INPUT" is required (if "INPUT" wasn't
-     // required we could have used an 'if let' to conditionally get the value)
-     // println!("Using input file: {}", matches.value_of("INPUT").unwrap());
+    if let Some(matches) = matches.subcommand_matches("anchor") {
+        let mut dir = env::current_dir().unwrap();
+        println!("cwd = {:?}", dir);
+        let this_dir = matches.value_of("FILE").unwrap();
+        println!("this dir = {:?}", this_dir);
+        dir.push(this_dir);
+        println!("Using folder location address {:?}", dir);
+    }
 
-     // Vary the output based on how many times the user used the "verbose" flag
-     // (i.e. 'myprog -v -v -v' or 'myprog -vvv' vs 'myprog -v'
-     match matches.occurrences_of("v") {
-         0 => println!("No verbose info"),
-         1 => println!("Some verbose info"),
-         2 => println!("Tons of verbose info"),
-         3 | _ => println!("Don't be crazy"),
-     }
+    // You can handle information about subcommands by requesting their matches by name
+    // (as below), requesting just the name used, or both at the same time
+    if let Some(matches) = matches.subcommand_matches("start") {
+        // start the daemon
+        barge::start_daemon();
+    }
 
-     // You can handle information about subcommands by requesting their matches by name
-     // (as below), requesting just the name used, or both at the same time
-     if let Some(matches) = matches.subcommand_matches("test") {
-         if matches.is_present("debug") {
-             println!("Printing debug info...");
-         } else {
-             println!("Printing normally...");
-         }
-     }
-
-     // more program logic goes here...
+    // more program logic goes here...
  }
