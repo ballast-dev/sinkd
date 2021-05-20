@@ -9,9 +9,10 @@ use notify::{Watcher, RecursiveMode, watcher};
 use std::sync::mpsc::channel;
 use std::time::Duration;
 use std::process::exit as exit;
-use crate::defs::Config;
+use crate::defs::*;
 
 pub struct AnchorPoint {
+    // watcher: Vec<notify::INotifyWatcher>,
     // directory to watch
     allowed_users: Vec<String>, // other than owner
     path: PathBuf,
@@ -68,44 +69,24 @@ impl AnchorPoint {
     }
 }
 
-// Configuration Holder
-struct Overlook {
-    owner: String,      // owner of the sinkd
-    patrol: Vec<AnchorPoint>,
-    keys: Vec<String>, // to hold ssh keys or future type 
-}
-
-impl Overlook {
-    pub fn new() -> Overlook {
-        return Overlook {
-            owner: String::new(),
-            patrol: Vec::new(),
-            keys: Vec::new(),
-        }
-    }
-}
-
-
 // Command line interface
 
 pub struct Barge {
     deployed: bool,
     overlook: Overlook,
-    config: String,
 }
 
 impl Barge {
 
     pub fn new() -> Barge {
         Barge {
-            deployed: true,
-            overlook: Overlook::new(),
-            config: String::from("nada")
+            deployed: false,
+            overlook: Overlook::new()
         }
     }
 
     pub fn start() {
-        // parse config
+        // parse overlook
         // start barge daemon
     }
 
@@ -140,48 +121,80 @@ impl Barge {
     }
 
 
-    fn load_conf() -> bool {
-        // config file located in /etc/sinkd.conf
+    fn load_conf(&mut self) -> bool {
+        // overlook file located in /etc/sinkd.conf
 
-        let mut toml_str = String::new();
+        if !self.deployed { // initialize
+            self.overlook.owner.key.clear();
+            self.overlook.owner.name.clear();
+            self.overlook.users.clear();
+            self.overlook.watches.clear();
+        }
+
+        let toml_str;
         match fs::read_to_string("/etc/sinkd.conf") {
-            Err(error) => println!("unable to open file '{}'", error),
-            Ok(output) => toml_str = output.clone(),
+            Err(error) => {
+                println!("unable to open file '{}'", error);
+                return false;
+            }
+            Ok(output) => {
+                toml_str = output.clone();
+            }
         }
 
-        let decoded: Config = toml::from_str(&toml_str[..]).expect("couldn't parse toml");
-        println!("{:#?}", decoded);
+        self.overlook = toml::from_str(&toml_str[..]).expect("couldn't parse toml");
+        return true;
+        // println!("{:#?}", decoded);
 
-        for watch in &decoded.watches {
-            println!("{:?}, {:?}, {:?}, {:?}", watch.path, watch.users, watch.interval, watch.excludes);
-        }
+        // for watch in &decoded.watches {
+        //     println!("{:?}, {:?}, {:?}, {:?}", watch.path, watch.users, watch.interval, watch.excludes);
+        // }
+    }
 
-        true // did it
+
+    fn conf_append(&mut self, file_to_watch: String, users: Vec<String>, interval: u32, excludes: Vec<String>) {
+        let new_watch = Directory {
+            path: file_to_watch,
+            users,
+            interval,
+            excludes,
+        };
+        // need to clear the vector, or upon initialization
+        self.overlook.watches.push(new_watch);
+        let new_overlook = toml::to_string_pretty(&self.overlook);
+
+        println!("{:?}", new_overlook);
     }
 
     /**
-     * upon edit of configuration restart the daemon
+     * upon edit of overlookuration restart the daemon
      * 
      * sinkd anchor FOLDER [-i | --interval] SECS
      */
-    pub fn anchor(&mut self, file_to_watch: &str, interval: u32, excludes: Vec<String>) -> bool {
+    pub fn anchor(&mut self, file_to_watch: String, interval: u32, excludes: Vec<String>) -> bool {
 
-        let this_user_name = "Johnny Goodboy Tyler";
-        self.overlook.patrol.push(
-            AnchorPoint::from(this_user_name,
-                              PathBuf::from(file_to_watch),
-                              interval,
-                              excludes)
+        self.load_conf();  // not sure if daemon should already be running
+        self.overlook.watches.push(
+            Directory {
+                path: file_to_watch,
+                users: Vec::new(), // need to pass empty vec
+                interval,
+                excludes,
+            }
         );
 
-        // anchor point can either be a file or a folder
+        // restart daemon ???
 
-        // 1 - open yaml file (/etc/sinkd.conf)
-        // 2 - deserialize
-        // 3 - append new FOLDER 
-        // 4 - write new yaml
-        // 5 - restart daemon (harbor)
-        Barge::load_conf();
+
+        // self.overlook.users.push(
+        //     User {
+        //         name: String::from("new_guy"),
+        //         address: String::from("atlantis"),
+        //         ssh_key: String::from("some_key"),
+        //     }
+        // );
+
+        // self.conf_append(file_to_watch, users, interval, excludes);
 
 
         // Create a channel to receive the events.

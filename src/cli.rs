@@ -5,7 +5,6 @@ use crate::daemon::barge::Barge;
 use crate::daemon::harbor::Harbor;
 
 
-
 //
 // D E P L O Y 
 //
@@ -27,15 +26,13 @@ pub fn deploy(ip: &str) -> bool {
 //
 
 
-
-
 pub enum DaemonType {
     Barge,
     Harbor,
 }
 
 /** localhost file syncing separate daemons */
-pub fn anchor(daemon_type: DaemonType ,file: &str) -> bool {
+pub fn anchor(daemon_type: DaemonType ,file: String) -> bool {
 
     match daemon_type {
         DaemonType::Barge => {
