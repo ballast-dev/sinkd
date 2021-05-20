@@ -27,10 +27,10 @@ impl Client {
 
     // infinite loop unless broken by interrupt
     pub fn init(&mut self) {
-        // if !self.load_conf() {
-        //     error!("Client did not start, unable to load configuration");
-        //     return;
-        // }
+        if !self.config.init() {
+            error!("sinkd>> couldn't initialize configurations");
+            panic!()
+        }
         self.run();
     }
 
@@ -91,28 +91,6 @@ impl Client {
             }
         }
     }
-
-    // fn load_conf(&mut self) -> bool {
-    //     self.config.users.clear();
-    //     self.config.anchors.clear();
-
-    //     let mut retval = false;
-    //     match fs::read_to_string("/etc/sinkd.conf") {
-    //         Err(error) => {
-    //             error!("unable to open /etc/sinkd.conf, {}", error);
-    //         }
-    //         Ok(output) => match toml::from_str(&output) {
-    //             Err(error) => {
-    //                 error!("couldn't parse '/etc/sinkd.conf' {}", error);
-    //             }
-    //             Ok(toml_parsed) => {
-    //                 self.config = toml_parsed;
-    //                 retval = true;
-    //             }
-    //         },
-    //     }
-    //     return retval;
-    // }
 
     fn set_watchers(&mut self) {
         for anchor in self.config.sys.shares.iter() {

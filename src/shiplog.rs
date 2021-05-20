@@ -16,7 +16,7 @@ impl ShipLog {
             file: OpenOptions::new()
                 .append(true)
                 .create(true)
-                .open(utils::get_sinkd_path().join("log"))
+                .open("/var/log/sinkd.log")
                 .expect("couldn't create log file")
         }
     }
