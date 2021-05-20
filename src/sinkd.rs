@@ -23,51 +23,25 @@ fn gen_keys() -> bool {
 }
 
 fn copy_keys_to_remote(pass: &str, host: &str) -> bool {
-    let command_str = format!("ssh-copy-id -i ~/.ssh/id_ed25519.pub {}", host);
-    println!("what are we putting out? {}", command_str);
+    // todo: add an optional force flag '-f'
+    let command_str = format!("printf 'y\n{}\n' | ssh-copy-id -i ~/.ssh/id_ed25519.pub {}", pass, host);
 
-    let mut echo = process::Command::new("sh")
-        .arg("-c")
-        .arg(format!("echo '{}'", pass))
-        .stdout(process::Stdio::piped())
-        .spawn()
-        .unwrap();
-
-    if let Some(echo_output) = echo.stdout.take() {
-        println!("{:?}", echo_output);
-        let copyid = process::Command::new("sh")
+    let echo = process::Command::new("sh")
         .arg("-c")
         .arg(command_str)
-        .stdin(echo_output)
         .stdout(process::Stdio::inherit())
-        .stderr(process::Stdio::inherit())
-        .spawn()
+        .output()
         .unwrap();
 
-        let copy_output = copyid.wait_with_output();
-
-        if let Ok(_) = echo.wait() {
-
-            match copy_output {
-                Err(x) => {
-                    println!("unable to copy ssh keys to remote, check firewall and ensure sshd is running!\n{:?}", x.to_string());
-                    return false;
-                }
-                Ok(output) => {
-                    println!("copied ssh-keys onto remote machine");
-                    println!("STDOUT: {:?}", String::from_utf8_lossy(&output.stdout));
-                    println!("STDERR: {:?}", String::from_utf8_lossy(&output.stderr));
-                    return true;
-                }
-            }
-
-        } else {
-            false
-        }   
-
+    // let echo_stdout = String::from_utf8_lossy(&echo.stdout);
+    let echo_stderr = String::from_utf8_lossy(&echo.stderr);
+    if echo_stderr.contains("already exist") {
+        println!("ssh keys already exist on server");
     } else {
-        return false; // todo: need to handle better
+        println!("ssh keys loaded on remote system");
     }
+    // todo: need to check output for validity
+    true
 }
 
 
