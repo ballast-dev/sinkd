@@ -1,22 +1,26 @@
-/**
+/*
  * Command Line Interface
-  - `sinkd deploy IP` creates harbor on server
-  - `sinkd anchor DIRECTORY` creates DIRECTORY on harbor (server file location)
-    - loads DIRECTORY in sinkd.json (top-level)
-    - possibility of multiple directories inside harbor folder
-  - `sinkd start` starts daemon
-  - `sinkd stop` stops daemon
-  - `sinkd restart` restarts daemon
- * 
  */
 
 
-pub fn deploy() -> bool {
+/**
+ * essentially the harbor and barge are two separate folder locations
+ * harbor and barge can live on the same machine
+ * just need to make sure one is not already deployed
+ */
+pub fn deploy(ip: &str) -> bool {
+    // ssh into another machine
+    // and start the sinkd daemon
     return true // able to start daemon on another computer
 }
 
-pub fn anchor(file: &str) -> bool{
+pub fn anchor(file: &str) -> bool {
+    println!("appending '{}' to watch files", file);    
     return true // able to watch directory
+}
+
+pub fn add_user(user: &str) {
+  
 }
 
 pub fn start() {

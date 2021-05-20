@@ -1,0 +1,11 @@
+---
+# need to state 
+# send this file with rsync over to another machine with (sinkd installed)
+# sinkd will listen and pick up on the file parse the /etc/sinkd/deployed.yaml
+# yaml file will have options:
+#  - interval wanted
+#  - users allowed
+#  - ssh-keys public keys
+
+# need a file browser (ranger?)
+...

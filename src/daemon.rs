@@ -52,6 +52,7 @@ use std::path::PathBuf;
  * ----------- 
  */
 
+// need to make a sinkd group for permissions
 pub struct Harbor {
     config: String  // parsed yaml from /etc/sinkd.conf
 }

@@ -14,27 +14,34 @@
 extern crate clap;
 extern crate notify;
 extern crate yaml_rust;
+extern crate regex;
+
 
 use clap::{Arg, App, SubCommand};
 use std::env;
+use std::path::Path;
+use std::process::exit as exit;
+use regex::Regex;
+
+mod cli;
 
 
-
-
- fn main() {
+#[allow(dead_code)]
+fn main() {
     let matches = App::new("sinkd")
                         .version("0.1.0")
                         .about("deployable cloud, drop anchor and go")
                         .subcommand(SubCommand::with_name("deploy")
-                            .about("deploys anchor point to given IP")
+                            .about("deploys sinkd to given IP")
                             .arg(Arg::with_name("IP")
                                 .required(true)
-                                .help("deploys sinkd daemon on given IP, ssh access required")
+                                .help("IPv4 address, ssh access required")
                             )
+                            .help("sets up sinkd server on remote computer")
                         )
                         .subcommand(SubCommand::with_name("anchor")
                             .about("anchors folder/file location")
-                            .arg(Arg::with_name("FILE")
+                            .arg(Arg::with_name("LOCATION")
                                 .required(true)
                                 .help("sinkd starts watching folder/file")
                             )
@@ -47,7 +54,7 @@ use std::env;
                             .about("stops the daemon")
                         )
                         .subcommand(SubCommand::with_name("restart")
-                            .about("restarts the daemon")
+                            .about("stops and starts the daemon (update config)")
                         )
                         .get_matches();
 
@@ -56,28 +63,39 @@ use std::env;
 //  println!("Value for config: {}", config);
 
     if let Some(matches) = matches.subcommand_matches("deploy") {
-        println!("Using ip address {:?}", matches.value_of("IP"));
-        // if matches.value_of() {
-        //     println!("Printing debug info...");
-        // } else {
-        //     println!("Printing normally...");
-        // }
+        
+        let ip = matches.value_of("IP").unwrap();
+        let valid_ip = Regex::new(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$").unwrap(); 
+
+        if valid_ip.is_match(ip) {
+            cli::deploy(ip);
+        } else {
+            println!("'{}' Invalid IP address", ip);
+            exit(1);
+        }
     }
 
     if let Some(matches) = matches.subcommand_matches("anchor") {
-        let mut dir = env::current_dir().unwrap();
-        println!("cwd = {:?}", dir);
+        
         let this_dir = matches.value_of("FILE").unwrap();
-        println!("this dir = {:?}", this_dir);
-        dir.push(this_dir);
-        println!("Using folder location address {:?}", dir);
+        
+        if Path::new(this_dir).exists() {
+            cli::anchor(this_dir);
+        } else {
+            println!("'{}' does not exist", this_dir);
+        }
     }
-
-    // You can handle information about subcommands by requesting their matches by name
-    // (as below), requesting just the name used, or both at the same time
+    
     if let Some(matches) = matches.subcommand_matches("start") {
-        // start the daemon
+        cli::start();
     }
 
-    // more program logic goes here...
- }
+    if let Some(matches) = matches.subcommand_matches("stop") {
+        cli::stop();
+    }
+
+    if let Some(matches) = matches.subcommand_matches("restart") {
+        cli::restart();
+    }
+
+}
