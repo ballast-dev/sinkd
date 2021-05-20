@@ -1,5 +1,7 @@
 # Set up passwordless login via SSH
 
+> https://linuxhint.com/setup_ssh_without_passwords/
+
 1. *On Local*
 1. `ssh-keygen -t ed25519`
 1. `ssh-copy-id remote_user@remote_IP`
