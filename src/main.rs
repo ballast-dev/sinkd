@@ -24,7 +24,6 @@ mod cli;
 mod daemon;
 mod defs;
 
-
 #[allow(dead_code)]
 fn main() {
     let matches = cli::build_cli().get_matches();

@@ -1,11 +1,4 @@
-# sinkd
-
-```txt
-     _     _     _
- ___|_|___| |_ _| |
-|_ -| |   | '_| . |
-|___|_|_|_|_,_|___|
-```
+# ![image](sinkd-logo.png)
 
 _**Everything and the kitchen sink**_  
 > Deployable cloud, when you want, where you want  
