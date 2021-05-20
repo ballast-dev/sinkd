@@ -16,40 +16,43 @@ fn gen_keys() -> bool {
             return false;
         }
         Ok(_) => {
-            println!("generated keys for current user");
+            println!("generated key for current user");
             return true;
         }
     }
 }
 
-fn copy_keys_to_remote(pass: &str, host: &str) -> bool {
+fn copy_keys_to_remote(host: &str) {
     // todo: add an optional force flag '-f'
-    let command_str = format!("printf 'y\n{}\n' | ssh-copy-id -i ~/.ssh/id_ed25519.pub {}", pass, host);
+    let command_str = format!("ssh-copy-id -i ~/.ssh/id_ed25519.pub {}", host);
 
     let echo = process::Command::new("sh")
         .arg("-c")
         .arg(command_str)
-        .stdout(process::Stdio::inherit())
+        .stdout(process::Stdio::null())
         .output()
         .unwrap();
 
     // let echo_stdout = String::from_utf8_lossy(&echo.stdout);
     let echo_stderr = String::from_utf8_lossy(&echo.stderr);
     if echo_stderr.contains("already exist") {
-        println!("ssh keys already exist on server");
+        println!("ssh key already exist on server");
     } else {
-        println!("ssh keys loaded on remote system");
+        println!("ssh key loaded on remote system");
     }
-    // todo: need to check output for validity
-    true
+
+    process::Command::new("sh")
+        .arg("-c")
+        .arg("eval $(ssh-agent) && ssh-add ~/.ssh/id_ed25519")
+        .output()
+        .unwrap();
+    println!("loaded private key with ssh-agent, passwordless login enabled!")
 }
-
-
 
 pub fn init(host: &str) {
     if gen_keys() {
-        let pass = rpassword::prompt_password_stdout("setting ssh-keys on remote...\npassword: ").unwrap();
-        copy_keys_to_remote(&pass, host);
+        // let pass = rpassword::prompt_password_stdout("setting ssh-keys on remote...\npassword: ").unwrap();
+        copy_keys_to_remote(host);
 
         
     }
