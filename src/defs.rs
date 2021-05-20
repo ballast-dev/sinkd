@@ -58,9 +58,9 @@ pub struct User {
 impl User {
     pub fn new() -> User {
         User {
-            name: String::from("new_user"),
-            address: String::from("user_addr"),
-            ssh_key: String::from("user_key"),
+            name: String::from("new_user_name"),
+            address: String::from("new_user_addr"),
+            ssh_key: String::from("new_user_key"),
         }
     }
     pub fn create() -> Vec<User> {

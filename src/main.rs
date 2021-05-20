@@ -6,26 +6,26 @@ extern crate toml;
 extern crate serde_derive;
 #[macro_use]
 extern crate log;
-// #![feature(const_fn)]
 
-
-use std::path::Path;
-// use std::process::exit as exit;
 
 mod cli;
 mod daemon;
 mod defs;
-mod hawser;
+mod ropework;
+mod shiplog;
 
 #[allow(dead_code)]
 fn main() {
+
+    shiplog::ShipLog::init();
+
     let matches = cli::build_cli().get_matches();
     
     if let Some(matches) = matches.subcommand_matches("add") {
         let path = String::from(matches.value_of("PATH").unwrap());
         println!("adding file!");
         
-        if Path::new(&path[..]).exists() {
+        if std::path::Path::new(&path[..]).exists() {
             cli::add(cli::DaemonType::Barge, path); // always a Barge from cli
         } else {
             println!("'{}' does not exist", path);

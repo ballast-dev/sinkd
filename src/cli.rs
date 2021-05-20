@@ -3,7 +3,7 @@
  */
 use crate::daemon::barge::Barge;
 use crate::daemon::harbor::Harbor;
-use crate::hawser;
+use crate::ropework;
 use daemonize::Daemonize;
 use clap::*;
 use std::fs;
@@ -136,7 +136,7 @@ pub fn list() {
 pub fn start() {
     // USER is an environment variable for *nix systems
     // NOTE: no intention to be used on windows
-    let sinkd_path = hawser::get_sinkd_path();
+    let sinkd_path = ropework::get_sinkd_path();
     let pid_path = sinkd_path.join("pid");
 
     if !pid_path.exists() { // then create file
@@ -171,7 +171,7 @@ pub fn start() {
 }
 
 pub fn stop() {
-    let pid_path = hawser::get_sinkd_path().join("pid");
+    let pid_path = ropework::get_sinkd_path().join("pid");
     match std::fs::read(&pid_path) {
         Err(err) => {
             eprintln!("Error stoping sinkd, {}", err);
