@@ -1,7 +1,3 @@
-/* ---------
-* B A R G E
-* ---------
-*/
 use std::fs;
 use std::env;
 use notify::{Watcher, RecursiveMode, watcher};
@@ -11,82 +7,56 @@ use std::process::exit as exit;
 use std::path::PathBuf;
 use crate::defs::*;
 
-// Command line interface
-pub struct Parrot {
-    pub tx: std::sync::mpsc::Sender<notify::DebouncedEvent>,
-    pub rx: std::sync::mpsc::Receiver<notify::DebouncedEvent>,
-    pub watcher: notify::RecommendedWatcher,
-}
-
-// impl Parrot {
-//     pub fn new() -> Parrot {
-//         Parrot {
-//             tx: std::sync::mpsc::Sender<notify::DebouncedEvent>::new(),
-            
-//         }
-//     }
-// }
 
 pub struct Barge {
+    // multiple produce single consumer
     deployed: bool,
-    overlook: Overlook,
-    parrots: Vec<Parrot>,
+    config: Config,
+    events: std::sync::mpsc::Receiver<notify::DebouncedEvent>, // single rx 
+    send: std::sync::mpsc::Sender<notify::DebouncedEvent>, // clone
+    parrots: Vec<notify::RecommendedWatcher>,
 }
 
 impl Barge {
 
     pub fn new() -> Barge {
+        let (tx, rx) = channel();
         Barge {
             deployed: false,
-            overlook: Overlook::new(),
+            config: Config::new(),
+            events: rx,
+            send: tx,
             parrots: Vec::new(),
         }
     }
 
-    pub fn start() {
-        // parse overlook
-        // start barge daemon
-    }
-
-    // to tell daemon to reparse its configuration file
-    pub fn restart() {
-        // stop
-        // start
-    }
-
-    pub fn stop() {
-        // stop barge daemon
-        // garbage collect?
-    }
-
-
+    
     // infinite loop unless broken by interrupt
-    fn run(&self) -> bool {
+    pub fn daemon(&mut self) {
 
-        // spawn a thread and return condition
-        return true
-        // listens to socket, waits for message
-
-        // while (true) {
-        //     if message.size > 1 {
-        //         text = message_read(message);
-        //         match text {
-        //             update => parse(),
-        //             file_change => sink(),
-        //         }
-        //     }
-        // }
+        self.load_conf();
+        
+        loop {
+            match self.events.recv() {
+                Ok(event) => {
+                    // handle event
+                    println!("{:?}", event);
+                },
+                Err(e) => println!("watch error: {:?}", e),
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10))
+        }
     }
 
 
     fn load_conf(&mut self) -> bool {
-        // overlook file located in /etc/sinkd.conf
+        // config file located in /etc/sinkd.conf
 
         if !self.deployed { // initialize
-            self.overlook.owner.key.clear();
-            self.overlook.owner.name.clear();
-            self.overlook.users.clear();
-            self.overlook.anchor_points.clear();
+            self.config.owner.key.clear();
+            self.config.owner.name.clear();
+            self.config.users.clear();
+            self.config.anchor_points.clear();
         }
 
         let toml_str;
@@ -100,7 +70,7 @@ impl Barge {
             }
         }
 
-        self.overlook = toml::from_str(&toml_str[..]).expect("couldn't parse toml");
+        self.config = toml::from_str(&toml_str[..]).expect("couldn't parse toml");
         return true;
         // println!("{:#?}", decoded);
 
@@ -118,25 +88,25 @@ impl Barge {
             excludes,
         };
         // need to clear the vector, or upon initialization
-        self.overlook.anchor_points.push(new_watch);
-        let new_overlook = toml::to_string_pretty(&self.overlook);
+        self.config.anchor_points.push(new_watch);
+        let new_overlook = toml::to_string_pretty(&self.config);
 
         println!("__conf append__\n{:?}", new_overlook);
     }
 
     /**
-     * upon edit of overlook
+     * upon edit of config
      * restart the daemon
      * 
      * sinkd anchor FOLDER [-i | --interval] SECS
      */
-    pub fn anchor(&mut self, mut file_to_watch: String, interval: u32, excludes: Vec<String>) -> bool {
-        
+    pub fn anchor(&mut self, mut file_to_watch: String, interval: u32, excludes: Vec<String>) {
+        println!("anchoring...");
         if &file_to_watch == "." {
             file_to_watch = env::current_dir().unwrap().to_string_lossy().to_string();
         }
         self.load_conf();  // not sure if daemon should already be running
-        self.overlook.anchor_points.push(
+        self.config.anchor_points.push(
             AnchorPoint {
                 path: PathBuf::from(file_to_watch.clone()),
                 users: Vec::new(), // need to pass empty vec
@@ -145,19 +115,8 @@ impl Barge {
             }
         );
 
-        // restart daemon ???
-
-
-        // Create a channel to receive the events.
-
-        // Create a watcher object, delivering debounced events.
-        // The notification back-end is selected based on the platform.
-
-        // std::sync::mpsc::Sender<notify::DebouncedEvent>
-        // std::sync::mpsc::Receiver<notify::DebouncedEvent>
-        for watch in self.overlook.anchor_points.iter() {
-            let (tx, rx) = channel();
-            let mut watcher = watcher(tx, Duration::from_secs(1)).expect("couldn't create watch");
+        for watch in self.config.anchor_points.iter() {
+            let mut watcher = watcher(self.send.clone(), Duration::from_secs(1)).expect("couldn't create watch");
             let result = watcher.watch(watch.path.clone(), RecursiveMode::Recursive);
 
             match result {
@@ -165,34 +124,16 @@ impl Barge {
                     println!("{:<30} not found, unable to set watcher", watch.path.display());
                     continue;
                 },
-
-                Ok(_) => ()
-            }
-
-            // self.parrots.push( Parrot {
-            //         tx,  
-            //         rx, 
-            //         watcher: watcher.clone() 
-            //     } 
-            // );
-            println!("pushed a Parrot, for this dir => {}", watch.path.display());
-
-        }
-        println!("anchor points is this -->{:?}", self.overlook.anchor_points);
-
-
-        // Add a path to be watched. All files and directories at that path and
-        // below will be monitored for changes.
-
-    // TODO: to spawn in in background
-        loop {
-            for parrot in self.parrots.iter() {
-                match parrot.rx.recv() {
-                    Ok(event) => println!("{:?}", event),
-                    Err(e) => println!("watch error: {:?}", e),
+                Ok(_) => {
+                    self.parrots.push(watcher); // transfers ownership
+                    println!("pushed a Parrot, for this dir => {}", watch.path.display());
                 }
+                // Ok(_) => ()
             }
+
         }
+        println!("anchor points is this -->{:?}", self.config.anchor_points);
+
     }
 
 

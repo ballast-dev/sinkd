@@ -11,20 +11,12 @@ I believe your files should stay with you **always**.
 - **No** privacy policies
 - **No** tradeoffs
 
-Given the pleathora of cloud providers and the frequent data breaches of large companies I created `sinkd` to give the power back to the user. 
+Given the pleathora of cloud providers and the frequent data breaches of large companies I created `sinkd` to give the power back to the user.
 
 1. Wraps `rsync` into a user friendly way
 1. Physical access to your files
 1. Granular permissions per user  
 1. Data restore, backup utility
-
-## What about [rclone](https://rclone.org/)?
-
-`rclone` is a fantastic application written in [Go](https://golang.org/). By using APIs from big cloud data providers `rclone` allows users to access their data in a truly ergonomic ways. 
-
-`sinkd` is written in [Rust](https://www.rust-lang.org) which is superior to **Go** in many ways.  
-The goal of `sinkd` is to **not** to use any cloud provider and keep everything _local_.  
-If the user wishes to allow access to the web that will be allowed but not enabled by default. 
 
 ### Future - Feature Enhancements
 

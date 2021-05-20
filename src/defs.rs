@@ -2,15 +2,15 @@
 use std::path::PathBuf;
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Overlook {
+pub struct Config {
     pub owner: Owner,
     pub users: Vec<User>,
     pub anchor_points: Vec<AnchorPoint>,
 }
 
-impl Overlook {
-    pub fn new() -> Overlook {
-        Overlook {
+impl Config {
+    pub fn new() -> Config {
+        Config {
             owner: Owner::new(),
             users: User::create(),
             anchor_points: AnchorPoint::create(),
@@ -18,13 +18,14 @@ impl Overlook {
     }
 
     pub fn add_watch(&mut self, path: PathBuf, users: Vec<String>, interval: u32, excludes: Vec<String>) {
-        let mut anchor = AnchorPoint {
+        self.anchor_points.push(
+            AnchorPoint {
                 path,
                 users,
                 interval,
                 excludes,
-            };
-        self.anchor_points.push(anchor);
+            }
+        );
         
     }
 }
@@ -103,7 +104,7 @@ impl AnchorPoint {
         return self.interval;
     }
 
-    pub fn add_exclude(&mut self, path: PathBuf) -> bool {
+    pub fn add_exclude(&mut self, _path: PathBuf) -> bool {
         let added: bool = true;
         if added {
             return true;
@@ -112,11 +113,11 @@ impl AnchorPoint {
         }
     }
 
-    pub fn add_user(&mut self, user: &str) -> bool {
+    pub fn add_user(&mut self, _user: &str) -> bool {
         return true;
     }
 
-    pub fn rm_user(&mut self, user: &str) -> bool {
+    pub fn rm_user(&mut self, _user: &str) -> bool {
         return true;
     }
 

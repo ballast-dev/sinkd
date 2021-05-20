@@ -5,28 +5,6 @@ use crate::daemon::barge::Barge;
 use crate::daemon::harbor::Harbor;
 use clap::*;
 
-//
-// D E P L O Y 
-//
-
-/**
- * essentially the harbor and barge are two separate folder locations
- * harbor and barge can live on the same machine
- * just need to make sure one is not already deployed
- */
-
-pub fn deploy(ip: &str) -> bool {
-    // starts the daemon remotely (If not already deployed)
-    // ssh into another machine
-    // and start the sinkd daemon
-    println!("Deployed to {}!", ip);
-    return true // able to start daemon on another computer
-}
-//
-// E N D   D E P L O Y 
-//
-
-
 pub enum DaemonType {
     Barge,
     Harbor,
@@ -42,20 +20,14 @@ pub enum DaemonType {
 
 pub fn build_cli() -> App<'static, 'static> {
     App::new("sinkd")
-        .version(env!("CARGO_PKG_VERSION"))
         .about("deployable cloud")
-        // NOTE: possibly have user install sinkd on server...
-        //       other option is to push configs over to server to enable harbor
-        //       ease of use is critical, vote to push configs
-        // .subcommand(SubCommand::with_name("deploy")
-        //     .about("enable daemon, pushes edits to given IP")
-        //     .arg(Arg::with_name("IP")
-        //         .required(true)
-        //         .help("IPv4 address, ssh access required")
-        //     )
-        //     .help("sets up sinkd server on remote computer")
-        // )
-        .subcommand(SubCommand::with_name("add")
+        .version(env!("CARGO_PKG_VERSION"))
+        .arg(Arg::with_name("daemon")
+            .short("d")
+            .long("daemon")
+            .hidden(true)
+        )
+        .subcommand(App::new("add")
             .about("adds path to watch list")
             .arg(Arg::with_name("PATH")
                 .required(true)
@@ -64,13 +36,15 @@ pub fn build_cli() -> App<'static, 'static> {
             .help("usage: sinkd add FILE [OPTIONS]\n\
                 lets sinkd become 'aware' of file or folder location provided")
         )
-        .subcommand(SubCommand::with_name("adduser")
+        .subcommand(App::new("adduser")
             .about("add user to watch")
             .arg(Arg::with_name("[USER, ...]")
-            .required(true)
-            .help("sinkd adduser USER")
+                .required(true)
+                .help("sinkd adduser USER")
+            )
+            .help("usage: sinkd adduser USER")
         )
-        .subcommand(SubCommand::with_name("ls")
+        .subcommand(App::new("ls")
             .alias("list")
             .arg(Arg::with_name("PATH")
                 .required(false)
@@ -78,7 +52,7 @@ pub fn build_cli() -> App<'static, 'static> {
             )
             .help("list currently watched files from given PATH")
         )
-        .subcommand(SubCommand::with_name("rm")
+        .subcommand(App::new("rm")
             .alias("remove")
             .about("removes PATH from list of watched directories")
             .arg(Arg::with_name("PATH")
@@ -86,23 +60,20 @@ pub fn build_cli() -> App<'static, 'static> {
             )
             .help("usage: sinkd rm PATH")
         )
-        .subcommand(SubCommand::with_name("rmuser")
+        .subcommand(App::new("rmuser")
             .about("removes user from watch")
             .arg(Arg::with_name("USER")
                 .required(true)
             )
             .help("usage: sinkd rmuser USER")
         )
-        .subcommand(SubCommand::with_name("start")
+        .subcommand(App::new("start")
             .about("starts the daemon")
         )
-        .subcommand(SubCommand::with_name("stop")
+        .subcommand(App::new("stop")
             .about("stops daemon")
         )
-        .subcommand(SubCommand::with_name("hoist")
-            .about("stops and starts the daemon (rescans config)")
-        )
-    )
+ 
 }
 
 
@@ -133,11 +104,34 @@ pub fn list() {
     println!("print out list of all watched folders")
 }
 
-pub fn stop() {
-    println!("stopping daemon")
+pub fn start() {
+    std::process::Command::new("sinkd")
+                           .arg("--daemon")
+                           .arg("&") // spawn in background
+                           .output()
+                           .expect("ERROR couldn't start daemon");
 }
 
-pub fn refresh() {
+pub fn daemon() {
+    let mut barge = Barge::new();
+    barge.daemon(); // never returns
+}
+
+pub fn stop() {
+    println!("stopping daemon");
+    // need to keep pid of barge process in separate file
+    std::process::Command::new("kill")
+                           .arg("-15")
+                           .arg("pid of process")
+                           .output()
+                           .expect("ERROR couldn't kill daemon");
+}
+
+pub fn restart() {
+    // stop the running daemon
+    // spawn the running daemon
+    // refresh the configuration
+    // NOTE: this should be called after every configuration change, maybe manual at first?
     println!("refreshing")
 }
 

@@ -3,7 +3,6 @@ name = "sinkd"
 version = "0.1.0"
 authors = ["Tony <tony@sinkd.co>"]
 edition = "2018"
-build = false
 
 [dependencies]
 clap = "2.33.0"
@@ -13,5 +12,5 @@ serde = "1.0.89"
 serde_derive = "1.0.89"
 toml = "0.4.10"
 
-[build-dependencies]
-clap = "2.33.0"
+# [build-dependencies]
+# clap = "2.33.0"
