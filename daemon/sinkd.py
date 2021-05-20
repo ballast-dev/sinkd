@@ -3,7 +3,8 @@
 
 # Sinkd daemon
 # will synchronize two folders
-# will be invoked on the terminal
+# will be invoked on the terminal via:
+#      `sinkd deploy <first_folder> <second_folder>`
 import subprocess
 
 

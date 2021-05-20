@@ -7,26 +7,29 @@
 ___
 Intro:
 
-Do you want to host your files on your own server? 
-We do too. Sinkd is a deployable cloud! 
+Do you want to host your files on your own server?
+We do too. Sinkd is a deployable cloud!
 Just give it two folder paths (local and remote) and you are good to go!
-Just ... 
-make sure you have access to both machines (write permissions) 
+Just ...
+make sure you have access to both machines (write permissions)
 and then
- 
+
 **drop anchor**
- ___________
-/__       __\
-   \\   // 
-----|| ||----------------------------------------------------------------------	
-    || ||  <-THIS IS AN ANCHOR ( NEEDS WORK )
- // \   / \\-----\_           
-// \/| |\/ \\      \                       /\
-||         ||      |  <---- THIS IS THE WAKE| NEEDS WORK )
-\\---------//      |                        |
-                 _/                         |              
------\_______/--/                   <-------  THIS IS OCEAN ( NEEDS WORK )
-         
+```
+                              _-_
+                             |(_)|
+                              |||
+                              |||
+                              |||
+                              |||
+                              |||
+                        ^     |^|     ^
+                      < * >   <=>   < * >
+                       | |    |||    | |
+                        \ \__/ | \__/ /
+                          \,__.|.__,/
+                              (_)
+```
            
 1. Script will start
 
