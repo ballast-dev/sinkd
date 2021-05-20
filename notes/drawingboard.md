@@ -4,14 +4,14 @@
 
 | command | alias | function |
 | ------- | ----- | -------- |
-| `init`   | `rig`      | setup daemon on server tbd... |
+| `setup`  | `rig`      | setup daemon on server tbd... |
 |`add`     | `anchor`   | add file/folder |
 |`adduser` | `hire`     | add user |
 |`ls`      | `parley`   | show current watched files/folders |
-|`rm`      | `brig`     | remove file/folder |
+|`rm`      | `embay`    | remove file/folder |
 |`rmuser`  | `fire`     | remove user? |
 |`start`   | `deploy`   | start daemon |
-|`stop`    | `snag`     | stop barge daemon |
+|`stop`    | `drydock`  | stop barge daemon |
 |`restart` | `oilskins` | stop then start (updates config) |
 
 ## Configuration Location/Loading 

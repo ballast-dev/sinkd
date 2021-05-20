@@ -1,5 +1,5 @@
 use crate::ropework;
-use crate::tradewind::Caravel;
+use crate::tradewind::Windjammer;
 use daemonize::Daemonize;
 use std::fs;
 use std::process;
@@ -210,12 +210,12 @@ pub fn start() {
     // .stdout(stdout)  // Redirect stdout to `/etc/sinkd/sinkd.out`.
     // .stderr(stderr)  // Redirect stderr to `/etc/sinkd/sinkd.err`.
     // .exit_action(|| println!("something?"))
-    // .privileged_action(|| Caravel::new().daemon());
+    // .privileged_action(|| );
 
     match daemonize.start() {
         Ok(_) => {
             info!("about to start daemon...");
-            Caravel::new().daemon();
+            Windjammer::new().trawl();
         }
         Err(e) => eprintln!("sinkd did not start (already running?), {}", e),
     }

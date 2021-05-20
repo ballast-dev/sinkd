@@ -7,7 +7,7 @@ use std::sync::mpsc::channel;
 use std::time::Duration;
 use std::{error::Error, fs};
 
-pub struct Caravel {
+pub struct Windjammer {
     // multiple produce single consumer
     config: Config,
     events: std::sync::mpsc::Receiver<notify::DebouncedEvent>, // single rx
@@ -15,10 +15,10 @@ pub struct Caravel {
     parrots: Vec<notify::RecommendedWatcher>,
 }
 
-impl Caravel {
-    pub fn new() -> Caravel {
+impl Windjammer {
+    pub fn new() -> Windjammer {
         let (tx, rx) = channel();
-        Caravel {
+        Windjammer {
             config: Config::new(),
             events: rx,
             send: tx,
@@ -27,9 +27,9 @@ impl Caravel {
     }
 
     // infinite loop unless broken by interrupt
-    pub fn daemon(&mut self) {
+    pub fn trawl(&mut self) {
         if !self.load_conf() {
-            error!("Daemon did not start, unable to load configuration");
+            error!("Windjammer did not start, unable to load configuration");
             return;
         }
         self.set_watchers();
