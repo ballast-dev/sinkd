@@ -20,6 +20,7 @@ mod setup;
 mod server;
 
 use clap::*;
+use config::SysConfig;
 
 pub fn build_sinkd() -> App<'static, 'static> {
     App::new("sinkd")
@@ -94,15 +95,35 @@ pub fn build_sinkd() -> App<'static, 'static> {
 }
 
 #[test]
-fn load_configs() {
-    match config::get_sys_config() {
-        Ok(sys_config) => {
-            println!("oh yeah, loaded sysconfig\n{:?}", sys_config)
-        },
+fn config() {
+    let sys_config: SysConfig = match config::get_sys_config() {
+        Ok(sys_config) => { sys_config },
         Err(err) => {
-            panic!("uh oh, check config! {}", err);
+            panic!("/etc/sinkd.conf ERROR {}", err);
+        }
+    };
+    for user in sys_config.users {
+        let _cfg = format!("/home/{}/.config/sinkd.conf", user);
+        match std::fs::read_to_string(&_cfg) {
+            Ok(_) => {
+                println!("going to user {}", &user);
+                match config::get_user_config(&user) {
+                    Ok(_) => {},
+                    Err(e) => {
+                        panic!("Error {}, {}", &_cfg, e)
+                    }
+                }
+            },
+            Err(_) => { 
+                eprintln!("configuration not loaded for {}", &user) 
+            }
         }
     }
+}
+
+#[test]
+fn dummy() {
+    println!("sucess?");
 }
 
 

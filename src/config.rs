@@ -1,10 +1,7 @@
 // Serialized structures from Configuration
 use std::path::PathBuf;
 use std::fs;
-use serde::Deserialize;
-use std::env;
 use std::collections::HashMap;
-
 use crate::utils::print_fancyln;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -91,13 +88,12 @@ impl SysConfig {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserConfig {
-    pub name: String,
     pub anchors: Vec<Anchor>
 }
 pub struct Config {
     // overall Config object to hold smaller 
     pub sys: SysConfig,
-    pub users: Vec<UserConfig>,
+    pub users: HashMap<String, UserConfig>,
 }
 
 
@@ -107,11 +103,12 @@ impl Config {
     pub fn new() -> Config {
         Config {
             sys: SysConfig::new(),
-            users: Vec::new()
+            users: HashMap::new()
         }
     }
 }
 
+#[allow(dead_code)]
 pub enum ConfigError {
     FileNotFound,
     InvalidSyntax(String),
@@ -122,15 +119,15 @@ pub enum ConfigError {
 impl std::fmt::Display for ConfigError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match &*self {
-            ConfigError::FileNotFound  => write!(f, "FileNotFound"),
+            ConfigError::FileNotFound       => write!(f, "FileNotFound"),
             ConfigError::InvalidSyntax(err) => write!(f, "InvalidSyntax {}", err),
-            ConfigError::MissingField  => write!(f, "MissingField"),
-            ConfigError::ReadOnly      => write!(f, "Readonly"),
+            ConfigError::MissingField       => write!(f, "MissingField"),
+            ConfigError::ReadOnly           => write!(f, "Readonly"),
         }
     }
 }
 
-//? assume package will install '/etc/sinkd.conf'
+//? Package will install '/etc/sinkd.conf'
 pub fn get_sys_config() -> Result<SysConfig, ConfigError> {
     match fs::read_to_string("/etc/sinkd.conf") {
         Err(error) => {

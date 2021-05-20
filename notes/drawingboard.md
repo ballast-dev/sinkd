@@ -24,14 +24,23 @@ Config will be loaded from `/etc/sinkd.conf` but also searched in `~/.config/sin
 | ----------- | ----------- |
 | `/absolute/path/to/stuff` | `/srv/sinkd/[user]/absolute/path/to/stuff` |
 
-## On Server
-- `/srv/sinkd/` is the "server root"
-- add `sinkd` group and relevent users to that group
+## Server-Side
+- **storage**
+    - `/srv/sinkd/` is the "server root"
+    - add `sinkd` group and relevent users to that group
+    - `/srv/sinkd/<user>/[anchor ...]`
+    - `/srv/sinkd/share/[anchor ...]` (multi-user, group permissions)
+- **daemon**
+    - `/etc/sinkd.conf` (system config)
+    - `/run/sinkd.pid` (client side daemon)
+    - `/var/log/sinkd.log` (client side logging)
 
-## On Client Side
-- `~/.sinkd/pid` holds running daemon process
-- `~/.sinkd/log` to log {info, warnings, errors}
 
+## Client-Side
+- `~/.config/sinkd.conf` (user config)
+- `/etc/sinkd.conf` (system config)
+- `/run/sinkd.pid` (client side daemon)
+- `/var/log/sinkd.log` (client side logging)
 
 ## Packaging
 With package elevation:
