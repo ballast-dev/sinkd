@@ -10,22 +10,6 @@ Intro:
 Do you want to host your files on your own server?
 We do too. Sinkd is a deployable cloud!
 Just give it two folder paths (local and remote) and **drop anchor**
-```
-                              _-_
-                             |(_)|
-                              |||
-                              |||
-                              |||
-                              |||
-                              |||
-                        ^     |^|     ^
-                      < * >   <=>   < * >
-                       | |    |||    | |
-                        \ \__/ | \__/ /
-                          \,__.|.__,/
-                              (_)
-```
-           
 1. Script will start
 
 2. Request from user `~/path/to/local` to `user@server.tld:~/path/to/remote`

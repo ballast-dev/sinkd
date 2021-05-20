@@ -1,5 +1,4 @@
-#!/bin/bash env python3
-###/usr/bin/python3   #don't know if this works
+#/usr/bin/env python
 
 # Sinkd daemon
 # will synchronize two folders
@@ -40,18 +39,3 @@ load_configs(local_folder)
 
 #bash_command = "echo YAY!"
 #os.system(bash_command)
-
-
-
-########## How to pipe with subprocess.
-# # print 'Hello World' to stdout
-# command1 = ['echo']
-# command1.append('Hello World')
-# process1 = subprocess.Popen(command1,stdout=subprocess.PIPE)
-#
-# # Find 'hello' in the input and print that match to stdout
-# command2 = ['grep']
-# command2.append('-o')
-# command2.append('-i')
-# command2.append('hello')
-# process2 = subprocess.Popen(command2,stdin=process1.stdout,stdout=subprocess.PIPE)
