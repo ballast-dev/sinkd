@@ -97,8 +97,8 @@ pub fn build_sinkd() -> App<'static, 'static> {
 fn main() {
 
     // let ts = rigging::get_timestamp("%T");
-    let c = unsafe { rigging::wrap(123) };
-    println!("I called C! {}", c);
+    let t = rigging::get_timestamp("%T");
+    println!("I called C! {}", t);
 
     shiplog::ShipLog::init();
     // mqtt::listen();

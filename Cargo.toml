@@ -3,7 +3,7 @@ name = "sinkd"
 version = "0.1.0"
 authors = ["Tony <tony@sinkd.co>"]
 edition = "2018"
-# build = "build.rs"
+build = "src/build.rs"
 
 # [build]
 # rustflags = ["--extern=~/Projects/paho.mqtt.rust/target/release/libpaho_mqtt.rlib"]
@@ -12,8 +12,8 @@ edition = "2018"
 clap = "2.33.3"
 notify = "4.0.15"
 regex = "1.4.2"
-serde = "1.0.117"
-serde_derive = "1.0.117"
+serde = "1.0.118"
+serde_derive = "1.0.118"
 toml = "0.5.7"
 daemonize = "0.4.1"
 # "std" is to enable set_boxed_logger
