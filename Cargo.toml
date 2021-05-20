@@ -21,6 +21,7 @@ log = { version = "0.4.14", features = ["std"] }
 paho-mqtt = "0.9.1"
 libc = "0.2.91"
 rpassword = "5.0.1"
+# signal-hook = "0.3.8"
 # paho-mqtt-sys = { version = "0.4", path = "paho-mqtt-sys", default-features=false }
 # futures = { version = "0.3", features = ["compat"] }
 # futures-timer = "3.0.2"
@@ -31,5 +32,5 @@ futures-util = "0.3.13"
 async-std = "1.9.0"
 
 [build-dependencies]
-# clap = "2.33.0"
+# cargo lib to build c code statically
 cc = { version = "1.0.67" }

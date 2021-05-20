@@ -1,5 +1,3 @@
-// Definitions for sinkd
-
 // Serialized structures from Configuration
 use std::path::PathBuf;
 
@@ -8,14 +6,14 @@ pub trait BuildAnchor {
 }
 
 pub trait FormedAnchor {
-    fn add_watch(&mut self, anchorage: Anchorage);
+    fn add_watch(&mut self, anchor: Anchor);
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
     pub server_addr: String,
     pub users: Vec<User>,
-    pub anchorages: Vec<Anchorage>,
+    pub anchors: Vec<Anchor>,
 }
 
 impl Config{
@@ -23,7 +21,7 @@ impl Config{
         Config {
             server_addr: String::new(),
             users: User::create(),
-            anchorages: vec![Anchorage::new()],
+            anchors: vec![Anchor::new()],
         }
     }
 }
@@ -32,13 +30,13 @@ impl Config{
 // method overloading... 
 impl BuildAnchor for Config {
     fn add_watch(&mut self, path: PathBuf, users: Vec<String>, interval: u32, excludes: Vec<String>) {
-        self.anchorages.push(Anchorage::from(path, users, interval, excludes));
+        self.anchors.push(Anchor::from(path, users, interval, excludes));
     }
 }
 
 impl FormedAnchor for Config {
-    fn add_watch(&mut self, anchorage: Anchorage) {
-        self.anchorages.push(anchorage);
+    fn add_watch(&mut self, anchor: Anchor) {
+        self.anchors.push(anchor);
     }
 }
 
@@ -62,16 +60,16 @@ impl User {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Anchorage {
+pub struct Anchor {
     pub path: PathBuf,
     pub users: Vec<String>,
     pub interval: u32,
     pub excludes: Vec<String>,
 }
 
-impl Anchorage {
-    pub fn new() -> Anchorage {
-        Anchorage {
+impl Anchor {
+    pub fn new() -> Anchor {
+        Anchor {
             path: PathBuf::from("invalid"),
             users: Vec::<String>::new(),
             interval: 5, // defaults to 5 secs?
@@ -79,8 +77,8 @@ impl Anchorage {
         }
     }
 
-    pub fn from(path: PathBuf, users: Vec<String>, interval: u32, excludes: Vec<String>) -> Anchorage {
-        Anchorage {
+    pub fn from(path: PathBuf, users: Vec<String>, interval: u32, excludes: Vec<String>) -> Anchor {
+        Anchor {
             path, 
             users,
             interval,
@@ -114,17 +112,17 @@ impl Anchorage {
     }
 
     pub fn add_user(&mut self, _user: &str) -> bool {
-        // if (users.count == 0) implicity means to share the anchorage
-        // moves the folder from: server_root/opt/sinkd/user/anchorage
-        //                  to:   server_root/opt/sinkd/share/anchorage
+        // if (users.count == 0) implicity means to share the anchor
+        // moves the folder from: server_root/opt/sinkd/user/anchor
+        //                  to:   server_root/opt/sinkd/share/anchor
         // should probably lock it down to certain group `sinkd` 
         return true;
     }
 
     pub fn rm_user(&mut self, _user: &str) -> bool {
-        // if (users.count == 0) implicity means to un-share the anchorage
-        // moves the folder from: server_root/opt/sinkd/share/anchorage
-        //                  to:   server_root/opt/sinkd/user/anchorage
+        // if (users.count == 0) implicity means to un-share the anchor
+        // moves the folder from: server_root/opt/sinkd/share/anchor
+        //                  to:   server_root/opt/sinkd/user/anchor
         return true;
     }
 }

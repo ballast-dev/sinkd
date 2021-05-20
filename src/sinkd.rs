@@ -1,5 +1,5 @@
-use crate::ropework;
-use crate::tradewind::Windjammer;
+use crate::utils;
+use crate::client::Client;
 use daemonize::Daemonize;
 use std::fs;
 use std::process;
@@ -122,7 +122,7 @@ pub fn setup_server(verbosity: u8, host: &str) {
 pub fn setup_keys(verbosity: u8, host: &str) {
     if gen_keys() {
         if copy_keys_to_remote(host) {
-           ropework::print_fancyln("finished setup", ropework::Attrs::NORMAL, ropework::Colors::GREEN)
+           utils::print_fancyln("finished setup", utils::Attrs::NORMAL, utils::Colors::GREEN)
         }
     }
     
@@ -186,7 +186,7 @@ pub fn list() {
 pub fn start() {
     // USER is an environment variable for *nix systems
     // NOTE: no intention to be used on windows
-    let sinkd_path = ropework::get_sinkd_path();
+    let sinkd_path = utils::get_sinkd_path();
     let pid_path = sinkd_path.join("pid");
 
     if !pid_path.exists() {
@@ -215,14 +215,14 @@ pub fn start() {
     match daemonize.start() {
         Ok(_) => {
             info!("about to start daemon...");
-            Windjammer::new().trawl();
+            Client::new().run();
         }
         Err(e) => eprintln!("sinkd did not start (already running?), {}", e),
     }
 }
 
 pub fn stop() {
-    let pid_path = ropework::get_sinkd_path().join("pid");
+    let pid_path = utils::get_sinkd_path().join("pid");
     match std::fs::read(&pid_path) {
         Err(err) => {
             eprintln!("Error stoping sinkd, {}", err);
@@ -269,7 +269,7 @@ pub fn log() {
     // error!("oops");
     // shows the log
 
-    let sinkd_path = ropework::get_sinkd_path();
+    let sinkd_path = utils::get_sinkd_path();
     let log_path = sinkd_path.join("log");
     print!(
         "{}",

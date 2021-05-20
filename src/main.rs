@@ -11,9 +11,9 @@ extern crate paho_mqtt;
 extern crate rpassword;
 
 
-mod rigging;
-mod tradewind;
-mod ropework;
+mod config;
+mod client;
+mod utils;
 mod shiplog;
 mod sinkd;
 mod mqtt;
@@ -24,28 +24,18 @@ pub fn build_sinkd() -> App<'static, 'static> {
     App::new("sinkd")
         .about("deployable cloud")
         .version(env!("CARGO_PKG_VERSION"))
-        .subcommand(App::new("setup")
+        .subcommand(App::new("init")
             .display_order(1)
-            .visible_alias("rig")
-            .about("Setup sinkd on local and remote")
-            .arg(Arg::with_name("SETUP_KEYS")
-                .short("k")
-                .long("keys")
-                .value_name("HOSTNAME")
-                .number_of_values(1)
-                .takes_value(true)
-                .help("setup ssh-keys between local and remote machine")
+            .about("Setup sinkd on client and server")
+            .arg(Arg::with_name("CLIENT")
+                .long("client")
+                .help("initialize sinkd daemon on client")
             )
-            .arg(Arg::with_name("SETUP_SERVER")
-                .short("s")
+            .arg(Arg::with_name("SERVER")
                 .long("server")
-                .value_name("HOSTNAME")
-                .number_of_values(1)
-                .takes_value(true)
-                .help("setup config and start daemon on server")
-                // .help("HOSTNAME of remote machine can be IPADDR too")
+                .help("initialize sinkd daemon on server")
             )
-            .usage("usage: sinkd setup [--keys, --server] HOSTNAME")
+            .usage("sinkd init [--client | --server]")
         )
         .subcommand(App::new("add")
             .alias("anchor")
@@ -83,7 +73,6 @@ pub fn build_sinkd() -> App<'static, 'static> {
         )
         .subcommand(App::new("rm")
             .alias("remove")
-            .alias("brig")
             .about("Removes PATH from list of watched directories")
             .arg(Arg::with_name("PATH")
                 .required(true)
@@ -92,7 +81,6 @@ pub fn build_sinkd() -> App<'static, 'static> {
             .help("usage: sinkd rm PATH")
         )
         .subcommand(App::new("rmuser")
-            .alias("fire")
             .about("Removes USER from watch")
             .arg(Arg::with_name("USER")
                 .required(true)
@@ -100,15 +88,12 @@ pub fn build_sinkd() -> App<'static, 'static> {
             .help("usage: sinkd rmuser USER")
         )
         .subcommand(App::new("start")
-            .alias("deploy")
             .about("Starts the daemon")
         )
         .subcommand(App::new("stop")
-            .alias("snag")
             .about("Stops daemon")
         )
         .subcommand(App::new("restart")
-            .alias("oilskins")
             .about("Restarts sinkd, reloading configuration")
         )
         .subcommand(App::new("log")
@@ -119,13 +104,14 @@ pub fn build_sinkd() -> App<'static, 'static> {
             .multiple(true)
             .help("verbose output")
         )
+        // .help("sinkd \n help and shit\n----boom-sauce")
 }
 
 
 #[allow(dead_code)]
 fn main() {
 
-    println!("Running sinkd at {}", ropework::get_timestamp("%Y%m%d-%T"));
+    println!("Running sinkd at {}", utils::get_timestamp("%Y%m%d-%T"));
 
     shiplog::ShipLog::init();
     // mqtt::listen();
@@ -140,10 +126,15 @@ fn main() {
     }
 
     match matches.subcommand() {
-        ("setup", Some(sub_match)) => {
-            if let Some(host) = sub_match.value_of("SETUP_KEYS") {
+        ("init", Some(sub_match)) => {
+            if let Some(host) = sub_match.value_of("SERVER") {
+                //? need to setup up mqtt on server 
+                //? server will send out a broadcast every ten seconds 
+                //? of any updates
                 sinkd::setup_keys(verbosity, &host);
-            } if let Some(host) = sub_match.value_of("SETUP_SERVER") {
+            } if let Some(host) = sub_match.value_of("CLIENT") {
+                //? client will rsync forward
+                //? mqtt subscribe for updates from server 
                 sinkd::setup_server(verbosity, &host);
             }
         },
@@ -166,7 +157,7 @@ fn main() {
         ("restart", Some(_)) => { sinkd::restart()},
         ("log",     Some(_)) => { sinkd::log()},
         _ => {
-            use ropework::*;
+            use utils::*;
             print_fancyln("deploy the anchor matey!", Attrs::INVERSE, Colors::YELLOW); 
             println!("invalid command, try -h for options"); 
         }

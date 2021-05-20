@@ -1,4 +1,4 @@
-use crate::rigging::*;
+use crate::config::*;
 use notify::DebouncedEvent::*;
 use notify::{watcher, RecursiveMode, Watcher};
 use std::env;
@@ -7,29 +7,29 @@ use std::sync::mpsc::channel;
 use std::time::Duration;
 use std::{error::Error, fs};
 
-pub struct Windjammer {
+pub struct Client {
     // multiple produce single consumer
     config: Config,
     events: std::sync::mpsc::Receiver<notify::DebouncedEvent>, // single rx
     send: std::sync::mpsc::Sender<notify::DebouncedEvent>,     // clone
-    parrots: Vec<notify::RecommendedWatcher>,
+    watchers: Vec<notify::RecommendedWatcher>,
 }
 
-impl Windjammer {
-    pub fn new() -> Windjammer {
+impl Client {
+    pub fn new() -> Client {
         let (tx, rx) = channel();
-        Windjammer {
+        Client {
             config: Config::new(),
             events: rx,
             send: tx,
-            parrots: Vec::new(),
+            watchers: Vec::new(),
         }
     }
 
     // infinite loop unless broken by interrupt
-    pub fn trawl(&mut self) {
+    pub fn run(&mut self) {
         if !self.load_conf() {
-            error!("Windjammer did not start, unable to load configuration");
+            error!("Client did not start, unable to load configuration");
             return;
         }
         self.set_watchers();
@@ -91,7 +91,7 @@ impl Windjammer {
 
     fn load_conf(&mut self) -> bool {
         self.config.users.clear();
-        self.config.anchorages.clear();
+        self.config.anchors.clear();
 
         let mut retval = false;
         match fs::read_to_string("/etc/sinkd.conf") {
@@ -112,18 +112,18 @@ impl Windjammer {
     }
 
     fn set_watchers(&mut self) {
-        for anchorage in self.config.anchorages.iter() {
-            let interval = Duration::from_secs(anchorage.interval.into());
+        for anchor in self.config.anchors.iter() {
+            let interval = Duration::from_secs(anchor.interval.into());
             let mut watcher = watcher(self.send.clone(), interval).expect("couldn't create watch");
 
-            match watcher.watch(anchorage.path.clone(), RecursiveMode::Recursive) {
+            match watcher.watch(anchor.path.clone(), RecursiveMode::Recursive) {
                 Err(_) => {
-                    warn!("unable to set watcher for: '{}'", anchorage.path.display());
+                    warn!("unable to set watcher for: '{}'", anchor.path.display());
                     continue;
                 }
                 Ok(_) => {
-                    self.parrots.push(watcher); // transfers ownership
-                    info!("pushed a Parrot for: '{}'", anchorage.path.display());
+                    self.watchers.push(watcher); // transfers ownership
+                    info!("set watcher for: '{}'", anchor.path.display());
                 }
             }
         }
@@ -137,7 +137,7 @@ impl Windjammer {
         excludes: Vec<String>,
     ) {
         // need to clear the vector, or upon initialization
-        self.config.anchorages.push(Anchorage {
+        self.config.anchors.push(Anchor {
             path: PathBuf::from(file_to_watch),
             users,
             interval,
@@ -160,14 +160,14 @@ impl Windjammer {
             file_to_watch = env::current_dir().unwrap().to_string_lossy().to_string();
         }
         self.load_conf(); // not sure if daemon should already be running
-        self.config.anchorages.push(Anchorage {
+        self.config.anchors.push(Anchor {
             path: PathBuf::from(file_to_watch.clone()),
             users: Vec::new(), // need to pass empty vec
             interval,
             excludes,
         });
 
-        for watch in self.config.anchorages.iter() {
+        for watch in self.config.anchors.iter() {
             let mut watcher =
                 watcher(self.send.clone(), Duration::from_secs(1)).expect("couldn't create watch");
             let result = watcher.watch(watch.path.clone(), RecursiveMode::Recursive);
@@ -181,11 +181,11 @@ impl Windjammer {
                     continue;
                 }
                 Ok(_) => {
-                    self.parrots.push(watcher); // transfers ownership
+                    self.watchers.push(watcher); // transfers ownership
                     info!("pushed a Parrot, for this dir => {}", watch.path.display());
                 }
             }
         }
-        info!("anchor points is this -->{:?}", self.config.anchorages);
+        info!("anchor points is this -->{:?}", self.config.anchors);
     }
 }
