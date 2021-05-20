@@ -4,7 +4,7 @@ use daemonize::Daemonize;
 use std::fs;
 
 
-pub fn add(file: String) -> bool {
+pub fn add(file: &str) -> bool {
     // add to config file
     // 
     println!("appending '{}' to watch files", file);   
