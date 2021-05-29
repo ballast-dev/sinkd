@@ -36,6 +36,7 @@ impl Client {
 
     pub fn run(&mut self) -> ! {
         self.set_watchers();
+        info!("running!");
         loop {
             match self.events.recv() {
                 Ok(event) => {

@@ -10,9 +10,6 @@
 |`ls`      | `parley`   | show current watched files/folders |
 |`rm`      | `embay`    | remove file/folder |
 |`rmuser`  | `fire`     | remove user? |
-|`start`   | `deploy`   | start daemon |
-|`stop`    | `drydock`  | stop barge daemon |
-|`restart` | `oilskins` | stop then start (updates config) |
 
 ## Configuration Location/Loading 
 Config will be loaded from `/etc/sinkd.conf` but also searched in `~/.config/sinkd.conf` for particular user preferences
@@ -52,7 +49,7 @@ With package elevation (_set up permissions correctly_):
     - `sudo chown sinkd:sinkd` for above files
     - [user] `~/.config/sinkd.conf` 
 1. `sudo chmod 2770 /srv/sinkd` with setgid (on server)
-1. `sudo useradd -r -g sinkd sinkd` adds user sinkd and assigns group sinkd as well 
+1. `sudo useradd -r -U sinkd` adds user sinkd and assigns group sinkd as well 
 1. `newgrp` to login to new group
 
 ## Create a service

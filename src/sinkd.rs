@@ -1,8 +1,8 @@
 use crate::{config, utils};
 use crate::client::Client;
 use daemonize::Daemonize;
-use std::{fs, u8};
-use libc;
+use std::{fs, path::PathBuf};
+// use libc;
 
 static PID_FILE: &str = "/run/sinkd.pid";
 
@@ -41,71 +41,91 @@ pub fn list() {
  * When sinkd is packaged should install /run/sinkd.pid file and make it writable the the sinkd group
  * Need to set up logging keep everything local to home directory ~/
  */
-pub fn start() {
-    // let sinkd_path = utils::get_sinkd_path();
-    // let pid_path = sinkd_path.join("pid");
+pub fn daemon() {
+    Client::new().init();
+    // let pid_path: PathBuf = PathBuf::from(PID_FILE);
 
     // if !pid_path.exists() {
-    //     let pid_file =
-    //         fs::File::create(&pid_path).expect("unable to create pid file, permissions?");
-    //     let metadata = pid_file.metadata().unwrap();
-    //     let mut permissions = metadata.permissions();
-    //     permissions.set_readonly(false);
-    //     fs::set_permissions(&pid_path, permissions).expect("cannot set permission");
+    //     if let Err(e) = std::process::Command::new("touch").arg(PID_FILE).spawn() {
+    //         error!("touch failed {}", e);
+    //         panic!();
+    //     }
+    //     if let Err(e) = std::process::Command::new("chmod").arg("664").arg(PID_FILE).spawn() {
+    //         error!("chmod failed {}", e);
+    //         panic!();
+    //     }
+
+    //     if let Err(e) = std::process::Command::new("chown").arg("sinkd:sinkd").arg(PID_FILE).spawn() {
+    //         error!("chown failed {}", e);
+    //         panic!();
+    //     }
+
+    //     match fs::File::create(&pid_path) {
+    //         Err(e) => {
+    //             error!("trouble making pid file {}", e)
+    //         },
+    //         Ok(pid_file) => {
+    //             // let metadata = pid_file.metadata().unwrap();
+    //             // let mut permissions = metadata.permissions();
+    //             // permissions.set_readonly(false);
+    //             if let Err(e) = fs::set_permissions(&pid_path, fs::Permissions::from_mode(0o664)) {
+    //                 error!("DID NOT SET PERMISSIONS!, {}", e);
+    //                 panic!();
+    //             }
+    //         }
+    //     }
     // }
 
+
     // TODO: need packager to setup file with correct permisions
-    let daemon = Daemonize::new()
-        .pid_file(PID_FILE);
-        // .chown_pid_file(true)  // is optional, see `Daemonize` documentation
-        // .user("nobody")
-        // .group("sinkd");
+    // let daemon = Daemonize::new()
+    //     .pid_file(PID_FILE);
 
-    match daemon.start() {
-        Ok(_) => {
-            info!("about to start daemon...");
-            Client::new().init();
-        }
-        Err(e) => error!("sinkd did not start (already running?), {}", e),
-    }
+    // match daemon.start() {
+    //     Ok(_) => {
+    //         info!("about to start daemon...");
+    //         Client::new().init();
+    //     }
+    //     Err(e) => error!("Error in creating daemon, {}", e),
+    // }
 }
 
-pub fn stop() {
-    match std::fs::read("/run/sinkd.pid") {
-        Err(err) => {
-            eprintln!("Error stoping sinkd, {}", err);
-            return;
-        }
-        Ok(contents) => {
-            let pid_str = String::from_utf8_lossy(&contents);
+// pub fn stop() {
+//     match std::fs::read(PID_FILE) {
+//         Err(err) => {
+//             eprintln!("Error stoping sinkd, {}", err);
+//             return;
+//         }
+//         Ok(contents) => {
+//             let pid_str = String::from_utf8_lossy(&contents);
 
-            match pid_str.parse::<u32>() {
-                Err(e2) => {
-                    eprintln!("sinkd not running?");
-                    eprintln!("{}", e2);
-                    return;
-                }
-                Ok(pid) => {
-                    println!("killing process {}", &pid);
-                    std::process::Command::new("kill")
-                        .arg("-15")
-                        .arg(pid_str.as_ref())
-                        .output()
-                        .expect("ERROR couldn't kill daemon");
-                }
-            }
-        }
-    }
-    match std::fs::write(PID_FILE, "") {
-        Err(err) => eprintln!("couldn't clear pid in ~/.sinkd/pid\n{}", err),
-        Ok(()) => println!("stopped sinkd daemon"),
-    }
-}
+//             match pid_str.parse::<u32>() {
+//                 Err(e2) => {
+//                     eprintln!("sinkd not running?");
+//                     eprintln!("{}", e2);
+//                     return;
+//                 }
+//                 Ok(pid) => {
+//                     println!("killing process {}", &pid);
+//                     std::process::Command::new("kill")
+//                         .arg("-15")
+//                         .arg(pid_str.as_ref())
+//                         .output()
+//                         .expect("ERROR couldn't kill daemon");
+//                 }
+//             }
+//         }
+//     }
+//     match std::fs::write(PID_FILE, "") {
+//         Err(err) => eprintln!("couldn't clear pid in {}\n{}", PID_FILE, err),
+//         Ok(()) => println!("stopped sinkd daemon"),
+//     }
+// }
 
-pub fn restart() {
-    stop();
-    start();
-}
+// pub fn restart() {
+//     stop();
+//     start();
+// }
 
 pub fn remove() {
     println!("remove files and folders")
