@@ -75,6 +75,15 @@ pub fn build_sinkd() -> App<'static, 'static> {
             )
             .help("usage: sinkd rm PATH")
         )
+        .subcommand(App::new("start")
+            .about("Starts the daemon")
+        )
+        .subcommand(App::new("stop")
+            .about("Stops daemon")
+        )
+        .subcommand(App::new("restart")
+            .about("Restarts sinkd, reloading configuration")
+        )
         .subcommand(App::new("log")
             .about("test out logging")
         )
@@ -97,8 +106,8 @@ fn main() {
     let matches = build_sinkd().get_matches();
     let mut verbosity: u8 = 0;
     match matches.occurrences_of("verbose") {
-        1 => verbosity = 1, // informationation
-        2 => verbosity = 2, // 
+        1 => verbosity = 1, 
+        2 => verbosity = 2,
         3 => verbosity = 3,
         _ => ()
     }
@@ -127,6 +136,9 @@ fn main() {
         },
         ("ls",      Some(_)) => { sinkd::list();},
         ("rm",      Some(_)) => { sinkd::remove();},
+        ("start",   Some(_)) => { sinkd::start();},
+        ("stop",    Some(_)) => { sinkd::stop();},
+        ("restart", Some(_)) => { sinkd::restart()},
         ("log",     Some(_)) => { sinkd::log()},
         _ => {}
     }

@@ -26,6 +26,12 @@ impl ShipLog {
         log::set_max_level(LevelFilter::Info);
     }
     
+    fn log_rotate(&self) -> bool {
+        // std::mem::drop
+        // how to close the file to rotate? 
+        drop(self.file);
+        return true;
+    }
 }
 
 impl log::Log for ShipLog {
@@ -36,9 +42,15 @@ impl log::Log for ShipLog {
 
     fn log(&self, record: &Record) {
         if self.enabled(record.metadata()) {
-            writeln!(&self.file, "{}[{}]{}",
+            let ten_megabytes: u64 = 1024 * 10000;
+            let file_size = &self.file.metadata().unwrap().len();
+            if file_size > &ten_megabytes {
+                self.log_rotate();
+            }
+            writeln!(&self.file, "{}[{}]-size:{}-{}",
                      utils::get_timestamp("%T"), 
                      record.level(), 
+                     &self.file.metadata().unwrap().len(),
                      record.args()).expect("couldn't write to log file");
         }
     }
