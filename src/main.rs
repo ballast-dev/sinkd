@@ -16,7 +16,7 @@ mod utils;
 mod shiplog;
 mod sinkd;
 mod mqtt;
-mod setup;
+mod init;
 mod server;
 mod test;
 
@@ -118,11 +118,11 @@ fn main() {
                 //? need to setup up mqtt on server 
                 //? server will send out a broadcast every ten seconds 
                 //? of any updates
-                setup::setup_keys(verbosity, &host);
+                init::setup_keys(verbosity, &host);
             } if let Some(host) = sub_match.value_of("CLIENT") {
                 //? client will rsync forward
                 //? mqtt subscribe for updates from server 
-                setup::setup_server(verbosity, &host);
+                init::setup_server(verbosity, &host);
             }
         },
         ("add", Some(sub_match)) => {

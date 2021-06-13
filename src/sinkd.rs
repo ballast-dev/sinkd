@@ -3,8 +3,10 @@ use crate::client::Client;
 use daemonize::Daemonize;
 use std::{fs, u8};
 use libc;
+use std::process;
 
-static PID_FILE: &str = "/run/sinkd.pid";
+pub const PID_FILE: &'static str = "/run/sinkd.pid";
+pub const LOG_FILE: &'static str = "/var/log/sinkd.log";
 
 fn reload_config() {
     info!("reload config?")
@@ -37,11 +39,18 @@ pub fn list() {
     }
 }
 
+pub fn start() {
+    process::Command::new("sh").arg("-c").arg("sudo systemctl start sinkd")
+        .output()
+        .unwrap();
+}
+
 /**
  * When sinkd is packaged should install /run/sinkd.pid file and make it writable the the sinkd group
  * Need to set up logging keep everything local to home directory ~/
  */
-pub fn start() {
+#[warn(unused_features)]
+pub fn legacy_start() {
     // let sinkd_path = utils::get_sinkd_path();
     // let pid_path = sinkd_path.join("pid");
 
@@ -71,40 +80,45 @@ pub fn start() {
 }
 
 pub fn stop() {
-    match std::fs::read("/run/sinkd.pid") {
-        Err(err) => {
-            eprintln!("Error stoping sinkd, {}", err);
-            return;
-        }
-        Ok(contents) => {
-            let pid_str = String::from_utf8_lossy(&contents);
+    process::Command::new("sh").arg("-c").arg("sudo systemctl stop sinkd")
+        // .stdout(process::Stdio::null())
+        .output()
+        .unwrap();
+    // match std::fs::read("/run/sinkd.pid") {
+    //     Err(err) => {
+    //         eprintln!("Error stoping sinkd, {}", err);
+    //         return;
+    //     }
+    //     Ok(contents) => {
+    //         let pid_str = String::from_utf8_lossy(&contents);
 
-            match pid_str.parse::<u32>() {
-                Err(e2) => {
-                    eprintln!("sinkd not running?");
-                    eprintln!("{}", e2);
-                    return;
-                }
-                Ok(pid) => {
-                    println!("killing process {}", &pid);
-                    std::process::Command::new("kill")
-                        .arg("-15")
-                        .arg(pid_str.as_ref())
-                        .output()
-                        .expect("ERROR couldn't kill daemon");
-                }
-            }
-        }
-    }
-    match std::fs::write(PID_FILE, "") {
-        Err(err) => eprintln!("couldn't clear pid in ~/.sinkd/pid\n{}", err),
-        Ok(()) => println!("stopped sinkd daemon"),
-    }
+    //         match pid_str.parse::<u32>() {
+    //             Err(e2) => {
+    //                 eprintln!("sinkd not running?");
+    //                 eprintln!("{}", e2);
+    //                 return;
+    //             }
+    //             Ok(pid) => {
+    //                 println!("killing process {}", &pid);
+    //                 std::process::Command::new("kill")
+    //                     .arg("-15")
+    //                     .arg(pid_str.as_ref())
+    //                     .output()
+    //                     .expect("ERROR couldn't kill daemon");
+    //             }
+    //         }
+    //     }arg
+    // }
+    // match std::fs::write(PID_FILE, "") {
+    //     Err(err) => eprintln!("couldn't clear pid in ~/.sinkd/pid\n{}", err),
+    //     Ok(()) => println!("stopped sinkd daemon"),
+    // }
 }
 
 pub fn restart() {
-    stop();
-    start();
+    process::Command::new("sh").arg("-c").arg("sudo systemctl restart sinkd")
+        .output()
+        .unwrap();
 }
 
 pub fn remove() {
@@ -115,12 +129,8 @@ pub fn log() {
     // info!("hello log");
     // warn!("warning");
     // error!("oops");
-    // shows the log
-
-    let sinkd_path = utils::get_sinkd_path();
-    let log_path = sinkd_path.join("log");
     print!(
         "{}",
-        fs::read_to_string(log_path).expect("couldn't read log file, check permissions")
+        fs::read_to_string(LOG_FILE).expect("couldn't read log file, check permissions")
     );
 }

@@ -4,6 +4,7 @@ use log::{Record, Level, Metadata, LevelFilter};
 use std::fs::OpenOptions;
 use std::io::prelude::*;  // for writeln!
 use crate::utils;
+use crate::sinkd;
 
 
 pub struct ShipLog { // big rope to moor ship to harbor
@@ -16,7 +17,7 @@ impl ShipLog {
             file: OpenOptions::new()
                 .append(true)
                 .create(true)
-                .open("/var/log/sinkd.log")
+                .open(sinkd::LOG_FILE)
                 .expect("couldn't create log file")
         }
     }
@@ -29,7 +30,7 @@ impl ShipLog {
     fn log_rotate(&self) -> bool {
         // std::mem::drop
         // how to close the file to rotate? 
-        drop(self.file);
+        // drop(self.file);
         return true;
     }
 }
@@ -45,13 +46,18 @@ impl log::Log for ShipLog {
             let ten_megabytes: u64 = 1024 * 10000;
             let file_size = &self.file.metadata().unwrap().len();
             if file_size > &ten_megabytes {
+                writeln!(&self.file, "{}[{}]FILESIZE OVER TEN-MEGABYTES({}): {}",
+                        utils::get_timestamp("%T"), 
+                        record.level(), 
+                        &self.file.metadata().unwrap().len(),
+                        record.args()).expect("couldn't write to log file");
                 self.log_rotate();
+            } else {
+                writeln!(&self.file, "{}[{}]-{}",
+                         utils::get_timestamp("%T"), 
+                         record.level(), 
+                         record.args()).expect("couldn't write to log file");
             }
-            writeln!(&self.file, "{}[{}]-size:{}-{}",
-                     utils::get_timestamp("%T"), 
-                     record.level(), 
-                     &self.file.metadata().unwrap().len(),
-                     record.args()).expect("couldn't write to log file");
         }
     }
 
