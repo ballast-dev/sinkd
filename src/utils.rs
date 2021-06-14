@@ -1,23 +1,99 @@
 // Common Utilities
 use std::fmt;
-use std::path;
+use std::path::PathBuf;
 
-pub fn get_sinkd_path() -> path::PathBuf {
-    let user = env!("USER");
-    let sinkd_path = if cfg!(target_os = "macos") {
-        path::Path::new("/Users").join(user).join(".sinkd")
+pub const PID_PATH: &'static str = "/tmp/sinkd.pid";
+pub const LOG_PATH: &'static str = "/tmp/sinkd.log";
+
+
+pub fn create_pid_file() -> Result<(), String> {
+    let pid_file = PathBuf::from(PID_PATH);
+    if !pid_file.exists() {
+        // match std::fs::create_dir_all(&pid_file) {
+        match std::fs::File::create(&pid_file) {
+            Err(why) => {
+                let err_str = format!("cannot create {:?}, {:?}", pid_file, why.kind());
+                return Err(err_str);
+            }
+            Ok(_) => return Ok(()),
+        }
     } else {
-        path::Path::new("/home").join(user).join(".sinkd")
-    };
+        return Ok(());  // already created 
+    }
+    // fs::File::create(PID_FILE).expect("unable to create pid file, permissions?");
+    // let metadata = pid_file.metadata().unwrap();
+    // let mut permissions = metadata.permissions();
+    // permissions.set_readonly(false);
+    // fs::set_permissions(&pid_path, permissions).expect("cannot set permission");
+}
+
+pub fn create_log_file() -> Result<(), String> {
+    let log_file = PathBuf::from(LOG_PATH);
+    if !log_file.exists() {
+        match std::fs::File::create(&log_file) {
+            Err(why) => {
+                let err_str = format!("cannot create {:?}, {:?}", log_file, why.kind());
+                return Err(err_str);
+            }
+            Ok(_) => return Ok(()),
+        }
+    } else {
+        return Ok(());  // already created
+    }
+}
+
+
+pub fn get_pid() -> Result<u16, String> {
+
+    // let user = env!("USER");
+    // let sinkd_path = if cfg!(target_os = "macos") {
+    //     path::Path::new("/Users").join(user).join(".sinkd")
+    // } else {
+    //     path::Path::new("/home").join(user).join(".sinkd")
+    // };
+
+    let pid_file = PathBuf::from(PID_PATH);
     
-    if !sinkd_path.exists() {
-        match std::fs::create_dir_all(&sinkd_path) {
-            Err(why) => println!("cannot create {:?}, {:?}", sinkd_path, why.kind()),
-            Ok(_) => {},
+    if !pid_file.exists() {
+        return Err(String::from("pid file not found"));
+    } else {
+        match std::fs::read(PID_PATH) {
+            Err(err) => {
+                let err_str = format!("Cannot read {}: {}", PID_PATH, err);
+                return Err(err_str);
+            }
+            Ok(contents) => {
+                let pid_str = String::from_utf8_lossy(&contents);
+                match pid_str.parse::<u16>() {
+                    Err(e2) => {
+                        let err_str = format!("Couldn't parse pid: {}", e2);
+                        return Err(err_str);
+                    }
+                    Ok(pid) => {
+                        return Ok(pid);
+                    }
+                }
+            }
         }
     }
-    return sinkd_path;
 } 
+
+pub fn set_pid(pid: u16) -> Result<(), String> {
+    let pid_file = PathBuf::from(PID_PATH);
+    if !pid_file.exists() {
+        return Err(String::from("pid file not found"))
+    } else {
+        match std::fs::write(pid_file, pid.to_ne_bytes()) {
+            Err(err) => {
+                let err_str = format!("couldn't clear pid in ~/.sinkd/pid\n{}", err);
+                return Err(err_str);
+            }
+            Ok(()) => {
+                return Ok(());  
+            } 
+        }
+    }
+}
 
 //--------------------
 // C O L O R S 

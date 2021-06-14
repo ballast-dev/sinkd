@@ -4,7 +4,6 @@ use log::{Record, Level, Metadata, LevelFilter};
 use std::fs::OpenOptions;
 use std::io::prelude::*;  // for writeln!
 use crate::utils;
-use crate::sinkd;
 
 
 pub struct ShipLog { // big rope to moor ship to harbor
@@ -17,7 +16,7 @@ impl ShipLog {
             file: OpenOptions::new()
                 .append(true)
                 .create(true)
-                .open(sinkd::LOG_FILE)
+                .open(utils::LOG_PATH)
                 .expect("couldn't create log file")
         }
     }

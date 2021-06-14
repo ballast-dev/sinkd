@@ -30,7 +30,7 @@ pub fn listen() {
     let (tx, rx) = std::sync::mpsc::channel();
 
     // Create a client & define connect options
-    let mut cli = mqtt::AsyncClient::new("tcp://localhost:1883").unwrap_or_else(|err| {
+    let mut client = mqtt::AsyncClient::new("tcp://localhost:1883").unwrap_or_else(|err| {
         println!("Error creating the client: {:?}", err);
         process::exit(1);
     });
@@ -38,7 +38,7 @@ pub fn listen() {
     // Create a message and publish it
     let msg = mqtt::Message::new("sinkd/", "sinkd is gonna kick ass", 0);
 
-    cli.publish(msg);
+    client.publish(msg);
 
     let disconn_opts = mqtt::DisconnectOptionsBuilder::new()
                     .reason_code(mqtt::ReasonCode::default())
@@ -46,7 +46,7 @@ pub fn listen() {
 
     // Attach a closure to the client to receive callback
     // on incoming messages.
-    cli.set_message_callback(move |_cli,msg| {
+    client.set_message_callback(move |_cli,msg| {
         if let Some(msg) = msg {
             let topic = msg.topic();
             let payload_str = msg.payload_str();
@@ -78,14 +78,14 @@ pub fn listen() {
     
     // Make the connection to the broker
     println!("Connecting to the MQTT server...");
-    cli.connect_with_callbacks(conn_opts, on_connect_success, on_connect_failure);
+    client.connect_with_callbacks(conn_opts, on_connect_success, on_connect_failure);
     
     println!("Waiting for messages...");
     loop {
         std::thread::sleep(std::time::Duration::from_millis(500));
         if let Ok(val) = rx.try_recv() {
             println!("got it! {:?}", val);
-            cli.disconnect(disconn_opts.clone());
+            client.disconnect(disconn_opts.clone());
             std::process::exit(0);
         }
     }
