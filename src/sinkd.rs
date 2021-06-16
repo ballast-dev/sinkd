@@ -2,8 +2,7 @@ use crate::{config, utils};
 use crate::client::Client;
 use daemonize::Daemonize;
 use std::fs;
-use std::process;
-
+use crate::shiplog;
 
 fn reload_config() {
     info!("reload config?")
@@ -42,6 +41,14 @@ pub fn list() {
  */
 // #[warn(unused_features)]
 pub fn start() -> bool {
+
+    match utils::create_log_file() {
+        Err(e) => {
+            eprintln!("{}", e);
+            return false;
+        }
+        Ok(_) => { shiplog::ShipLog::init(); }
+    }
     
     match utils::create_pid_file() {
         Err(e) => {
@@ -68,20 +75,31 @@ pub fn start() -> bool {
     }
 }
 
-pub fn stop() -> bool{
+pub fn stop() -> bool {
+    if !utils::have_permissions() {
+        eprintln!("Need to be root");
+        return false;
+    }
     match utils::get_pid() {
         Err(e) => { 
             eprintln!("{}", e);
             return false; 
         }
         Ok(pid) => {
-            println!("killing process {}", &pid);
             std::process::Command::new("kill")
                 .arg("-15")
                 .arg(format!("{}", pid))
                 .output()
                 .expect("ERROR couldn't kill daemon");
-            return true;
+            println!("killed process {}", &pid);
+
+            match utils::set_pid(0) {
+                Err(e) => { 
+                    eprintln!("{}", e); 
+                    return false; 
+                },
+                Ok(_) => { return true;  }
+            }
         }
     } 
 }

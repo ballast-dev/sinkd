@@ -99,13 +99,6 @@ pub fn build_sinkd() -> App<'static, 'static> {
 fn main() {
 
     println!("Running sinkd at {}", utils::get_timestamp("%Y%m%d-%T"));
-    match utils::create_log_file() {
-        Err(e) => {
-            eprintln!("{}", e);
-            return;
-        }
-        Ok(_) => { shiplog::ShipLog::init(); }
-    }
 
     // mqtt::listen();
     // std::process::exit(0);

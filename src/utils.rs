@@ -2,11 +2,19 @@
 use std::fmt;
 use std::path::PathBuf;
 
-pub const PID_PATH: &'static str = "/tmp/sinkd.pid";
-pub const LOG_PATH: &'static str = "/tmp/sinkd.log";
+pub const PID_PATH: &'static str = "/run/sinkd.pid";
+pub const LOG_PATH: &'static str = "/run/sinkd.log";
 
+pub fn have_permissions() -> bool {
+    unsafe {
+        return libc::geteuid() == 0;
+    }
+}
 
 pub fn create_pid_file() -> Result<(), String> {
+    if !have_permissions() {
+        return Err(String::from("Need to be root"));
+    }
     let pid_file = PathBuf::from(PID_PATH);
     if !pid_file.exists() {
         // match std::fs::create_dir_all(&pid_file) {
@@ -28,6 +36,9 @@ pub fn create_pid_file() -> Result<(), String> {
 }
 
 pub fn create_log_file() -> Result<(), String> {
+    if !have_permissions() {
+        return Err(String::from("Need to be root"));
+    }
     let log_file = PathBuf::from(LOG_PATH);
     if !log_file.exists() {
         match std::fs::File::create(&log_file) {
@@ -83,15 +94,28 @@ pub fn set_pid(pid: u16) -> Result<(), String> {
     if !pid_file.exists() {
         return Err(String::from("pid file not found"))
     } else {
-        match std::fs::write(pid_file, pid.to_ne_bytes()) {
-            Err(err) => {
-                let err_str = format!("couldn't clear pid in ~/.sinkd/pid\n{}", err);
-                return Err(err_str);
+
+        if pid == 0 {
+
+            unsafe {
+                let c_str = CString::new(PID_PATH).unwrap();
+                libc::unlink(c_str.into_raw());
             }
-            Ok(()) => {
-                return Ok(());  
-            } 
+            return Ok(())
+
+        } else {
+
+            match std::fs::write(pid_file, pid.to_ne_bytes()) {
+                Err(err) => {
+                    let err_str = format!("couldn't clear pid in ~/.sinkd/pid\n{}", err);
+                    return Err(err_str);
+                }
+                Ok(()) => {
+                    return Ok(());  
+                } 
+            }
         }
+
     }
 }
 
