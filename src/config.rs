@@ -7,8 +7,8 @@ use crate::utils::print_fancyln;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Anchor {
     pub path: PathBuf,
-    pub interval: u32,
-    pub excludes: Vec<String>
+    pub interval: u64,
+    pub excludes: Vec<String>,
 }
 
 // anchors are user directories to watch 
@@ -19,39 +19,6 @@ impl Anchor {
             path: PathBuf::from("invalid"),
             interval: 5, // defaults to 5 secs?
             excludes: Vec::new(),
-        }
-    }
-
-    pub fn from(path: PathBuf, users: Vec<String>, interval: u32, excludes: Vec<String>) -> Anchor {
-        Anchor {
-            path, 
-            interval,
-            excludes
-        }
-    }
-
-    pub fn set_path(&mut self, path: PathBuf) {
-        self.path = path;
-    }
-
-    pub fn get_path(&self) -> &PathBuf {
-        return &self.path;
-    }
-
-    pub fn set_interval(&mut self, interval: u32) {
-        self.interval = interval;
-    }
-
-    pub fn get_interval(&self) -> u32 {
-        return self.interval;
-    }
-
-    pub fn add_exclude(&mut self, _path: PathBuf) -> bool {
-        let added: bool = true;
-        if added {
-            return true;
-        } else {
-            return false;
         }
     }
 }

@@ -1,8 +1,8 @@
-use crate::{config, utils};
-use crate::client::Client;
 use daemonize::Daemonize;
 use std::fs;
 use crate::shiplog;
+use crate::{config, utils};
+use crate::client;
 
 fn reload_config() {
     info!("reload config?")
@@ -66,7 +66,7 @@ pub fn start() -> bool {
             match daemon.start() {
                 Ok(_) => {
                     info!("about to start daemon...");
-                    Client::new().init();
+                    client::run();
                 }
                 Err(e) => error!("sinkd did not start (already running?), {}", e),
             }

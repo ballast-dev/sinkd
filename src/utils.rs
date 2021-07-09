@@ -3,7 +3,7 @@ use std::fmt;
 use std::path::PathBuf;
 
 pub const PID_PATH: &'static str = "/run/sinkd.pid";
-pub const LOG_PATH: &'static str = "/run/sinkd.log";
+pub const LOG_PATH: &'static str = "/var/log/sinkd.log";
 
 pub fn have_permissions() -> bool {
     unsafe {
