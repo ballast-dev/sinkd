@@ -82,7 +82,8 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
         path: PathBuf,
         excludes: Vec::<String>, // holds wildcards
         interval: Duration,
-        last_event: Instant 
+        last_event: Instant,
+        changed: bool
     }
     let mut inode_map: HashMap<String, Vec<Inode>> = HashMap::new();
     for (name, cfg) in users_map.iter() {
@@ -93,44 +94,41 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
                     path: anchor.path.clone(),
                     excludes: anchor.excludes.clone(),
                     interval: Duration::from_secs(anchor.interval),
-                    last_event: Instant::now()
+                    last_event: Instant::now(),
+                    changed: false
                 }
             );
         }
         inode_map.insert(name.clone(), inodes);
     }
 
+    // if / in server addr then local path
+    let _srv_addr: String;
+    if sys_cfg.server_addr.contains("/") {
+        _srv_addr = sys_cfg.server_addr.clone();
+    } else {
+        _srv_addr = String::from("");
+    }
 
+
+    let mut something_triggered: bool = false;
     loop {
 
         match synch_rx.try_recv() {
             Ok(path) => {
                 let mut found = false;
-                for (name, inodes) in inode_map.iter() {
-                    for inode in inodes {
+                for (name, inodes) in inode_map.iter_mut() {
+                    for inode in inodes.iter_mut() {
                         if path.starts_with(&inode.path) {
                             let elapse = Instant::now().checked_duration_since(inode.last_event).unwrap();
                             if elapse >= inode.interval {
-                                let rsync_result = std::process::Command::new("rsync")
-                                    .arg("-a") // to archive
-                                    // .arg(&path)
-                                    .arg(&inode.path)
-                                    // TODO check for current user
-                                    // rsync -avt my/path/ tony@host:/path/to/stuff
-                                    .arg(&sys_cfg.server_addr)
-                                    .spawn();
-                                match rsync_result {
-                                    Err(x) => {
-                                        error!("{:?}", x);
-                                    }
-                                    Ok(_) => {
-                                        info!("Called rsync src:{}  ->  dest:{}", 
-                                                &path.display(), 
-                                                &sys_cfg.server_addr);
-                                    }
-                                }
+
+
+
+                            } else {
+                                inode.changed = true;
+                                something_triggered = true;
                             }
-                            
 
                             found = true;
                             break;
@@ -143,6 +141,16 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
             },
             Err(_) => {
                 std::thread::sleep(Duration::from_secs(1));
+                if something_triggered {
+                    for (name, inodes) in inode_map.iter_mut() {
+                        for inode in inodes.iter_mut() {
+                            if inode.changed {
+                                
+                            }
+                        }
+                    }
+                }
+
             }
         }
 
@@ -188,4 +196,25 @@ fn set_watchers(config: &Config, notify_tx: mpsc::Sender::<DebouncedEvent>) {
             }
         }
     }
+}
+
+fn fire_rsync(usr: &String, srv: &String, src: &String, dest: &String) {
+    let rsync_result = std::process::Command::new("rsync")
+        .arg("-a") // to archive
+        .arg(&inode.path)
+        // TODO check for current user
+        // rsync -avt my/path/ tony@host:/path/to/stuff
+        .arg(&sys_cfg.server_addr)
+        .spawn();
+    match rsync_result {
+        Err(x) => {
+            error!("{:?}", x);
+        }
+        Ok(_) => {
+            info!("Called rsync src:{}  ->  dest:{}", 
+                    &path.display(), 
+                    &sys_cfg.server_addr);
+        }
+    }
+
 }
