@@ -111,9 +111,7 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
     }
 
 
-    let mut something_triggered: bool = false;
     loop {
-
         match synch_rx.try_recv() {
             Ok(path) => {
                 let mut found = false;
@@ -122,28 +120,7 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
                         if path.starts_with(&inode.path) {
                             let elapse = Instant::now().checked_duration_since(inode.last_event).unwrap();
                             if elapse >= inode.interval {
-                                let rsync_result = std::process::Command::new("rsync")
-                                    .arg("-at") // archive and timestamps
-                                    .arg(&inode.path)
-                                    .arg(format!("{}@{}:/srv/sinkd/{}", 
-                                                 &name, 
-                                                 &sys_cfg.server_addr,
-                                                 &inode.path.display()))
-                                    // rsync -avt my/path/ tony@host:/path/to/stuff
-                                    .arg(&sys_cfg.server_addr)
-                                    .spawn();
-                                    inode.uncaught_event = false; 
-
-                                match rsync_result {
-                                    Err(x) => {
-                                        error!("{:?}", x);
-                                    }
-                                    Ok(_) => {
-                                        info!("Called rsync src:{}  ->  dest:{}", 
-                                                &path.display(), 
-                                                &sys_cfg.server_addr);
-                                    }
-                                }
+                                fire_rsync(&name, &sys_cfg.server_addr, &inode.path)
                             } else {
                                 inode.uncaught_event = true;
                             }
@@ -161,43 +138,12 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
                         if inode.uncaught_event {
                             let elapse = Instant::now().checked_duration_since(inode.last_event).unwrap();
                             if elapse >= inode.interval {
-                                let rsync_result = std::process::Command::new("rsync")
-                                    .arg("-at") // archive and timestamps
-                                    .arg(&inode.path)
-                                    .arg(format!("{}@{}:/srv/sinkd/{}", 
-                                                    &name, 
-                                                    &sys_cfg.server_addr,
-                                                    &inode.path.display()))
-                                    // rsync -avt my/path/ tony@host:/path/to/stuff
-                                    .arg(&sys_cfg.server_addr)
-                                    .spawn();
-                                    inode.uncaught_event = false; 
-
-                                match rsync_result {
-                                    Err(x) => {
-                                        error!("{:?}", x);
-                                    }
-                                    Ok(_) => {
-                                        info!("Called rsync src:{}  ->  dest:{}", 
-                                                &inode.path.display(), 
-                                                &sys_cfg.server_addr);
-                                    }
-                                }
+                                fire_rsync(&name, &sys_cfg.server_addr, &inode.path)
                             }    
                         }
                     }
                 }
                 std::thread::sleep(Duration::from_secs(1));
-                if something_triggered {
-                    for (name, inodes) in inode_map.iter_mut() {
-                        for inode in inodes.iter_mut() {
-                            if inode.changed {
-                                
-                            }
-                        }
-                    }
-                }
-
             }
         }
 
@@ -245,23 +191,24 @@ fn set_watchers(config: &Config, notify_tx: mpsc::Sender::<DebouncedEvent>) {
     }
 }
 
-fn fire_rsync(usr: &String, srv: &String, src: &String, dest: &String) {
+fn fire_rsync(username: &String, hostname: &String, path: &PathBuf) {
+    // rsync -avt my/path/ tony@host:/path/to/stuff
+    let src = path;
+    let dest = format!("{}@{}:/srv/sinkd/{}", &username, &hostname, &path.display());
     let rsync_result = std::process::Command::new("rsync")
-        .arg("-a") // to archive
-        .arg(&inode.path)
-        // TODO check for current user
-        // rsync -avt my/path/ tony@host:/path/to/stuff
-        .arg(&sys_cfg.server_addr)
+        .arg("-at") // archive and timestamps
+        .arg(&src)
+        .arg(&dest)
         .spawn();
+
     match rsync_result {
         Err(x) => {
             error!("{:?}", x);
         }
         Ok(_) => {
             info!("Called rsync src:{}  ->  dest:{}", 
-                    &path.display(), 
-                    &sys_cfg.server_addr);
+                    &src.display(), 
+                    &dest);
         }
     }
-
 }
