@@ -11,7 +11,7 @@ const INTERVAL: u8 = 5; // in seconds
 pub fn run() {
     let mut config = Config::new();
     if !config.init() {
-        error!("sinkd>> couldn't initialize configurations");
+        error!("FATAL couldn't initialize configurations");
         panic!() 
     }
     
@@ -83,7 +83,7 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
         excludes: Vec::<String>, // holds wildcards
         interval: Duration,
         last_event: Instant,
-        changed: bool
+        uncaught_event: bool 
     }
     let mut inode_map: HashMap<String, Vec<Inode>> = HashMap::new();
     for (name, cfg) in users_map.iter() {
@@ -95,7 +95,7 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
                     excludes: anchor.excludes.clone(),
                     interval: Duration::from_secs(anchor.interval),
                     last_event: Instant::now(),
-                    changed: false
+                    uncaught_event: false
                 }
             );
         }
@@ -122,24 +122,71 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
                         if path.starts_with(&inode.path) {
                             let elapse = Instant::now().checked_duration_since(inode.last_event).unwrap();
                             if elapse >= inode.interval {
+                                let rsync_result = std::process::Command::new("rsync")
+                                    .arg("-at") // archive and timestamps
+                                    .arg(&inode.path)
+                                    .arg(format!("{}@{}:/srv/sinkd/{}", 
+                                                 &name, 
+                                                 &sys_cfg.server_addr,
+                                                 &inode.path.display()))
+                                    // rsync -avt my/path/ tony@host:/path/to/stuff
+                                    .arg(&sys_cfg.server_addr)
+                                    .spawn();
+                                    inode.uncaught_event = false; 
 
-
-
+                                match rsync_result {
+                                    Err(x) => {
+                                        error!("{:?}", x);
+                                    }
+                                    Ok(_) => {
+                                        info!("Called rsync src:{}  ->  dest:{}", 
+                                                &path.display(), 
+                                                &sys_cfg.server_addr);
+                                    }
+                                }
                             } else {
-                                inode.changed = true;
-                                something_triggered = true;
+                                inode.uncaught_event = true;
                             }
 
-                            found = true;
+                            found = true;  // to prevent futher looping
                             break;
                         }
                     }
                     if found { break; }
                 }
-            
-                // if elapse.ge(Duration::from())
             },
             Err(_) => {
+                for (name, inodes) in inode_map.iter_mut() {
+                    for inode in inodes.iter_mut() {
+                        if inode.uncaught_event {
+                            let elapse = Instant::now().checked_duration_since(inode.last_event).unwrap();
+                            if elapse >= inode.interval {
+                                let rsync_result = std::process::Command::new("rsync")
+                                    .arg("-at") // archive and timestamps
+                                    .arg(&inode.path)
+                                    .arg(format!("{}@{}:/srv/sinkd/{}", 
+                                                    &name, 
+                                                    &sys_cfg.server_addr,
+                                                    &inode.path.display()))
+                                    // rsync -avt my/path/ tony@host:/path/to/stuff
+                                    .arg(&sys_cfg.server_addr)
+                                    .spawn();
+                                    inode.uncaught_event = false; 
+
+                                match rsync_result {
+                                    Err(x) => {
+                                        error!("{:?}", x);
+                                    }
+                                    Ok(_) => {
+                                        info!("Called rsync src:{}  ->  dest:{}", 
+                                                &inode.path.display(), 
+                                                &sys_cfg.server_addr);
+                                    }
+                                }
+                            }    
+                        }
+                    }
+                }
                 std::thread::sleep(Duration::from_secs(1));
                 if something_triggered {
                     for (name, inodes) in inode_map.iter_mut() {
