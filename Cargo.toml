@@ -5,9 +5,6 @@ authors = ["Tony <tony@sinkd.co>"]
 edition = "2018"
 build = "src/build.rs"
 
-# [build]
-# rustflags = ["--extern=~/Projects/paho.mqtt.rust/target/release/libpaho_mqtt.rlib"]
-
 [dependencies]
 clap = "2.33.3"
 notify = "4.0.15"
@@ -18,14 +15,8 @@ toml = "0.5.8"
 daemonize = "0.4.1"
 # "std" is to enable set_boxed_logger
 log = { version = "0.4.14", features = ["std"] }
-paho-mqtt = "0.9.1"
 libc = "0.2.91"
 rpassword = "5.0.1"
-# signal-hook = "0.3.8"
-# paho-mqtt-sys = { version = "0.4", path = "paho-mqtt-sys", default-features=false }
-# futures = { version = "0.3", features = ["compat"] }
-# futures-timer = "3.0.2"
-# thiserror = "1.0"
 
 [dev-dependencies]
 futures-util = "0.3.13"

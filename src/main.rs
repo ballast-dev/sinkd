@@ -7,7 +7,6 @@ extern crate serde_derive;
 #[macro_use]
 extern crate log;
 extern crate libc;
-extern crate paho_mqtt;
 extern crate rpassword;
 
 mod config;
@@ -15,7 +14,6 @@ mod client;
 mod utils;
 mod shiplog;
 mod sinkd;
-mod mqtt;
 mod init;
 mod server;
 mod test;
