@@ -9,20 +9,21 @@ use notify::{DebouncedEvent, Watcher};
 const INTERVAL: u8 = 5; // in seconds
 
 pub fn run() {
+    info!("client is running?");
     let mut config = Config::new();
     if !config.init() {
         error!("FATAL couldn't initialize configurations");
         panic!() 
     }
-    
     let (notify_tx, notify_rx) = mpsc::channel();
     // let (synch_tx, synch_rx): (mpsc::Sender::<PathBuf>, mpsc::Receiver::<PathBuf>) = mpsc::channel();
     let (synch_tx, synch_rx) = mpsc::channel(); // just pass type for compiler to understand
     // let watchers = Vec::new();   // TODO: needed?     
     set_watchers(&config, &notify_tx);
 
+    let watch_tx = synch_tx.clone();
     let watch_thread = thread::spawn(move || {
-        watch_entry(notify_rx, synch_tx.clone());
+        watch_entry(notify_rx, watch_tx);
     });
 
     let synch_thread = thread::spawn(move || {
@@ -38,8 +39,8 @@ pub fn run() {
 }
 
 fn watch_entry(notify_rx: mpsc::Receiver<DebouncedEvent>, synch_tx: mpsc::Sender<PathBuf>) {
-    info!("watch_entry");
     loop {
+        debug!("notification loop");
         match notify_rx.recv() {
             Ok(event) => {
                 info!("received notification event!");
@@ -62,7 +63,7 @@ fn watch_entry(notify_rx: mpsc::Receiver<DebouncedEvent>, synch_tx: mpsc::Sender
                     }
                 }
             }
-            Err(e) => info!("Received DebouncedEvent error: {:?}", e),
+            Err(e) => info!("notify mpsc::channel hung up... {:?}", e),
         }
         // TODO: to sleep on interval pulled from configuration
         // std::thread::sleep(std::time::Duration::from_secs(1));
@@ -85,6 +86,7 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
     // println!("{:?}", new_now.checked_duration_since(now));
     // println!("{:?}", now.checked_duration_since(new_now)); // None
 
+    info!("synch_entry");
     // create interval hashmap 
     struct Inode {
         path: PathBuf,
@@ -117,8 +119,7 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
     } else {
         _srv_addr = String::from("");
     }
-
-    info!("synch_entry");
+    info!("synch_loop");
     loop {
         match synch_rx.try_recv() {
             Ok(path) => {
@@ -153,6 +154,7 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
                     }
                 }
                 std::thread::sleep(Duration::from_secs(1));
+                debug!("synch loop?")
             }
         }
 

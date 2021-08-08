@@ -97,7 +97,7 @@ pub fn build_sinkd() -> App<'static, 'static> {
 fn main() {
 
     println!("Running sinkd at {}", utils::get_timestamp("%Y%m%d-%T"));
-
+    
     // mqtt::listen();
     // std::process::exit(0);
     let matches = build_sinkd().get_matches();

@@ -49,7 +49,9 @@ pub fn start() -> bool {
         }
         Ok(_) => { shiplog::ShipLog::init(); }
     }
-    
+    debug!("debug is up?");
+    info!("info works...");
+
     match utils::create_pid_file() {
         Err(e) => {
             eprintln!("{}", e);
@@ -58,10 +60,10 @@ pub fn start() -> bool {
         Ok(_) => {
             // TODO: need packager to setup file with correct permisions
             let daemon = Daemonize::new()
-                .pid_file(utils::PID_PATH);
+                .pid_file(utils::PID_PATH)
+                .group("sinkd");
                 // .chown_pid_file(true)  // is optional, see `Daemonize` documentation
                 // .user("nobody")
-                // .group("sinkd");
         
             match daemon.start() {
                 Ok(_) => {
