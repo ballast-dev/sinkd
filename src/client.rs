@@ -19,22 +19,30 @@ pub fn run() {
     // let (synch_tx, synch_rx): (mpsc::Sender::<PathBuf>, mpsc::Receiver::<PathBuf>) = mpsc::channel();
     let (synch_tx, synch_rx) = mpsc::channel(); // just pass type for compiler to understand
     // let watchers = Vec::new();   // TODO: needed?     
-    set_watchers(&config, notify_tx);
+    set_watchers(&config, &notify_tx);
 
     let watch_thread = thread::spawn(move || {
-        watch_entry(notify_rx, synch_tx);
+        watch_entry(notify_rx, synch_tx.clone());
     });
 
     let synch_thread = thread::spawn(move || {
         synch_entry(&config.sys, &config.users, synch_rx);
     });
+    
+    if let Err(_) = watch_thread.join() {
+        println!("oh no.... watch thread bugged out")
+    }
+    if let Err(_) = synch_thread.join() {
+        println!("oh no.... synch thread bugged out")
+    }
 }
 
 fn watch_entry(notify_rx: mpsc::Receiver<DebouncedEvent>, synch_tx: mpsc::Sender<PathBuf>) {
-    info!("running!");
+    info!("watch_entry");
     loop {
         match notify_rx.recv() {
             Ok(event) => {
+                info!("received notification event!");
                 match event {
                     // todo: maybe aggregate the calls under the parent folder, to minimize overhead
                     DebouncedEvent::NoticeWrite(_) => {}  // do nothing
@@ -110,10 +118,11 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
         _srv_addr = String::from("");
     }
 
-
+    info!("synch_entry");
     loop {
         match synch_rx.try_recv() {
             Ok(path) => {
+                info!("received from synch thread");
                 let mut found = false;
                 for (name, inodes) in inode_map.iter_mut() {
                     for inode in inodes.iter_mut() {
@@ -124,7 +133,6 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
                             } else {
                                 inode.uncaught_event = true;
                             }
-
                             found = true;  // to prevent futher looping
                             break;
                         }
@@ -136,6 +144,7 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
                 for (name, inodes) in inode_map.iter_mut() {
                     for inode in inodes.iter_mut() {
                         if inode.uncaught_event {
+                            info!("uncaught event!");
                             let elapse = Instant::now().checked_duration_since(inode.last_event).unwrap();
                             if elapse >= inode.interval {
                                 fire_rsync(&name, &sys_cfg.server_addr, &inode.path)
@@ -151,7 +160,7 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
 
 }
 
-fn set_watchers(config: &Config, notify_tx: mpsc::Sender::<DebouncedEvent>) {
+fn set_watchers(config: &Config, notify_tx: &mpsc::Sender::<DebouncedEvent>) {
 
     // Set watcher for share drives
     for anchor in config.sys.shares.iter() {
