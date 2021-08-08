@@ -2,6 +2,7 @@
 use std::fmt;
 use std::path::PathBuf;
 
+// TODO: need to wrap in os specific way
 pub const PID_PATH: &'static str = "/run/sinkd.pid";
 pub const LOG_PATH: &'static str = "/var/log/sinkd.log";
 

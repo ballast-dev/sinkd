@@ -9,7 +9,6 @@ use notify::{DebouncedEvent, Watcher};
 const INTERVAL: u8 = 5; // in seconds
 
 pub fn run() {
-    info!("client is running?");
     let mut config = Config::new();
     if !config.init() {
         error!("FATAL couldn't initialize configurations");
@@ -43,7 +42,7 @@ fn watch_entry(notify_rx: mpsc::Receiver<DebouncedEvent>, synch_tx: mpsc::Sender
         debug!("notification loop");
         match notify_rx.recv() {
             Ok(event) => {
-                info!("received notification event!");
+                debug!("received notification event!");
                 match event {
                     // todo: maybe aggregate the calls under the parent folder, to minimize overhead
                     DebouncedEvent::NoticeWrite(_) => {}  // do nothing
@@ -86,7 +85,7 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
     // println!("{:?}", new_now.checked_duration_since(now));
     // println!("{:?}", now.checked_duration_since(new_now)); // None
 
-    info!("synch_entry");
+    debug!("synch_entry");
     // create interval hashmap 
     struct Inode {
         path: PathBuf,
@@ -119,11 +118,11 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
     } else {
         _srv_addr = String::from("");
     }
-    info!("synch_loop");
+    debug!("synch_loop");
     loop {
         match synch_rx.try_recv() {
             Ok(path) => {
-                info!("received from synch thread");
+                debug!("received from synch thread");
                 let mut found = false;
                 for (name, inodes) in inode_map.iter_mut() {
                     for inode in inodes.iter_mut() {
@@ -145,7 +144,7 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
                 for (name, inodes) in inode_map.iter_mut() {
                     for inode in inodes.iter_mut() {
                         if inode.uncaught_event {
-                            info!("uncaught event!");
+                            debug!("uncaught event!");
                             let elapse = Instant::now().checked_duration_since(inode.last_event).unwrap();
                             if elapse >= inode.interval {
                                 fire_rsync(&name, &sys_cfg.server_addr, &inode.path)
