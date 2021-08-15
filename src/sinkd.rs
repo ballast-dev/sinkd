@@ -49,8 +49,6 @@ pub fn start() -> bool {
         }
         Ok(_) => { shiplog::ShipLog::init(); }
     }
-    debug!("debug is up?");
-    info!("info works...");
 
     match utils::create_pid_file() {
         Err(e) => {

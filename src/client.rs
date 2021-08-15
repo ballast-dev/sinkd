@@ -14,15 +14,17 @@ pub fn run() {
         error!("FATAL couldn't initialize configurations");
         panic!() 
     }
+
     let (notify_tx, notify_rx) = mpsc::channel();
     // let (synch_tx, synch_rx): (mpsc::Sender::<PathBuf>, mpsc::Receiver::<PathBuf>) = mpsc::channel();
     let (synch_tx, synch_rx) = mpsc::channel(); // just pass type for compiler to understand
     // let watchers = Vec::new();   // TODO: needed?     
-    set_watchers(&config, &notify_tx);
+    
+    // keep the watchers alive!
+    let _watchers = get_watchers(&config, notify_tx);
 
-    let watch_tx = synch_tx.clone();
     let watch_thread = thread::spawn(move || {
-        watch_entry(notify_rx, watch_tx);
+        watch_entry(notify_rx, synch_tx);
     });
 
     let synch_thread = thread::spawn(move || {
@@ -62,7 +64,10 @@ fn watch_entry(notify_rx: mpsc::Receiver<DebouncedEvent>, synch_tx: mpsc::Sender
                     }
                 }
             }
-            Err(e) => info!("notify mpsc::channel hung up... {:?}", e),
+            Err(e) => {
+                info!("notify mpsc::channel hung up... {:?}", e);
+                thread::sleep(Duration::from_secs(2))
+            }
         }
         // TODO: to sleep on interval pulled from configuration
         // std::thread::sleep(std::time::Duration::from_secs(1));
@@ -118,7 +123,6 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
     } else {
         _srv_addr = String::from("");
     }
-    debug!("synch_loop");
     loop {
         match synch_rx.try_recv() {
             Ok(path) => {
@@ -153,7 +157,7 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
                     }
                 }
                 std::thread::sleep(Duration::from_secs(1));
-                debug!("synch loop?")
+                debug!("synch loop...")
             }
         }
 
@@ -161,12 +165,12 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
 
 }
 
-fn set_watchers(config: &Config, notify_tx: &mpsc::Sender::<DebouncedEvent>) {
-
+fn get_watchers(config: &Config, tx: mpsc::Sender<notify::DebouncedEvent>) -> Vec<notify::RecommendedWatcher> {
+    let mut watchers: Vec<notify::RecommendedWatcher> = Vec::new();
     // Set watcher for share drives
     for anchor in config.sys.shares.iter() {
         let interval = Duration::from_secs(anchor.interval.into());
-        let mut watcher = notify::watcher(notify_tx.clone(), interval).expect("couldn't create watch");
+        let mut watcher = notify::watcher(tx.clone(), interval).expect("couldn't create watch");
 
         match watcher.watch(anchor.path.clone(), notify::RecursiveMode::Recursive) {
             Err(_) => {
@@ -174,8 +178,8 @@ fn set_watchers(config: &Config, notify_tx: &mpsc::Sender::<DebouncedEvent>) {
                 continue;
             }
             Ok(_) => {
-                // self.watchers.push(watcher); // transfers ownership
                 info!("set watcher for: '{}'", anchor.path.display());
+                watchers.push(watcher);
             }
         }
     }
@@ -185,7 +189,7 @@ fn set_watchers(config: &Config, notify_tx: &mpsc::Sender::<DebouncedEvent>) {
         // Client runs for all users
         for anchor in &usr_cfg.1.anchors {
             let interval = Duration::from_secs(anchor.interval.into());
-            let mut watcher = notify::watcher(notify_tx.clone(), interval).expect("couldn't create watch");
+            let mut watcher = notify::watcher(tx.clone(), interval).expect("couldn't create watch");
 
             match watcher.watch(anchor.path.clone(), notify::RecursiveMode::Recursive) {
                 Err(_) => {
@@ -193,12 +197,13 @@ fn set_watchers(config: &Config, notify_tx: &mpsc::Sender::<DebouncedEvent>) {
                     continue;
                 }
                 Ok(_) => {
-                    // self.watchers.push(watcher); // transfers ownership
                     info!("set watcher for: '{}'", anchor.path.display());
+                    watchers.push(watcher);
                 }
             }
         }
     }
+    return watchers;
 }
 
 fn fire_rsync(username: &String, hostname: &String, path: &PathBuf) {
