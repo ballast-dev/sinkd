@@ -6,8 +6,6 @@ use std::time::{Duration, Instant};
 use crate::config::{Config, UserConfig, SysConfig};
 use notify::{DebouncedEvent, Watcher};
 
-const INTERVAL: u8 = 5; // in seconds
-
 pub fn run() {
     let mut config = Config::new();
     if !config.init() {

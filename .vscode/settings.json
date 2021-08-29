@@ -1,8 +1,10 @@
 {
     "workbench.colorCustomizations": {
-        "editor.background": "#000000",
-        "terminal.background": "#000000",
-        "sideBar.background": "#0a0a0a",
-        "editor.lineHighlightBackground": "#1a1a1a"
+        "[Remedy - Dark (Straight)]" : {
+            "editor.background": "#000000",
+            "terminal.background": "#000000",
+            "sideBar.background": "#0a0a0a",
+            "editor.lineHighlightBackground": "#1a1a1a"
+        }
     }
 }
