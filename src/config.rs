@@ -131,7 +131,7 @@ impl Config {
         for user in &self.sys.users {
             match Config::get_user_config(&user) {
                 Ok(_usr_cfg) => { 
-                    &self.users.insert(user.clone(), _usr_cfg); 
+                    let _ = &self.users.insert(user.clone(), _usr_cfg); 
                     _user_loaded = true;
                     continue;
                 },

@@ -18,7 +18,6 @@ pub fn run() {
     let (notify_tx, notify_rx) = mpsc::channel();
     // let (synch_tx, synch_rx): (mpsc::Sender::<PathBuf>, mpsc::Receiver::<PathBuf>) = mpsc::channel();
     let (synch_tx, synch_rx) = mpsc::channel(); // just pass type for compiler to understand
-    // let watchers = Vec::new();   // TODO: needed?     
     
     // keep the watchers alive!
     let _watchers = get_watchers(&config, notify_tx);
@@ -32,21 +31,21 @@ pub fn run() {
     });
     
     if let Err(_) = watch_thread.join() {
-        println!("oh no.... watch thread bugged out")
+        error!("Client watch thread error!");
+        std::process::exit(1);
     }
     if let Err(_) = synch_thread.join() {
-        println!("oh no.... synch thread bugged out")
+        error!("Client synch thread error!");
+        std::process::exit(1);
     }
 }
 
 fn watch_entry(notify_rx: mpsc::Receiver<DebouncedEvent>, synch_tx: mpsc::Sender<PathBuf>) {
     loop {
-        debug!("notification loop");
         match notify_rx.recv() {
             Ok(event) => {
                 debug!("received notification event!");
                 match event {
-                    // todo: maybe aggregate the calls under the parent folder, to minimize overhead
                     DebouncedEvent::NoticeWrite(_) => {}  // do nothing
                     DebouncedEvent::NoticeRemove(_) => {} // do nothing for notices
                     DebouncedEvent::Create(path) => synch_tx.send(path).unwrap(),
@@ -75,6 +74,8 @@ fn watch_entry(notify_rx: mpsc::Receiver<DebouncedEvent>, synch_tx: mpsc::Sender
 }
 
 fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, synch_rx: mpsc::Receiver<PathBuf>) {
+    // Aggregate the calls under the parent folder, to minimize overhead
+
     //! need to pull excludes from config on loaded path
     //! '/srv/sinkd/user' will have permissions of user (to prevent rsync errors)
     //? RSYNC options to consider
@@ -90,7 +91,6 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
     // println!("{:?}", new_now.checked_duration_since(now));
     // println!("{:?}", now.checked_duration_since(new_now)); // None
 
-    debug!("synch_entry");
     // create interval hashmap 
     struct Inode {
         path: PathBuf,
@@ -123,6 +123,7 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
     } else {
         _srv_addr = String::from("");
     }
+
     loop {
         match synch_rx.try_recv() {
             Ok(path) => {
@@ -209,7 +210,13 @@ fn get_watchers(config: &Config, tx: mpsc::Sender<notify::DebouncedEvent>) -> Ve
 fn fire_rsync(username: &String, hostname: &String, path: &PathBuf) {
     // rsync -avt my/path/ tony@host:/path/to/stuff
     let src = path;
-    let dest = format!("{}@{}:/srv/sinkd/{}", &username, &hostname, &path.display());
+    let dest: String;
+    if hostname.starts_with('/') {
+        dest = format!("/srv/sinkd/{}/{}", &username, &path.display()); 
+    } else {
+        dest = format!("{}@{}:/srv/sinkd/{}/{}", &username, &hostname, &username, &path.display());
+    }
+
     let rsync_result = std::process::Command::new("rsync")
         .arg("-at") // archive and timestamps
         .arg(&src)
