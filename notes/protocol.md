@@ -34,6 +34,8 @@ Two options: (will implement first option)
     - disadvantage, hard to keep state of status
 
 ## Client 
+1. mqtt subscribe to `sinkd/status`
+1. mqtt publish to `sinkd/update`
 1. *polling thread* 
     - listen to broadcasts from server
     - update internal status 
@@ -43,6 +45,8 @@ Two options: (will implement first option)
     - update internal status to reflect current status
 
 ## Server
+1. mqtt subscribe to `sinkd/update`
+1. mqtt publish to `sinkd/status`
 1. *listening thread*
     - receive packets from clients
     - update broadcast to current status

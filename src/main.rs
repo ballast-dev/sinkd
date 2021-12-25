@@ -17,6 +17,7 @@ mod sinkd;
 mod init;
 mod server;
 mod test;
+mod protocol;
 
 use clap::*;
 
@@ -29,10 +30,13 @@ pub fn build_sinkd() -> App<'static, 'static> {
             .about("Setup sinkd on client or server")
             .arg(Arg::with_name("CLIENT")
                 .long("client")
+                .takes_value(false)
                 .help("initialize sinkd daemon on client")
             )
             .arg(Arg::with_name("SERVER")
                 .long("server")
+                .takes_value(false)
+                .conflicts_with("CLIENT")
                 .help("initialize sinkd daemon on server")
             )
             .usage("sinkd init [--client | --server]")
@@ -55,14 +59,14 @@ pub fn build_sinkd() -> App<'static, 'static> {
         .subcommand(App::new("ls")
             .alias("list")
             .about("List currently watched files from given PATH")
-            .arg(Arg::with_name("PATH")
+            .arg(Arg::with_name("PATHS")
                 // need to revisit, should user have explicit control
                 // possible -r flag for recursive 
                 .required(false)
                 .multiple(true) // CAREFUL: this will consume other arguments
                 .help("list watched files and directories")
             )
-            .help("usage: sinkd ls [PATH]")
+            .help("usage: sinkd ls [PATH | PATH ...]")
         )
         .subcommand(App::new("rm")
             .alias("remove")
@@ -111,15 +115,10 @@ fn main() {
 
     match matches.subcommand() {
         ("init", Some(sub_match)) => {
-            if let Some(host) = sub_match.value_of("SERVER") {
-                //? need to setup up mqtt on server 
-                //? server will send out a broadcast every ten seconds 
-                //? of any updates
-                init::setup_keys(verbosity, &host);
-            } if let Some(host) = sub_match.value_of("CLIENT") {
-                //? client will rsync forward
-                //? mqtt subscribe for updates from server 
-                init::setup_server(verbosity, &host);
+            if sub_match.is_present("SERVER") {
+                init::server(verbosity);
+            } else {
+                init::client(verbosity);
             }
         },
         ("add", Some(sub_match)) => {
@@ -131,7 +130,7 @@ fn main() {
                 }
             }
         },
-        ("ls",      Some(_)) => { sinkd::list();},
+        ("ls",      Some(path)) => { sinkd::list(&path.values_of_lossy("PATHS").unwrap());},
         ("rm",      Some(_)) => { sinkd::remove();},
         ("start",   Some(_)) => { sinkd::start();},
         ("stop",    Some(_)) => { sinkd::stop();},

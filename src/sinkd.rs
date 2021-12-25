@@ -20,8 +20,11 @@ pub fn add(file: &str) -> bool {
     return true; // able to watch directory
 }
 
-pub fn list() {
+pub fn list(paths: &Vec<String>) {
     //TODO need to list system shares
+    for path in paths {
+        println!("path: {}", path);
+    }
     let user = env!("USER");
     match config::Config::get_user_config(user) {
         Ok(usr_cfg) => {
@@ -30,7 +33,7 @@ pub fn list() {
             }
         },
         Err(e) => {
-            eprintln!("{}", e)
+            eprintln!("user config: {}", e)
         }
     }
 }

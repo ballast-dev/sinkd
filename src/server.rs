@@ -1,12 +1,18 @@
-/*
-    Server Side
-    clients push up updates 
-    server needs to send updates to out-of-date clients
+//    ____                    
+//   / __/__ _____  _____ ____
+//  _\ \/ -_) __/ |/ / -_) __/
+// /___/\__/_/  |___/\__/_/   
 
-    sends update along with rsync 
-        -> "sinkd/client/user/time"
+use crate::protocol::defs;
 
+enum State {
+    SYNCHING,
+    READY,
+}
 
-    
+// `sinkd start` starts up the client daemon
+// `sinkd start -s,--server` will start up the server daemon
 
- */
+pub fn start() {
+
+}
