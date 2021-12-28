@@ -18,27 +18,32 @@
 # Server vs. Client
 | server | client |
 | ------ | ------ |
-| no config | /etc/sinkd.conf and ~/.config/sinkd.conf | 
-| /run/sinkd.pid | /run/sinkd.pid | 
+| no config                   | /etc/sinkd.conf and ~/.config/sinkd.conf | 
+| /run/sinkd.pid              | /run/sinkd.pid | 
 | mkdir /srv/sinkd/ set perms | no /srv/sinkd |
-| setup rsync daemon | no rsync daemon |
+| setup rsync daemon          | no rsync daemon |
 
-___
-**server** `sinkd init --server` 
+## `sinkd init --server` 
   - mkdir /srv/sinkd 
   - chmod 2770 /srv/sinkd (for setgid, not recursive for user permissions to retain)
-  <!-- - cd /srv/sinkd/ && umask 5007
-  - create systemd unit file with appropriate flags i.e. `sinkd --daemon server` 
+  - cd /srv/sinkd/ && umask 5007
+  - create systemd unit file with appropriate flags
   - enable service 
-  - start service  -->
-  - setup rsync daemon 
+  - start service 
 
-**client** `sinkd init --client` (make flag explicit, do not default)
+
+
+## `sinkd init --client` (make flag explicit, do not default)
   - create /etc/sinkd.conf 
   - create ~/.config/sinkd.conf 
   - create systemd unit file with appropriate flags i.e. `sinkd --daemon client` 
   - enable service 
   - start service
+
+## `sinkd start -c --client | -s --server`
+
+## package-manager uninstall 
+  - will package up sinkd in a way to smartly remove itself 
 
 __Hidden API__ for systemd not for user 
   - `sinkd --daemon server` 

@@ -3,7 +3,8 @@
 //  _\ \/ -_) __/ |/ / -_) __/
 // /___/\__/_/  |___/\__/_/   
 
-use crate::protocol::defs;
+use std::{process, sync::mpsc, thread};
+
 
 enum State {
     SYNCHING,
@@ -13,6 +14,55 @@ enum State {
 // `sinkd start` starts up the client daemon
 // `sinkd start -s,--server` will start up the server daemon
 
+// - (pkgr) mkdir /srv/sinkd 
+// - (pkgr) chmod 2770 /srv/sinkd (for setgid, not recursive for user permissions to retain)
+// - (pkgr) cd /srv/sinkd/ && umask 5007
+// - (pkgr) create systemd unit file with appropriate flags
+// - (pkgr) enable service 
+// - (pkgr) start service >> which calls sinkd::server::start()
+
+
 pub fn start() {
+    // first subscribe to `sinkd/status` 
+    // if let Err(e) = init_mqtt() {
+    //     panic!("{}", e);
+    // }
+
+    // let (synch_tx, synch_rx): (mpsc::Sender<String>, mpsc::Receiver<String>) = mpsc::channel();
+    
+    // keep things alive between threads by calling outside of scope
+
+    // let mqtt_thread = thread::spawn(move || {
+    //     if let Err(e) = mqtt_entry(synch_tx) {
+    //         panic!("mqtt thread unable to start");
+    //     }
+    // });
+
+    // let synch_thread = thread::spawn(move || {
+    //     if let Err(e) = synch_entry(synch_rx) {
+    //         panic!("synch thread unable to start");
+    //     }
+    // });
+    
+    // if let Err(_) = mqtt_thread.join() {
+    //     error!("Client watch thread error!");
+    //     std::process::exit(1);
+    // }
+    // if let Err(_) = synch_thread.join() {
+    //     error!("Client synch thread error!");
+    //     std::process::exit(1);
+    // }
+
+
+
 
 }
+
+
+fn callme() {
+    println!("callback invoked!");
+}
+
+// fn synch_entry(synch_rx: mpsc::Receiver<String>) -> Result<(), String> {
+//     Ok(())
+// }

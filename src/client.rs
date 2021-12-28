@@ -97,7 +97,9 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
         last_event: Instant,
         uncaught_event: bool 
     }
+
     let mut inode_map: HashMap<String, Vec<Inode>> = HashMap::new();
+
     for (name, cfg) in users_map.iter() {
         let mut inodes = Vec::new();
         for anchor in &cfg.anchors {
@@ -127,6 +129,7 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
             Ok(path) => {
                 debug!("received from synch thread");
                 let mut found = false;
+                // instead of looping should find key in map
                 for (name, inodes) in inode_map.iter_mut() {
                     for inode in inodes.iter_mut() {
                         if path.starts_with(&inode.path) {
