@@ -38,45 +38,6 @@ pub fn list(paths: &Vec<String>) {
     }
 }
 
-/**
- * When sinkd is packaged should install /run/sinkd.pid file and make it writable the the sinkd group
- * Need to set up logging keep everything local to home directory ~/
- */
-// #[warn(unused_features)]
-pub fn start() -> bool {
-
-    match utils::create_log_file() {
-        Err(e) => {
-            eprintln!("{}", e);
-            return false;
-        }
-        Ok(_) => { shiplog::ShipLog::init(); }
-    }
-
-    match utils::create_pid_file() {
-        Err(e) => {
-            eprintln!("{}", e);
-            return false;
-        }
-        Ok(_) => {
-            // TODO: need packager to setup file with correct permisions
-            let daemon = Daemonize::new()
-                .pid_file(utils::PID_PATH)
-                .group("sinkd");
-                // .chown_pid_file(true)  // is optional, see `Daemonize` documentation
-                // .user("nobody")
-        
-            match daemon.start() {
-                Ok(_) => {
-                    info!("about to start daemon...");
-                    client::run();
-                }
-                Err(e) => error!("sinkd did not start (already running?), {}", e),
-            }
-            return true;
-        }
-    }
-}
 
 pub fn stop() -> bool {
     if !utils::have_permissions() {
@@ -108,9 +69,9 @@ pub fn stop() -> bool {
 }
 
 pub fn restart() {
-    if stop() {
-        start();
-    }
+    // if stop() {
+    //     start();
+    // }
 }
 
 pub fn remove() {

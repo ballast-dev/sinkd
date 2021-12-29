@@ -1,12 +1,64 @@
-use std::collections::HashMap;
-use std::path::PathBuf;
-use std::sync::mpsc;
-use std::thread;
-use std::time::{Duration, Instant};
-use crate::config::{Config, UserConfig, SysConfig};
-use notify::{DebouncedEvent, Watcher};
+use std::{
+    collections::HashMap,
+    path::PathBuf,
+    sync::mpsc,
+    thread,
+    time::{Duration, Instant}
+};
 
-pub fn run() {
+use notify::{DebouncedEvent, Watcher};
+use daemonize::Daemonize;
+
+use crate::{
+    config::{Config, UserConfig, SysConfig},
+    shiplog,
+    utils
+};
+
+
+fn init() -> Result<(), String> {
+    match utils::create_log_file() {
+        Err(e) => Err(e),
+        Ok(_) => { 
+            shiplog::ShipLog::init(); 
+            match utils::create_pid_file() {
+                Err(e) => Err(e),
+                Ok(_) => Ok(())
+            }
+        }
+    }
+}
+/**
+ * When sinkd is packaged should install /run/sinkd.pid file and make it writable the the sinkd group
+ * Need to set up logging keep everything local to home directory ~/
+ */
+// #[warn(unused_features)]
+pub fn start(verbosity: u8) -> bool {
+
+    if let Err(e) = init() {
+        eprintln!("{}", e);
+        std::process::exit(1);
+    }
+    // TODO: need packager to setup file with correct permisions
+    let daemon = Daemonize::new()
+        .pid_file(utils::PID_PATH)
+        .group("sinkd");
+        // .chown_pid_file(true)  // is optional, see `Daemonize` documentation
+        // .user("nobody")
+
+    match daemon.start() {
+        Ok(_) => {
+            info!("about to start daemon...");
+            run();
+        }
+        Err(e) => error!("sinkd did not start (already running?), {}", e),
+    }
+    return true;
+
+}
+
+
+fn run() {
     let mut config = Config::new();
     if !config.init() {
         error!("FATAL couldn't initialize configurations");

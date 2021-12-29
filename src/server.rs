@@ -4,6 +4,7 @@
 // /___/\__/_/  |___/\__/_/   
 
 use std::{process, sync::mpsc, thread};
+use crate::protocol;
 
 
 enum State {
@@ -24,9 +25,14 @@ enum State {
 
 pub fn start() {
     // first subscribe to `sinkd/status` 
-    // if let Err(e) = init_mqtt() {
-    //     panic!("{}", e);
-    // }
+    let mut mqtt_client: protocol::MqttClient;
+    match protocol::MqttClient::new(None) {
+        Ok(mc) => mqtt_client = mc,
+        Err(err_str) => {
+            error!("unable to initialize mqtt: {}", err_str);
+            std::process::exit(2);
+        }
+    }
 
     // let (synch_tx, synch_rx): (mpsc::Sender<String>, mpsc::Receiver<String>) = mpsc::channel();
     
@@ -56,11 +62,6 @@ pub fn start() {
 
 
 
-}
-
-
-fn callme() {
-    println!("callback invoked!");
 }
 
 // fn synch_entry(synch_rx: mpsc::Receiver<String>) -> Result<(), String> {
