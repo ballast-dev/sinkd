@@ -25,14 +25,14 @@ enum State {
 
 pub fn start() {
     // first subscribe to `sinkd/status` 
-    let mut mqtt_client: protocol::MqttClient;
-    match protocol::MqttClient::new(None) {
-        Ok(mc) => mqtt_client = mc,
-        Err(err_str) => {
-            error!("unable to initialize mqtt: {}", err_str);
-            std::process::exit(2);
-        }
-    }
+    // let mut mqtt_client: protocol::MqttClient;
+    // match protocol::MqttClient::new(Some("localhost"), dispatch) {
+    //     Ok(mc) => mqtt_client = mc,
+    //     Err(err_str) => {
+    //         error!("unable to initialize mqtt: {}", err_str);
+    //         std::process::exit(2);
+    //     }
+    // }
 
     // let (synch_tx, synch_rx): (mpsc::Sender<String>, mpsc::Receiver<String>) = mpsc::channel();
     

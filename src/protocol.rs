@@ -21,21 +21,31 @@ pub struct MqttClient {
 
 impl MqttClient {
     //? Pass None to this constructor for localhost
-    pub fn new(host: Option<&str>) -> Result<MqttClient, String> {
-        match mqtt::AsyncClient::new(host.unwrap_or("tcp://localhost:1883")) {
+    pub fn new<C>(host: Option<&str>, mut callback: C) -> Result<MqttClient, String> 
+        where C: FnMut(&Option<mqtt::Message>) + 'static 
+    {
+
+        let fq_host: String; 
+        match host {
+            Some("localhost") => { fq_host = String::from("tcp://localhost:1883"); }
+            Some(_str) => { fq_host = format!("tcp://{}:1883", _str); }
+            None => {
+                error!("Need host string");
+                std::process::exit(-1);
+            }
+            
+        }
+
+        match mqtt::AsyncClient::new(fq_host) {
             Err(e) => Err(format!("Error creating the client: {:?}", e)),
-            Ok(_c) => {
+            Ok(mut _c) => {
+                //? This needs a rework
+                _c.set_message_callback(move |_cli, msg| {callback(&msg)});
                 let mut mqtt_client = MqttClient { client: _c};
                 mqtt_client.connect();
                 Ok(mqtt_client)
             }
         }
-    }
-
-    pub fn callback<F>(&mut self, cb: F) 
-        where F: FnMut(&mqtt::AsyncClient, Option<mqtt::Message>) + 'static 
-    {
-        self.client.set_message_callback(cb);
     }
 
     pub fn publish(&mut self, arg: &str) {

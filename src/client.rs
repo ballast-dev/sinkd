@@ -5,12 +5,11 @@ use std::{
     thread,
     time::{Duration, Instant}
 };
-
 use notify::{DebouncedEvent, Watcher};
-use daemonize::Daemonize;
-
+use paho_mqtt as mqtt;
 use crate::{
     config::{Config, UserConfig, SysConfig},
+    protocol,
     shiplog,
     utils
 };
@@ -28,6 +27,16 @@ fn init() -> Result<(), String> {
         }
     }
 }
+
+fn dispatch(msg: &Option<mqtt::Message>) {
+    if let Some(msg) = msg {
+        let payload = std::str::from_utf8(msg.payload()).unwrap();
+        debug!("topic: {}\tpayload: {}", msg.topic(), payload);
+    } else {
+        error!("malformed mqtt message");
+    }
+}
+
 /**
  * When sinkd is packaged should install /run/sinkd.pid file and make it writable the the sinkd group
  * Need to set up logging keep everything local to home directory ~/
@@ -39,22 +48,38 @@ pub fn start(verbosity: u8) -> bool {
         eprintln!("{}", e);
         std::process::exit(1);
     }
-    // TODO: need packager to setup file with correct permisions
-    let daemon = Daemonize::new()
-        .pid_file(utils::PID_PATH)
-        .group("sinkd");
-        // .chown_pid_file(true)  // is optional, see `Daemonize` documentation
-        // .user("nobody")
 
-    match daemon.start() {
-        Ok(_) => {
-            info!("about to start daemon...");
-            run();
+    println!("starting?");
+    if let Ok(mut client) = protocol::MqttClient::new(Some("localhost"), dispatch) { // None for localhost
+        debug!("connected and set callbacks?");
+        println!("Waiting for messages...");
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            // if let Ok(val) = rx.try_recv() {
+            //     println!("got it! {:?}", val);
+            //     // client.disconnect(disconn_opts.clone());
+            //     std::process::exit(0);
+            // }
         }
-        Err(e) => error!("sinkd did not start (already running?), {}", e),
-    }
-    return true;
 
+        return true;
+    } else {
+        return false;
+    }
+    // // TODO: need packager to setup file with correct permisions
+    // let daemon = Daemonize::new()
+    //     .pid_file(utils::PID_PATH)
+    //     .group("sinkd");
+    //     // .chown_pid_file(true)  // is optional, see `Daemonize` documentation
+    //     // .user("nobody")
+
+    // match daemon.start() {
+    //     Ok(_) => {
+    //         info!("about to start daemon...");
+    //         run();
+    //     }
+    //     Err(e) => error!("sinkd did not start (already running?), {}", e),
+    // }
 }
 
 
