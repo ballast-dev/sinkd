@@ -39,7 +39,7 @@ impl MqttClient {
         match mqtt::AsyncClient::new(fq_host) {
             Err(e) => Err(format!("Error creating the client: {:?}", e)),
             Ok(mut _c) => {
-                //? This needs a rework
+                // TODO: replumb for cleaner abstraction
                 _c.set_message_callback(move |_cli, msg| {callback(&msg)});
                 let mut mqtt_client = MqttClient { client: _c};
                 mqtt_client.connect();

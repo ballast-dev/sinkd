@@ -49,8 +49,10 @@ pub fn start(verbosity: u8) -> bool {
         std::process::exit(1);
     }
 
+
+    // TODO: spawn two threads. 1: polling thread 2: listening thread
     println!("starting?");
-    if let Ok(mut client) = protocol::MqttClient::new(Some("localhost"), dispatch) { // None for localhost
+    if let Ok(mut client) = protocol::MqttClient::new(Some("localhost"), dispatch) {
         debug!("connected and set callbacks?");
         println!("Waiting for messages...");
         loop {
