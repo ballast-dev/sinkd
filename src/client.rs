@@ -202,43 +202,56 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
         _srv_addr = String::from("");
     }
 
+    let mut buffered_event = false;
+
     loop {
         match synch_rx.try_recv() {
             Ok(path) => {
                 debug!("received from synch channel");
-                let mut found = false;
-                // instead of looping should find key in map
-                for (name, inodes) in inode_map.iter_mut() {
-                    for inode in inodes.iter_mut() {
-                        if path.starts_with(&inode.path) {
-                            let now = Instant::now();
-                            let elapse = now.duration_since(inode.last_event);
-                            if elapse >= inode.interval {
-                                inode.last_event = now;
-                                debug!("EVENT>> elapse: {}", elapse.as_secs());
-                                fire_rsync(&name, &sys_cfg.server_addr, &inode.path);
-                            } else {
-                                inode.uncaught_event = true;
+                if !buffered_event {
+                    //TODO: instead of looping should find key in map
+                    for (name, inodes) in inode_map.iter_mut() {
+                        for inode in inodes.iter_mut() {
+                            if path.starts_with(&inode.path) {
+                                let now = Instant::now();
+                                let elapse = now.duration_since(inode.last_event);
+                                if elapse >= inode.interval {
+                                    inode.last_event = now;
+                                    debug!("EVENT>> elapse: {}", elapse.as_secs());
+                                    fire_rsync(&name, &sys_cfg.server_addr, &inode.path);
+                                } else {
+                                    buffered_event = true;
+                                    inode.uncaught_event = true;  // catch all events
+                                }
+                                // break;
                             }
-                            found = true;  // to prevent futher looping
-                            break;
+                            // if buffered_event
                         }
+                        // if buffered_event { break; }
                     }
-                    if found { break; }
                 }
             },
             Err(_) => { // buffered events
-                for (name, inodes) in inode_map.iter_mut() {
-                    for inode in inodes.iter_mut() {
-                        if inode.uncaught_event {
-                            let now = Instant::now();
-                            let elapse = now.duration_since(inode.last_event);
-                            if elapse >= inode.interval {
+
+                if buffered_event {
+                    for (name, inodes) in inode_map.iter_mut() {
+                        for inode in inodes.iter_mut() {
+                            if inode.uncaught_event && inode.last_event.elapsed() >= inode.interval {
                                 // buffered events shouldn't update inode.last_event
-                                debug!("BUFFERED EVENT>> elapse: {}", elapse.as_secs());
+                                debug!("BUFFERED EVENT>> elapse: {}", inode.last_event.elapsed().as_secs());
                                 inode.uncaught_event = false;
                                 fire_rsync(&name, &sys_cfg.server_addr, &inode.path);
-                            }    
+                            }
+                        }
+                    }
+                    // check for buffered events
+                    for (_, inodes) in inode_map.iter_mut() {
+                        for inode in inodes.iter_mut() {
+                            if !inode.uncaught_event {
+                                buffered_event = false;
+                            } else {
+                                buffered_event = true;
+                            }
                         }
                     }
                 }
