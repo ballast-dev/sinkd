@@ -50,24 +50,23 @@ pub fn start(verbosity: u8) -> bool {
     }
 
 
-    // TODO: spawn two threads. 1: polling thread 2: listening thread
-    println!("starting?");
-    if let Ok(mut client) = protocol::MqttClient::new(Some("localhost"), dispatch) {
-        debug!("connected and set callbacks?");
-        println!("Waiting for messages...");
-        loop {
-            std::thread::sleep(std::time::Duration::from_millis(500));
-            // if let Ok(val) = rx.try_recv() {
-            //     println!("got it! {:?}", val);
-            //     // client.disconnect(disconn_opts.clone());
-            //     std::process::exit(0);
-            // }
+    // TODO need to read from config
+    if let Ok(_) = protocol::MqttClient::new(Some("localhost"), dispatch) {
+
+        // notify has a watch thread to watch to the files (endless loop)
+        // notify has a synch thread to rsync the changes (endless loop)
+        let notify_thread = thread::spawn(move || notify_entry());
+
+        if let Err(_) = notify_thread.join() {
+            error!("Client synch thread error!");
+            std::process::exit(1);
         }
 
         return true;
     } else {
         return false;
     }
+
     // // TODO: need packager to setup file with correct permisions
     // let daemon = Daemonize::new()
     //     .pid_file(utils::PID_PATH)
@@ -85,7 +84,7 @@ pub fn start(verbosity: u8) -> bool {
 }
 
 
-fn run() {
+fn notify_entry() {
     let mut config = Config::new();
     if !config.init() {
         error!("FATAL couldn't initialize configurations");
@@ -119,9 +118,9 @@ fn run() {
 
 fn watch_entry(notify_rx: mpsc::Receiver<DebouncedEvent>, synch_tx: mpsc::Sender<PathBuf>) {
     loop {
-        match notify_rx.recv() {
+        match notify_rx.recv() { // blocking call
             Ok(event) => {
-                debug!("received notification event!");
+                debug!("received watch event!");
                 match event {
                     DebouncedEvent::NoticeWrite(_) => {}  // do nothing
                     DebouncedEvent::NoticeRemove(_) => {} // do nothing for notices
@@ -146,7 +145,7 @@ fn watch_entry(notify_rx: mpsc::Receiver<DebouncedEvent>, synch_tx: mpsc::Sender
             }
         }
         // TODO: to sleep on interval pulled from configuration
-        // std::thread::sleep(std::time::Duration::from_secs(1));
+        // std::thread::sleep(std::time::Duration::from_secs(2));
     }
 }
 
@@ -195,7 +194,7 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
         inode_map.insert(name.clone(), inodes);
     }
 
-    // if / in server addr then local path
+    // if '/' in server addr then local path
     let _srv_addr: String;
     if sys_cfg.server_addr.contains("/") {
         _srv_addr = sys_cfg.server_addr.clone();
@@ -206,15 +205,18 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
     loop {
         match synch_rx.try_recv() {
             Ok(path) => {
-                debug!("received from synch thread");
+                debug!("received from synch channel");
                 let mut found = false;
                 // instead of looping should find key in map
                 for (name, inodes) in inode_map.iter_mut() {
                     for inode in inodes.iter_mut() {
                         if path.starts_with(&inode.path) {
-                            let elapse = Instant::now().checked_duration_since(inode.last_event).unwrap();
+                            let now = Instant::now();
+                            let elapse = now.duration_since(inode.last_event);
                             if elapse >= inode.interval {
-                                fire_rsync(&name, &sys_cfg.server_addr, &inode.path)
+                                inode.last_event = now;
+                                debug!("EVENT>> elapse: {}", elapse.as_secs());
+                                fire_rsync(&name, &sys_cfg.server_addr, &inode.path);
                             } else {
                                 inode.uncaught_event = true;
                             }
@@ -225,14 +227,17 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
                     if found { break; }
                 }
             },
-            Err(_) => {
+            Err(_) => { // buffered events
                 for (name, inodes) in inode_map.iter_mut() {
                     for inode in inodes.iter_mut() {
                         if inode.uncaught_event {
-                            debug!("uncaught event!");
-                            let elapse = Instant::now().checked_duration_since(inode.last_event).unwrap();
+                            let now = Instant::now();
+                            let elapse = now.duration_since(inode.last_event);
                             if elapse >= inode.interval {
-                                fire_rsync(&name, &sys_cfg.server_addr, &inode.path)
+                                // buffered events shouldn't update inode.last_event
+                                debug!("BUFFERED EVENT>> elapse: {}", elapse.as_secs());
+                                inode.uncaught_event = false;
+                                fire_rsync(&name, &sys_cfg.server_addr, &inode.path);
                             }    
                         }
                     }
@@ -287,20 +292,22 @@ fn get_watchers(config: &Config, tx: mpsc::Sender<notify::DebouncedEvent>) -> Ve
     return watchers;
 }
 
-fn fire_rsync(username: &String, hostname: &String, path: &PathBuf) {
-    // rsync -avt my/path/ tony@host:/path/to/stuff
-    let src = path;
-    let dest: String;
+fn fire_rsync(username: &String, hostname: &String, src_path: &PathBuf) {
+    // debug!("username: {}, hostname: {}, path: {}", username, hostname, path.display());
+
+    // Agnostic pathing allows sinkd not to care about user folder structure
+    let dest_path: String;
     if hostname.starts_with('/') {
-        dest = format!("/srv/sinkd/{}/{}", &username, &path.display()); 
+        dest_path = String::from("/srv/sinkd/");
     } else {
-        dest = format!("{}@{}:/srv/sinkd/{}/{}", &username, &hostname, &username, &path.display());
+        dest_path = format!("{}@{}:/srv/sinkd/", &username, &hostname);
     }
 
     let rsync_result = std::process::Command::new("rsync")
-        .arg("-at") // archive and timestamps
-        .arg(&src)
-        .arg(&dest)
+        .arg("-atR") // archive, timestamps, relative
+        .arg("--delete")
+        .arg(&src_path)
+        .arg(&dest_path)
         .spawn();
 
     match rsync_result {
@@ -308,9 +315,9 @@ fn fire_rsync(username: &String, hostname: &String, path: &PathBuf) {
             error!("{:?}", x);
         }
         Ok(_) => {
-            info!("Called rsync src:{}  ->  dest:{}", 
-                    &src.display(), 
-                    &dest);
+            info!("DID IT>> Called rsync src:{}  ->  dest:{}", 
+                    &src_path.display(), 
+                    &dest_path);
         }
     }
 }

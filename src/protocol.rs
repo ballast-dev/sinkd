@@ -57,7 +57,6 @@ impl MqttClient {
     // Callback for a successful connection to the broker.
     // We subscribe to the topic(s) we want here.
     fn on_connect_success(cli: &mqtt::AsyncClient, _msgid: u16) {
-        println!("Connection succeeded");
         cli.subscribe("sinkd/#", mqtt::QOS_0);
     }
 
