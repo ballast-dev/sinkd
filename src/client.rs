@@ -173,7 +173,7 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
         excludes: Vec::<String>, // holds wildcards
         interval: Duration,
         last_event: Instant,
-        uncaught_event: bool 
+        event: bool 
     }
 
     let mut inode_map: HashMap<String, Vec<Inode>> = HashMap::new();
@@ -187,7 +187,7 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
                     excludes: anchor.excludes.clone(),
                     interval: Duration::from_secs(anchor.interval),
                     last_event: Instant::now(),
-                    uncaught_event: false
+                    event: false
                 }
             );
         }
@@ -202,60 +202,43 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
         _srv_addr = String::from("");
     }
 
-    let mut buffered_event = false;
 
     loop {
         match synch_rx.try_recv() {
+
+            // re-entrant
+            // First time has path with event, mark the inode in question 
+            // Second time parse through inodes with uncaught_events 
+
+
             Ok(path) => {
                 debug!("received from synch channel");
-                if !buffered_event {
-                    //TODO: instead of looping should find key in map
-                    for (name, inodes) in inode_map.iter_mut() {
-                        for inode in inodes.iter_mut() {
-                            if path.starts_with(&inode.path) {
-                                let now = Instant::now();
-                                let elapse = now.duration_since(inode.last_event);
-                                if elapse >= inode.interval {
-                                    inode.last_event = now;
-                                    debug!("EVENT>> elapse: {}", elapse.as_secs());
-                                    fire_rsync(&name, &sys_cfg.server_addr, &inode.path);
-                                } else {
-                                    buffered_event = true;
-                                    inode.uncaught_event = true;  // catch all events
-                                }
-                                // break;
-                            }
-                            // if buffered_event
+                //TODO: instead of looping should find key in map
+                for (_, inodes) in inode_map.iter_mut() {
+                    for inode in inodes.iter_mut() {
+                        if path.starts_with(&inode.path) {
+                                inode.event = true;  // mark the inode
                         }
-                        // if buffered_event { break; }
                     }
                 }
             },
             Err(_) => { // buffered events
 
-                if buffered_event {
-                    for (name, inodes) in inode_map.iter_mut() {
-                        for inode in inodes.iter_mut() {
-                            if inode.uncaught_event && inode.last_event.elapsed() >= inode.interval {
-                                // buffered events shouldn't update inode.last_event
-                                debug!("BUFFERED EVENT>> elapse: {}", inode.last_event.elapsed().as_secs());
-                                inode.uncaught_event = false;
+                for (name, inodes) in inode_map.iter_mut() {
+                    for inode in inodes.iter_mut() {
+                        if inode.event {
+                            let now = Instant::now();
+                            let elapse = now.duration_since(inode.last_event);
+                            if elapse >= inode.interval {
+                                debug!("EVENT>> elapse: {}", elapse.as_secs());
+                                inode.event = false;
                                 fire_rsync(&name, &sys_cfg.server_addr, &inode.path);
                             }
                         }
                     }
-                    // check for buffered events
-                    for (_, inodes) in inode_map.iter_mut() {
-                        for inode in inodes.iter_mut() {
-                            if !inode.uncaught_event {
-                                buffered_event = false;
-                            } else {
-                                buffered_event = true;
-                            }
-                        }
-                    }
                 }
-                std::thread::sleep(Duration::from_secs(1));
+               
+                std::thread::sleep(Duration::from_secs(1)); // "system_interval" config value
                 debug!("synch loop...")
             }
         }
