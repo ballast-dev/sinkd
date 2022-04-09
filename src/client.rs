@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::HashSet,
     path::PathBuf,
     sync::mpsc,
     thread,
@@ -8,7 +8,7 @@ use std::{
 use notify::{DebouncedEvent, Watcher};
 use paho_mqtt as mqtt;
 use crate::{
-    config::{Config, UserConfig, SysConfig},
+    config,
     protocol,
     shiplog,
     utils
@@ -85,25 +85,27 @@ pub fn start(verbosity: u8) -> bool {
 
 
 fn notify_entry() {
-    let mut config = Config::new();
-    if !config.init() {
-        error!("FATAL couldn't initialize configurations");
-        panic!() 
-    }
+    // make this more robust
+    //? have Config:get_inode_map() -> Result<HashMap, Config::Error> {}
+    //? be the main entry call
+    //? Config should panic and do all error handling within module
+
+    let (mut inode_map, server_addr) = config::get_map_and_server();
+    debug!("inode map: {:?}", inode_map);
 
     let (notify_tx, notify_rx) = mpsc::channel();
     // let (synch_tx, synch_rx): (mpsc::Sender::<PathBuf>, mpsc::Receiver::<PathBuf>) = mpsc::channel();
     let (synch_tx, synch_rx) = mpsc::channel(); // just pass type for compiler to understand
     
     // keep the watchers alive!
-    let _watchers = get_watchers(&config, notify_tx);
+    let _watchers = get_watchers(&inode_map, notify_tx);
 
     let watch_thread = thread::spawn(move || {
-        watch_entry(notify_rx, synch_tx);
+        watch_entry(&mut inode_map, notify_rx, synch_tx);
     });
 
     let synch_thread = thread::spawn(move || {
-        synch_entry(&config.sys, &config.users, synch_rx);
+        synch_entry(&server_addr, synch_rx);
     });
     
     if let Err(_) = watch_thread.join() {
@@ -116,7 +118,22 @@ fn notify_entry() {
     }
 }
 
-fn watch_entry(notify_rx: mpsc::Receiver<DebouncedEvent>, synch_tx: mpsc::Sender<PathBuf>) {
+fn update(event_path: PathBuf, inode_map: &mut config::InodeMap, synch_tx: &mpsc::Sender<PathBuf>) {
+    for (inode_path, inode) in inode_map {
+        if event_path.starts_with(inode_path) {
+            let now = Instant::now();
+            let elapse = now.duration_since(inode.last_event);
+            if elapse >= inode.interval {
+                debug!("EVENT>> elapse: {}", elapse.as_secs());
+                inode.last_event = now;
+                synch_tx.send(inode_path.clone()).unwrap(); // to kick off synch thread
+            }
+            break;
+        }
+    }
+}
+
+fn watch_entry(inode_map: &mut config::InodeMap, notify_rx: mpsc::Receiver<DebouncedEvent>, synch_tx: mpsc::Sender<PathBuf>) {
     loop {
         match notify_rx.recv() { // blocking call
             Ok(event) => {
@@ -124,11 +141,11 @@ fn watch_entry(notify_rx: mpsc::Receiver<DebouncedEvent>, synch_tx: mpsc::Sender
                 match event {
                     DebouncedEvent::NoticeWrite(_) => {}  // do nothing
                     DebouncedEvent::NoticeRemove(_) => {} // do nothing for notices
-                    DebouncedEvent::Create(path) => synch_tx.send(path).unwrap(),
-                    DebouncedEvent::Write(path) => synch_tx.send(path).unwrap(),
-                    DebouncedEvent::Chmod(path) => synch_tx.send(path).unwrap(),
-                    DebouncedEvent::Remove(path) => synch_tx.send(path).unwrap(),
-                    DebouncedEvent::Rename(path, _) => synch_tx.send(path).unwrap(),
+                    DebouncedEvent::Create(path) => update(path, inode_map, &synch_tx),
+                    DebouncedEvent::Write(path) => update(path, inode_map, &synch_tx),
+                    DebouncedEvent::Chmod(path) => update(path, inode_map, &synch_tx),
+                    DebouncedEvent::Remove(path) => update(path, inode_map, &synch_tx),
+                    DebouncedEvent::Rename(path, _) => update(path, inode_map, &synch_tx),
                     DebouncedEvent::Rescan => {},
                     DebouncedEvent::Error(error, option_path) => {
                         info!(
@@ -149,7 +166,7 @@ fn watch_entry(notify_rx: mpsc::Receiver<DebouncedEvent>, synch_tx: mpsc::Sender
     }
 }
 
-fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, synch_rx: mpsc::Receiver<PathBuf>) {
+fn synch_entry(server_addr: &String, synch_rx: mpsc::Receiver<PathBuf>) {
     // Aggregate the calls under the parent folder, to minimize overhead
 
     //! need to pull excludes from config on loaded path
@@ -167,74 +184,20 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
     // println!("{:?}", new_now.checked_duration_since(now));
     // println!("{:?}", now.checked_duration_since(new_now)); // None
 
-    // create interval hashmap 
-    struct Inode {
-        path: PathBuf,
-        excludes: Vec::<String>, // holds wildcards
-        interval: Duration,
-        last_event: Instant,
-        event: bool 
-    }
-
-    let mut inode_map: HashMap<String, Vec<Inode>> = HashMap::new();
-
-    for (name, cfg) in users_map.iter() {
-        let mut inodes = Vec::new();
-        for anchor in &cfg.anchors {
-            inodes.push(
-                Inode{
-                    path: anchor.path.clone(),
-                    excludes: anchor.excludes.clone(),
-                    interval: Duration::from_secs(anchor.interval),
-                    last_event: Instant::now(),
-                    event: false
-                }
-            );
-        }
-        inode_map.insert(name.clone(), inodes);
-    }
-
-    // if '/' in server addr then local path
-    let _srv_addr: String;
-    if sys_cfg.server_addr.contains("/") {
-        _srv_addr = sys_cfg.server_addr.clone();
-    } else {
-        _srv_addr = String::from("");
-    }
-
+    let mut events = HashSet::new();
 
     loop {
         match synch_rx.try_recv() {
 
-            // re-entrant
-            // First time has path with event, mark the inode in question 
-            // Second time parse through inodes with uncaught_events 
-
-
             Ok(path) => {
                 debug!("received from synch channel");
-                //TODO: instead of looping should find key in map
-                for (_, inodes) in inode_map.iter_mut() {
-                    for inode in inodes.iter_mut() {
-                        if path.starts_with(&inode.path) {
-                                inode.event = true;  // mark the inode
-                        }
-                    }
-                }
+                events.insert(path);
             },
             Err(_) => { // buffered events
 
-                for (name, inodes) in inode_map.iter_mut() {
-                    for inode in inodes.iter_mut() {
-                        if inode.event {
-                            let now = Instant::now();
-                            let elapse = now.duration_since(inode.last_event);
-                            if elapse >= inode.interval {
-                                debug!("EVENT>> elapse: {}", elapse.as_secs());
-                                inode.event = false;
-                                fire_rsync(&name, &sys_cfg.server_addr, &inode.path);
-                            }
-                        }
+                if !events.is_empty() {
+                    for path in events.drain() {
+                        fire_rsync(server_addr, &path);
                     }
                 }
                
@@ -247,48 +210,28 @@ fn synch_entry(sys_cfg: &SysConfig, users_map: &HashMap<String, UserConfig>, syn
 
 }
 
-fn get_watchers(config: &Config, tx: mpsc::Sender<notify::DebouncedEvent>) -> Vec<notify::RecommendedWatcher> {
+fn get_watchers(inode_map: &config::InodeMap, tx: mpsc::Sender<notify::DebouncedEvent>) -> Vec<notify::RecommendedWatcher> {
     let mut watchers: Vec<notify::RecommendedWatcher> = Vec::new();
-    // Set watcher for share drives
-    for anchor in config.sys.shares.iter() {
-        let interval = Duration::from_secs(anchor.interval.into());
-        let mut watcher = notify::watcher(tx.clone(), interval).expect("couldn't create watch");
 
-        match watcher.watch(anchor.path.clone(), notify::RecursiveMode::Recursive) {
+    for (pathbuf, inode) in inode_map.iter() {
+        let mut watcher = notify::watcher(tx.clone(), inode.interval).expect("couldn't create watch");
+
+        match watcher.watch(pathbuf, notify::RecursiveMode::Recursive) {
             Err(_) => {
-                warn!("unable to set watcher for: '{}'", anchor.path.display());
+                warn!("unable to set watcher for: '{}'", pathbuf.display());
                 continue;
             }
             Ok(_) => {
-                info!("set watcher for: '{}'", anchor.path.display());
+                info!("set watcher for: '{}'", pathbuf.display());
                 watchers.push(watcher);
             }
         }
     }
 
-    // Set watcher for user drives
-    for usr_cfg in &config.users {
-        // Client runs for all users
-        for anchor in &usr_cfg.1.anchors {
-            let interval = Duration::from_secs(anchor.interval.into());
-            let mut watcher = notify::watcher(tx.clone(), interval).expect("couldn't create watch");
-
-            match watcher.watch(anchor.path.clone(), notify::RecursiveMode::Recursive) {
-                Err(_) => {
-                    warn!("unable to set watcher for: '{}'", anchor.path.display());
-                    continue;
-                }
-                Ok(_) => {
-                    info!("set watcher for: '{}'", anchor.path.display());
-                    watchers.push(watcher);
-                }
-            }
-        }
-    }
     return watchers;
 }
 
-fn fire_rsync(username: &String, hostname: &String, src_path: &PathBuf) {
+fn fire_rsync(hostname: &String, src_path: &PathBuf) {
     // debug!("username: {}, hostname: {}, path: {}", username, hostname, path.display());
 
     // Agnostic pathing allows sinkd not to care about user folder structure
@@ -296,7 +239,8 @@ fn fire_rsync(username: &String, hostname: &String, src_path: &PathBuf) {
     if hostname.starts_with('/') {
         dest_path = String::from("/srv/sinkd/");
     } else {
-        dest_path = format!("{}@{}:/srv/sinkd/", &username, &hostname);
+        // user permissions should persist regardless
+        dest_path = format!("sinkd@{}:/srv/sinkd/", &hostname);
     }
 
     let rsync_result = std::process::Command::new("rsync")

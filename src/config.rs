@@ -1,9 +1,14 @@
 // Serialized structures from Configuration
-use std::path::PathBuf;
-use std::fs;
-use std::collections::HashMap;
+use std::{
+    path::PathBuf,
+    fs,
+    collections::HashMap,
+    time::{Duration, Instant}
+};
 use crate::utils::print_fancyln;
 
+
+// these are serially parsable 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Anchor {
     pub path: PathBuf,
@@ -18,10 +23,19 @@ impl Anchor {
         Anchor {
             path: PathBuf::from("invalid"),
             interval: 5, // defaults to 5 secs?
-            excludes: Vec::new(),
+            excludes: Vec::new()
         }
     }
 }
+#[derive(Debug)]
+pub struct Inode {
+    pub excludes: Vec::<String>, // holds wildcards
+    pub interval: Duration,
+    pub last_event: Instant,
+    pub event: bool 
+}
+
+pub type InodeMap = HashMap<PathBuf, Inode>; 
 
 // to show case function overloading 
 pub trait BuildAnchor {
@@ -75,7 +89,6 @@ impl std::fmt::Display for ConfigError {
 }
 
 pub struct Config {
-    // overall Config object to hold smaller 
     pub sys: SysConfig,
     pub users: HashMap<String, UserConfig>,
 }
@@ -203,4 +216,52 @@ impl Config {
 
 }
 
+
+pub fn get_map_and_server() -> (InodeMap, String) {
+    // create interval hashmap 
+
+    let mut config = Config::new();
+    if !config.init() {
+        error!("FATAL couldn't initialize configurations");
+        panic!("FATAL couldn't initialize configurations") 
+    }
+
+    let mut inode_map: InodeMap = HashMap::new();
+
+    for anchor in config.sys.shares.iter() {
+        if !inode_map.contains_key(&anchor.path) {
+            inode_map.insert(
+                anchor.path.clone(),
+                Inode {
+                    excludes: anchor.excludes.clone(),
+                    interval: Duration::from_secs(anchor.interval),
+                    last_event: Instant::now(),
+                    event: false
+                }
+            );
+        } else {
+            error!("[sys_config] inode_map already contains path(key): {}", &anchor.path.display());
+        }
+    }
+    for (_, cfg) in config.users.iter() {
+        for anchor in &cfg.anchors {
+            if !inode_map.contains_key(&anchor.path) {
+                //TODO: better way to check before inserting
+                // inode_map.entry(anchor.path).or_insert(Inode{});
+                inode_map.insert(
+                    anchor.path.clone(),
+                    Inode {
+                        excludes: anchor.excludes.clone(),
+                        interval: Duration::from_secs(anchor.interval),
+                        last_event: Instant::now(),
+                        event: false
+                    }
+                );
+            } else {
+                error!("[usr_config] inode_map already contains path(key): {}", &anchor.path.display());
+            }
+        }
+    }
+    return (inode_map, config.sys.server_addr);
+}
 
