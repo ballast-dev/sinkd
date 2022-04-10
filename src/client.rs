@@ -49,23 +49,28 @@ pub fn start(verbosity: u8) -> bool {
         std::process::exit(1);
     }
 
+    // notify has a watch thread to watch to the files (endless loop)
+    // notify has a synch thread to rsync the changes (endless loop)
+    let notify_thread = thread::spawn(move || notify_entry());
 
-    // TODO need to read from config
-    if let Ok(_) = protocol::MqttClient::new(Some("localhost"), dispatch) {
-
-        // notify has a watch thread to watch to the files (endless loop)
-        // notify has a synch thread to rsync the changes (endless loop)
-        let notify_thread = thread::spawn(move || notify_entry());
-
-        if let Err(_) = notify_thread.join() {
-            error!("Client synch thread error!");
-            std::process::exit(1);
-        }
-
-        return true;
-    } else {
-        return false;
+    if let Err(_) = notify_thread.join() {
+        error!("Client synch thread error!");
+        std::process::exit(1);
     }
+
+    return true;
+
+    
+
+    // // TODO need to read from config
+    // if let Ok(_) = protocol::MqttClient::new(Some("localhost"), dispatch) {
+
+    // } else {
+    //     return false;
+    // }
+
+
+
 
     // // TODO: need packager to setup file with correct permisions
     // let daemon = Daemonize::new()
@@ -90,8 +95,7 @@ fn notify_entry() {
     //? be the main entry call
     //? Config should panic and do all error handling within module
 
-    let (mut inode_map, server_addr) = config::get_map_and_server();
-    debug!("inode map: {:?}", inode_map);
+    let (srv_addr, mut inode_map) = config::get();
 
     let (notify_tx, notify_rx) = mpsc::channel();
     // let (synch_tx, synch_rx): (mpsc::Sender::<PathBuf>, mpsc::Receiver::<PathBuf>) = mpsc::channel();
@@ -105,7 +109,7 @@ fn notify_entry() {
     });
 
     let synch_thread = thread::spawn(move || {
-        synch_entry(&server_addr, synch_rx);
+        synch_entry(&srv_addr, synch_rx);
     });
     
     if let Err(_) = watch_thread.join() {

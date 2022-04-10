@@ -1,28 +1,18 @@
 #[test]
 fn config() {
-    use crate::config::Config;
-    let sys_config = match Config::get_sys_config() {
-        Ok(sys_config) => { sys_config },
-        Err(err) => {
-            panic!("/etc/sinkd.conf ERROR {}", err);
-        }
-    };
-    for user in sys_config.users {
-        let _cfg = format!("/home/{}/.config/sinkd.conf", user);
-        match std::fs::read_to_string(&_cfg) {
-            Ok(_) => {
-                println!("going to user {}", &user);
-                match Config::get_user_config(&user) {
-                    Ok(_) => {},
-                    Err(e) => {
-                        panic!("Error {}, {}", &_cfg, e)
-                    }
-                }
-            },
-            Err(_) => { 
-                eprintln!("configuration not loaded for {}", &user) 
-            }
-        }
+    use crate::config;
+
+    let (srv_addr, inode_map) = config::get();
+    println!("Server Address: {}", srv_addr);
+
+    //? need to somehow trinkle in verbosity in tests
+
+    for (path, inode) in inode_map {
+        println!("path:       {:?}", path);
+        println!("excludes:   {:?}", inode.excludes);
+        println!("interval:   {:?}", inode.interval);
+        println!("last_event: {:?}", inode.last_event);
+        println!("event:      {:?}", inode.event);
     }
 }
 

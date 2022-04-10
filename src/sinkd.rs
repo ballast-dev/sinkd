@@ -26,16 +26,16 @@ pub fn list(paths: &Vec<String>) {
         println!("path: {}", path);
     }
     let user = env!("USER");
-    match config::Config::get_user_config(user) {
-        Ok(usr_cfg) => {
-            for anchor in &usr_cfg.anchors {
-                println!("{}", anchor.path.display());
-            }
-        },
-        Err(e) => {
-            eprintln!("user config: {}", e)
-        }
-    }
+    // match config::ConfigParser::get_user_config(user) {
+    //     Ok(usr_cfg) => {
+    //         for anchor in &usr_cfg.anchors {
+    //             println!("{}", anchor.path.display());
+    //         }
+    //     },
+    //     Err(e) => {
+    //         eprintln!("user config: {}", e)
+    //     }
+    // }
 }
 
 

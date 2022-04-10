@@ -5,6 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "sourceLanguages": ["rust"],
             "type": "lldb",
             "request": "launch",
             "name": "Debug executable 'sinkd'",
@@ -19,10 +20,12 @@
                     "kind": "bin"
                 }
             },
-            "args": [],
-            "cwd": "${workspaceFolder}"
+            "args": ["start"],
+            "cwd": "${workspaceFolder}",
+            "sudo": true
         },
         {
+            "sourceLanguages": ["rust"],
             "type": "lldb",
             "request": "launch",
             "name": "Debug unit tests in executable 'sinkd'",
