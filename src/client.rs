@@ -44,29 +44,23 @@ pub fn start(verbosity: u8) -> bool {
         eprintln!("{}", e);
         std::process::exit(1);
     }
-
-    // notify has a watch thread to watch to the files (endless loop)
-    // notify has a synch thread to rsync the changes (endless loop)
-    let notify_thread = thread::spawn(move || notify_entry());
-
-    if let Err(_) = notify_thread.join() {
-        error!("Client synch thread error!");
-        std::process::exit(1);
-    }
-
-    return true;
-
+   
+    // TODO need to read from config
+    if let Ok(_) = protocol::MqttClient::new(Some("localhost"), dispatch) {
+        // notify has a watch thread to watch to the files (endless loop)
+        // notify has a synch thread to rsync the changes (endless loop)
+        let notify_thread = thread::spawn(move || notify_entry());
     
+        if let Err(_) = notify_thread.join() {
+            error!("Client synch thread error!");
+            std::process::exit(1);
+        }
+    
+        return true;
 
-    // // TODO need to read from config
-    // if let Ok(_) = protocol::MqttClient::new(Some("localhost"), dispatch) {
-
-    // } else {
-    //     return false;
-    // }
-
-
-
+    } else {
+        return false;
+    }
 
     // // TODO: need packager to setup file with correct permisions
     // let daemon = Daemonize::new()
