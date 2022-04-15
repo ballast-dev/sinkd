@@ -37,11 +37,7 @@ fn dispatch(msg: &Option<mqtt::Message>) {
     }
 }
 
-/**
- * When sinkd is packaged should install /run/sinkd.pid file and make it writable the the sinkd group
- * Need to set up logging keep everything local to home directory ~/
- */
-// #[warn(unused_features)]
+#[warn(unused_features)]
 pub fn start(verbosity: u8) -> bool {
 
     if let Err(e) = init() {
@@ -90,16 +86,10 @@ pub fn start(verbosity: u8) -> bool {
 
 
 fn notify_entry() {
-    // make this more robust
-    //? have Config:get_inode_map() -> Result<HashMap, Config::Error> {}
-    //? be the main entry call
-    //? Config should panic and do all error handling within module
 
     let (srv_addr, mut inode_map) = config::get();
-
-    let (notify_tx, notify_rx) = mpsc::channel();
-    // let (synch_tx, synch_rx): (mpsc::Sender::<PathBuf>, mpsc::Receiver::<PathBuf>) = mpsc::channel();
-    let (synch_tx, synch_rx) = mpsc::channel(); // just pass type for compiler to understand
+    let (notify_tx, notify_rx): (mpsc::Sender::<DebouncedEvent>, mpsc::Receiver::<DebouncedEvent>) = mpsc::channel();
+    let (synch_tx, synch_rx): (mpsc::Sender::<PathBuf>, mpsc::Receiver::<PathBuf>) = mpsc::channel();
     
     // keep the watchers alive!
     let _watchers = get_watchers(&inode_map, notify_tx);
@@ -141,7 +131,6 @@ fn watch_entry(inode_map: &mut config::InodeMap, notify_rx: mpsc::Receiver<Debou
     loop {
         match notify_rx.recv() { // blocking call
             Ok(event) => {
-                debug!("received watch event!");
                 match event {
                     DebouncedEvent::NoticeWrite(_) => {}  // do nothing
                     DebouncedEvent::NoticeRemove(_) => {} // do nothing for notices
@@ -161,32 +150,18 @@ fn watch_entry(inode_map: &mut config::InodeMap, notify_rx: mpsc::Receiver<Debou
                 }
             }
             Err(e) => {
-                info!("notify mpsc::channel hung up... {:?}", e);
-                thread::sleep(Duration::from_secs(2))
+                error!("FATAL: notify mpsc::channel hung up in watch_entry {:?}", e);
+                panic!()
             }
         }
-        // TODO: to sleep on interval pulled from configuration
-        // std::thread::sleep(std::time::Duration::from_secs(2));
     }
 }
 
 fn synch_entry(server_addr: &String, synch_rx: mpsc::Receiver<PathBuf>) {
-    // Aggregate the calls under the parent folder, to minimize overhead
-
-    //! need to pull excludes from config on loaded path
-    //! '/srv/sinkd/user' will have permissions of user (to prevent rsync errors)
     //? RSYNC options to consider
-    //~ --copy-links  (included with -a, copies where it points to)
-    //~ --delete (must be a whole directory, no wildcards)
-    //~ --delete-excluded (also delete excluded files)
-    //~ --max-size=SIZE (limit size of transfers)
-    //~ --exclude 
-
-    // let now = Instant::now();
-    // thread::sleep(Duration::new(1, 0));
-    // let new_now = Instant::now();
-    // println!("{:?}", new_now.checked_duration_since(now));
-    // println!("{:?}", now.checked_duration_since(new_now)); // None
+    // --delete-excluded (also delete excluded files)
+    // --max-size=SIZE (limit size of transfers)
+    // --exclude 
 
     let mut events = HashSet::new();
 
@@ -198,27 +173,25 @@ fn synch_entry(server_addr: &String, synch_rx: mpsc::Receiver<PathBuf>) {
                 events.insert(path);
             },
             Err(_) => { // buffered events
-
                 if !events.is_empty() {
                     for path in events.drain() {
                         fire_rsync(server_addr, &path);
                     }
                 }
-               
-                std::thread::sleep(Duration::from_secs(1)); // "system_interval" config value
+                // TODO: add 'system_interval' to config 
+                std::thread::sleep(Duration::from_secs(1));
                 debug!("synch loop...")
             }
         }
-
     }
-
 }
 
 fn get_watchers(inode_map: &config::InodeMap, tx: mpsc::Sender<notify::DebouncedEvent>) -> Vec<notify::RecommendedWatcher> {
     let mut watchers: Vec<notify::RecommendedWatcher> = Vec::new();
 
-    for (pathbuf, inode) in inode_map.iter() {
-        let mut watcher = notify::watcher(tx.clone(), inode.interval).expect("couldn't create watch");
+    for (pathbuf, _) in inode_map.iter() {
+        //TODO: use 'system_interval' to setup notification events
+        let mut watcher = notify::watcher(tx.clone(), Duration::from_secs(1)).expect("couldn't create watch");
 
         match watcher.watch(pathbuf, notify::RecursiveMode::Recursive) {
             Err(_) => {
@@ -231,7 +204,6 @@ fn get_watchers(inode_map: &config::InodeMap, tx: mpsc::Sender<notify::Debounced
             }
         }
     }
-
     return watchers;
 }
 
@@ -241,6 +213,7 @@ fn fire_rsync(hostname: &String, src_path: &PathBuf) {
     // Agnostic pathing allows sinkd not to care about user folder structure
     let dest_path: String;
     if hostname.starts_with('/') {
+        // TODO: packager should set up folder '/srv/sinkd'
         dest_path = String::from("/srv/sinkd/");
     } else {
         // user permissions should persist regardless
@@ -250,6 +223,7 @@ fn fire_rsync(hostname: &String, src_path: &PathBuf) {
     let rsync_result = std::process::Command::new("rsync")
         .arg("-atR") // archive, timestamps, relative
         .arg("--delete")
+        // TODO: to add --exclude [list of folders] from config
         .arg(&src_path)
         .arg(&dest_path)
         .spawn();

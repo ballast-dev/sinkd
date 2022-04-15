@@ -187,12 +187,14 @@ pub fn get() -> (String, InodeMap) {
 
     for anchor in parser.sys.shares.iter() {
         // if !inode_map.contains_key(&anchor.path) {
-        inode_map.entry(anchor.path.clone()).or_insert(Inode {
-            excludes: anchor.excludes.clone(),
-            interval: Duration::from_secs(anchor.interval),
-            last_event: Instant::now(),
-            event: false,
-        });
+        inode_map.entry(anchor.path.clone()).or_insert(
+            Inode {
+                excludes: anchor.excludes.clone(),
+                interval: Duration::from_secs(anchor.interval),
+                last_event: Instant::now(),
+                event: false
+            }
+        );
         // } else {
         //     error!("[sys_config] inode_map already contains path(key): {}", &anchor.path.display());
         // }
@@ -200,12 +202,14 @@ pub fn get() -> (String, InodeMap) {
     for (_, cfg) in parser.users.iter() {
         for anchor in &cfg.anchors {
             // if !inode_map.contains_key(&anchor.path) {
-            inode_map.entry(anchor.path.clone()).or_insert(Inode {
-                excludes: anchor.excludes.clone(),
-                interval: Duration::from_secs(anchor.interval),
-                last_event: Instant::now(),
-                event: false,
-            });
+            inode_map.entry(anchor.path.clone()).or_insert(
+                Inode {
+                    excludes: anchor.excludes.clone(),
+                    interval: Duration::from_secs(anchor.interval),
+                    last_event: Instant::now(),
+                    event: false,
+                }
+            );
             // } else {
             //     error!("[usr_config] inode_map already contains path(key): {}", &anchor.path.display());
             // }

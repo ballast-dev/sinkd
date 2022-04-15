@@ -5,7 +5,17 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "sourceLanguages": ["rust"],
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "sourceLanguages": [
+                "rust"
+            ],
             "type": "lldb",
             "request": "launch",
             "name": "Debug executable 'sinkd'",
@@ -20,12 +30,16 @@
                     "kind": "bin"
                 }
             },
-            "args": ["start"],
+            "args": [
+                "start"
+            ],
             "cwd": "${workspaceFolder}",
             "sudo": true
         },
         {
-            "sourceLanguages": ["rust"],
+            "sourceLanguages": [
+                "rust"
+            ],
             "type": "lldb",
             "request": "launch",
             "name": "Debug unit tests in executable 'sinkd'",

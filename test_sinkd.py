@@ -1,28 +1,39 @@
+import glob
 import os
-from pathlib import Path
 import shutil
 import subprocess
+import time
+from pathlib import Path
 
-try:
-    shutil.rmtree("/home/tony/dmz/client/boom")
-    shutil.rmtree("/home/tony/dmz/client/other")
-except FileNotFoundError as e:
-    print(e)
 
-os.mkdir("/home/tony/dmz/client/boom")
-subprocess.run(["touch",
-                "/home/tony/dmz/client/boom/file1",
-                "/home/tony/dmz/client/boom/file2",
-                "/home/tony/dmz/client/boom/file3",
-                "/home/tony/dmz/client/boom/file4",
-                "/home/tony/dmz/client/boom/file5"])
+def remove_files(tlds: list):
+    for tld in tlds:
+        wildcard = f"{tld}{os.path.sep}*"
+        for d in glob.glob(wildcard):
+            try:
+                shutil.rmtree(d)
+                print("removed ", d)
+            except FileNotFoundError as e:
+                print(e)
 
-os.mkdir("/home/tony/dmz/client/other")
-subprocess.run(["touch",
-                "/home/tony/dmz/client/other/file1",
-                "/home/tony/dmz/client/other/file2",
-                "/home/tony/dmz/client/other/file3",
-                "/home/tony/dmz/client/other/file4",
-                "/home/tony/dmz/client/other/file5"])
 
-print("yay?")
+def create_files(folder: str, filenum: int, delay: float = 0.01):
+
+    os.mkdir(folder)
+    for i in range(filenum):
+        print(f"touching file{i} with delay:{delay}")
+        time.sleep(delay)
+        filepath = Path(folder, f"file{i}")
+        subprocess.run(["touch", filepath])
+
+
+if __name__ == "__main__":
+    TLD = "/home/tony/dmz/client"
+    remove_files([TLD])
+    boom_folder = Path(TLD, "boom")
+    create_files(boom_folder, 3, 0.5)
+    print(f"delay:{6}secs")
+    time.sleep(6)
+    other_folder = Path(TLD, "other")
+    create_files(other_folder, 10, 1)
+    print("done")
