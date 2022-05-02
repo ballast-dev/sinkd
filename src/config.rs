@@ -75,12 +75,8 @@ impl ConfigParser {
     fn load_configs(&mut self) -> bool {
         if let Err(e) = self.load_sys_config() {
             match e {
-                ParseError::InvalidSyntax(syn) => {
-                    error!("{}", syn)
-                }
-                _ => {
-                    error!("{}", e)
-                }
+                ParseError::InvalidSyntax(syn) => error!("{}", syn),
+                _ => error!("{}", e)
             }
             return false;
         }
@@ -89,7 +85,8 @@ impl ConfigParser {
             error!("{}", e);
             return false;
         }
-        return true;
+
+        true
     }
 
     fn load_sys_config(&mut self) -> Result<(), ParseError> {
@@ -102,12 +99,12 @@ impl ConfigParser {
                 Err(error) => {
                     // error!("couldn't parse '/etc/sinkd.conf' {}", error);
                     let invalid_syntax = ParseError::InvalidSyntax(error.to_string());
-                    return Err(invalid_syntax);
+                    Err(invalid_syntax)
                 }
                 Ok(toml_parsed) => {
                     //? toml_parsed is converted into Rust via serde lib
                     self.sys = toml_parsed;
-                    return Ok(());
+                    Ok(())
                 }
             },
         }
@@ -116,7 +113,7 @@ impl ConfigParser {
     fn load_user_configs(&mut self) -> Result<(), ParseError> {
         let mut _user_loaded = false;
         for user in &self.sys.users {
-            match ConfigParser::get_user_config(&user) {
+            match ConfigParser::get_user_config(user) {
                 Ok(_usr_cfg) => {
                     let _ = &self.users.insert(user.clone(), _usr_cfg);
                     _user_loaded = true;

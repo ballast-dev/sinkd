@@ -2,6 +2,7 @@
 //   / __/__ _____  _____ ____
 //  _\ \/ -_) __/ |/ / -_) __/
 // /___/\__/_/  |___/\__/_/   
+#![allow(unused_imports)]
 
 use std::{process, sync::mpsc, thread};
 use crate::protocol;

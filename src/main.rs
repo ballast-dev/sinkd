@@ -20,90 +20,90 @@ mod protocol;
 
 use clap::*;
 
-pub fn build_sinkd() -> App<'static, 'static> {
-    App::new("sinkd")
+pub fn build_sinkd() -> Command<'static> {
+    Command::new("sinkd")
         .about("deployable cloud")
         .version(env!("CARGO_PKG_VERSION"))
-        .subcommand(App::new("init")
+        .subcommand(Command::new("init")
             .display_order(1)
             .about("Setup sinkd on client or server")
-            .arg(Arg::with_name("CLIENT")
+            .arg(Arg::new("CLIENT")
                 .long("client")
                 .takes_value(false)
                 .help("initialize sinkd daemon on client")
             )
-            .arg(Arg::with_name("SERVER")
+            .arg(Arg::new("SERVER")
                 .long("server")
                 .takes_value(false)
                 .conflicts_with("CLIENT")
                 .help("initialize sinkd daemon on server")
             )
-            .usage("sinkd init [--client | --server]")
+            .override_usage("sinkd init [--client | --server]")
         )
-        .subcommand(App::new("add")
+        .subcommand(Command::new("add")
             .about("Adds PATH to watch list\nlets sinkd become 'aware' of file or folder location provided")
-            .arg(Arg::with_name("SHARE")
-                .short("s")
+            .arg(Arg::new("SHARE")
+                .short('s')
                 .long("share")
                 .help("add watch for multiple users")
             )
-            .arg(Arg::with_name("PATH")
+            .arg(Arg::new("PATH")
                 .required(true)
-                .multiple(true) // CAREFUL: this will consume other arguments
+                .multiple_occurrences(true) // CAREFUL: this will consume other arguments
                 .help("sinkd starts watching path")
             )
-            .usage("sinkd add FILE [FILE..]")
+            .override_usage("sinkd add FILE [FILE..]")
         )
-        .subcommand(App::new("ls")
+        .subcommand(Command::new("ls")
             .alias("list")
             .about("List currently watched files from given PATH")
-            .arg(Arg::with_name("PATHS")
+            .arg(Arg::new("PATHS")
                 // need to revisit, should user have explicit control
                 // possible -r flag for recursive 
                 .required(false)
-                .multiple(true) // CAREFUL: this will consume other arguments
+                .multiple_occurrences(true) // CAREFUL: this will consume other arguments
                 .help("list watched files and directories")
             )
-            .usage("sinkd ls [PATH..]")
+            .override_usage("sinkd ls [PATH..]")
         )
-        .subcommand(App::new("rm")
+        .subcommand(Command::new("rm")
             .alias("remove")
             .about("Removes PATH from list of watched directories")
-            .arg(Arg::with_name("PATH")
+            .arg(Arg::new("PATH")
                 .required(true)
-                .multiple(true) // CAREFUL: this will consume other arguments
+                .multiple_occurrences(true) // CAREFUL: this will consume other arguments
             )
-            .usage("sinkd rm PATH")
+            .override_usage("sinkd rm PATH")
         )
-        .subcommand(App::new("start")
+        .subcommand(Command::new("start")
             .about("Starts the daemon")
-            .usage("sinkd start [--client | --server]")
-            .arg(Arg::with_name("CLIENT")
-                .short("c")
+            .override_usage("sinkd start [--client | --server]")
+            .arg(Arg::new("CLIENT")
+                .short('c')
                 .long("client")
                 .takes_value(false)
                 .help("start sinkd in client mode")
             )
-            .arg(Arg::with_name("SERVER")
-                .short("s")
+            .arg(Arg::new("SERVER")
+                .short('s')
                 .long("server")
                 .takes_value(false)
                 .conflicts_with("CLIENT")
                 .help("start sinkd in server mode")
             )
         )
-        .subcommand(App::new("stop")
+        .subcommand(Command::new("stop")
             .about("Stops daemon")
         )
-        .subcommand(App::new("restart")
+        .subcommand(Command::new("restart")
             .about("Restarts sinkd, reloading configuration")
         )
-        .subcommand(App::new("log")
+        .subcommand(Command::new("log")
             .about("test out logging")
         )
-        .arg(Arg::with_name("verbose")
-            .short("v")
-            .multiple(true)
+        .arg(Arg::new("verbose")
+            .short('v')
+            .multiple_occurrences(true)
             .help("verbose output")
         )
 }
@@ -133,7 +133,7 @@ fn main() {
         //         init::client(verbosity);
         //     }
         // },
-        ("add", Some(argv)) => {
+        Some(("add", argv)) => {
             for path in argv.values_of("PATH").unwrap() {
                 if std::path::Path::new(path).exists() {
                     sinkd::add(path);
@@ -142,20 +142,18 @@ fn main() {
                 }
             }
         },
-        ("ls",      Some(path)) => { sinkd::list(&path.values_of_lossy("PATHS").unwrap_or_else(|| {vec![]}));},
-        ("rm",      Some(_)) => { sinkd::remove();},
-        ("start",   Some(argv)) => { 
+        Some(("ls", path)) => { sinkd::list(&path.values_of_lossy("PATHS").unwrap_or_else(|| {vec![]}));},
+        Some(("rm", _)) => { sinkd::remove();},
+        Some(("start", argv)) => { 
             if argv.is_present("SERVER") {
                 // server::start(verbosity);
-            } else {
-                if !client::start(verbosity) { 
-                    println!("unable to start client, take a look: {}", utils::LOG_PATH)
-                }
+            } else if !client::start(verbosity) { 
+                println!("unable to start client, take a look: {}", utils::LOG_PATH)
             }
         },
-        ("stop",    Some(_)) => { sinkd::stop();},
-        ("restart", Some(_)) => { sinkd::restart()},
-        ("log",     Some(_)) => { sinkd::log()},
+        Some(("stop",    _)) => { sinkd::stop();},
+        Some(("restart", _)) => { sinkd::restart()},
+        Some(("log",     _)) => { sinkd::log()},
         _ => {}
     }
 }

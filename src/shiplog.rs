@@ -5,7 +5,7 @@ use log::{Level, LevelFilter, Metadata, Record};
 use std::fs::OpenOptions;
 use std::io::prelude::*; // for writeln!
 
-const TEN_MEGABYTES: u64 = 1024 ^ 2 * 10;
+const TEN_MEGABYTES: u64 = (1024 ^ 2) * 10;
 
 pub struct ShipLog {
     // big rope to moor ship to harbor

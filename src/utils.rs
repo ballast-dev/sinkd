@@ -6,8 +6,8 @@ use libc::{c_char, c_uint};
 use std::ffi::CString;
 
 // TODO: need to wrap in os specific way
-pub const PID_PATH: &'static str = "/run/sinkd.pid";
-pub const LOG_PATH: &'static str = "/var/log/sinkd.log";
+pub const PID_PATH: &str = "/run/sinkd.pid";
+pub const LOG_PATH: &str = "/var/log/sinkd.log";
 
 
 extern {
@@ -116,30 +116,29 @@ pub fn set_pid(pid: u16) -> Result<(), String> {
     let pid_file = PathBuf::from(PID_PATH);
     if !pid_file.exists() {
         return Err(String::from("pid file not found"))
+    } 
+
+    if pid == 0 {
+
+        unsafe {
+            let c_str = CString::new(PID_PATH).unwrap();
+            libc::unlink(c_str.into_raw());
+        }
+        return Ok(())
+
     } else {
 
-        if pid == 0 {
-
-            unsafe {
-                let c_str = CString::new(PID_PATH).unwrap();
-                libc::unlink(c_str.into_raw());
+        match std::fs::write(pid_file, pid.to_ne_bytes()) {
+            Err(err) => {
+                let err_str = format!("couldn't clear pid in ~/.sinkd/pid\n{}", err);
+                return Err(err_str);
             }
-            return Ok(())
-
-        } else {
-
-            match std::fs::write(pid_file, pid.to_ne_bytes()) {
-                Err(err) => {
-                    let err_str = format!("couldn't clear pid in ~/.sinkd/pid\n{}", err);
-                    return Err(err_str);
-                }
-                Ok(()) => {
-                    return Ok(());  
-                } 
-            }
+            Ok(()) => {
+                return Ok(());  
+            } 
         }
-
     }
+
 }
 
 //--------------------
@@ -339,15 +338,18 @@ ENDCONF
 }
 
 pub fn setup_server(verbosity: u8, host: &str) {
-    let pass = rpassword::prompt_password_stdout("setting up daemon on server...\npassword: ").unwrap();
+    let pass = rpassword::prompt_password("setting up daemon on server...\npassword: ").unwrap();
     set_up_rsync_daemon(&host, &pass);
 }
 
 pub fn setup_keys(verbosity: u8, host: &str) {
-    if gen_keys() {
-        if copy_keys_to_remote(host) {
-           print_fancyln("finished setup", Attrs::NORMAL, Colors::GREEN)
-        }
+    if !gen_keys() {
+        print_fancyln("Unable to generate keys", Attrs::NORMAL, Colors::RED);
+        return;
+    }
+    
+    if copy_keys_to_remote(host) {
+        print_fancyln("finished setup", Attrs::NORMAL, Colors::GREEN)
     }
     
     // let mut du_output_child = Command::new("du")
