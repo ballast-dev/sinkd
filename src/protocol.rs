@@ -14,17 +14,12 @@ pub struct MsgStatus {
     cycle: u16,
 }
 
-pub struct MqttClient<'a> {
+pub struct MqttClient {
     client: mqtt::AsyncClient,
-    topic: &'a str,
 }
 
-impl MqttClient<'_> {
-    pub fn new<'a, C>(
-        host: Option<&str>,
-        topic: &'a str,
-        mut callback: C,
-    ) -> Result<MqttClient<'a>, String>
+impl MqttClient {
+    pub fn new<C>(host: Option<&str>, mut callback: C) -> Result<MqttClient, String>
     where
         C: FnMut(&Option<mqtt::Message>) + 'static,
     {
@@ -64,7 +59,6 @@ impl MqttClient<'_> {
 
                 Ok(MqttClient {
                     client: async_client,
-                    topic: topic,
                 })
             }
         }
@@ -79,14 +73,15 @@ impl MqttClient<'_> {
         }
     }
 
-    fn subscribe(&self) {
-        self.client.subscribe(self.topic, mqtt::QOS_0);
+    pub fn subscribe<'a>(&self, topic: &'a str) {
+        self.client.subscribe(topic, mqtt::QOS_0);
     }
 
     // Callback for a successful connection to the broker.
     // We subscribe to the topic(s) we want here.
     fn on_connect_success(cli: &mqtt::AsyncClient, _msgid: u16) {
-        cli.subscribe("sinkd/#", mqtt::QOS_0);
+        debug!("connected to mqtt broker");
+        // cli.subscribe("sinkd/#", mqtt::QOS_0);
     }
 
     // Callback for a failed attempt to connect to the server.

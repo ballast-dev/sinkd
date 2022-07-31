@@ -126,14 +126,14 @@ fn watch_entry(
             // blocking call
             Ok(event) => {
                 match event {
-                    DebouncedEvent::NoticeWrite(_) => {}  // do nothing
-                    DebouncedEvent::NoticeRemove(_) => {} // do nothing for notices
                     DebouncedEvent::Create(path) => update(path, inode_map, &synch_tx),
                     DebouncedEvent::Write(path) => update(path, inode_map, &synch_tx),
                     DebouncedEvent::Chmod(path) => update(path, inode_map, &synch_tx),
                     DebouncedEvent::Remove(path) => update(path, inode_map, &synch_tx),
                     DebouncedEvent::Rename(path, _) => update(path, inode_map, &synch_tx),
                     DebouncedEvent::Rescan => {}
+                    DebouncedEvent::NoticeWrite(_) => {}
+                    DebouncedEvent::NoticeRemove(_) => {}
                     DebouncedEvent::Error(error, option_path) => {
                         info!(
                             "What was the error? {:?}\n the path should be: {:?}",
@@ -158,10 +158,10 @@ fn synch_entry(server_addr: &String, synch_rx: mpsc::Receiver<PathBuf>) {
     // --exclude
 
     // TODO need to read from config
-    if let Ok(mut mqtt) = protocol::MqttClient::new(Some("localhost"), "sinkd/status", dispatch) {
+    if let Ok(mut mqtt) = protocol::MqttClient::new(Some("localhost"), dispatch) {
         // notify has a watch thread to watch to the files (endless loop)
         // notify has a synch thread to rsync the changes (endless loop)
-
+        mqtt.subscribe("sinkd/status");
         // Using Hashset to prevent repeated entries
         let mut events = HashSet::new();
 
@@ -179,6 +179,11 @@ fn synch_entry(server_addr: &String, synch_rx: mpsc::Receiver<PathBuf>) {
                             //? before synchronizing on the server need to figure out
                             //? state of server...
                             // need to tell the server to poll me
+
+                            // 1. send msg to server to update
+                            // 2. server updates FROM client
+                            // 3. server sends message back to client (UP_TO_DATE) 
+                            // 4. 
 
                             mqtt.publish("dude man bro");
 
@@ -221,6 +226,7 @@ fn get_watchers(
     return watchers;
 }
 
+// TODO: move to it's own file
 fn fire_rsync(hostname: &String, src_path: &PathBuf) {
     // debug!("username: {}, hostname: {}, path: {}", username, hostname, path.display());
 
