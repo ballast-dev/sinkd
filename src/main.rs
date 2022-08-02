@@ -20,8 +20,8 @@ mod utils;
 
 use clap::*;
 
-pub fn build_sinkd() -> Command<'static> {
-    Command::new("sinkd")
+pub fn build_sinkd() -> App<'static> {
+    App::new("sinkd")
         .about("deployable cloud")
         .version(env!("CARGO_PKG_VERSION"))
         .subcommand(Command::new("init")
@@ -42,7 +42,7 @@ pub fn build_sinkd() -> Command<'static> {
         )
         .subcommand(Command::new("add")
             .about("Adds PATH to watch list\nlets sinkd become 'aware' of file or folder location provided")
-            .arg(Arg::new("SHARE")
+            .arg(Arg::with_name("SHARE")
                 .short('s')
                 .long("share")
                 .help("add watch for multiple users")
@@ -77,19 +77,24 @@ pub fn build_sinkd() -> Command<'static> {
         )
         .subcommand(Command::new("start")
             .about("Starts the daemon")
-            .override_usage("sinkd start [--client | --server]")
-            .arg(Arg::new("CLIENT")
+            .usage("sinkd start [--client | --server]")
+            .arg(Arg::with_name("CLIENT")
                 .short('c')
                 .long("client")
                 .takes_value(false)
                 .help("start sinkd in client mode")
             )
-            .arg(Arg::new("SERVER")
+            .arg(Arg::with_name("SERVER")
                 .short('s')
                 .long("server")
                 .takes_value(false)
                 .conflicts_with("CLIENT")
                 .help("start sinkd in server mode")
+            )
+            .arg(Arg::with_name("clear_logs")
+                .long("clear-log")
+                .hidden(true)
+                .action(clap::ArgAction::SetTrue)
             )
         )
         .subcommand(Command::new("stop")
@@ -101,7 +106,7 @@ pub fn build_sinkd() -> Command<'static> {
         .subcommand(Command::new("log")
             .about("test out logging")
         )
-        .arg(Arg::new("verbose")
+        .arg(Arg::with_name("verbose")
             .short('v')
             .multiple_occurrences(true)
             .help("verbose output")
@@ -131,27 +136,36 @@ fn main() {
         //         init::client(verbosity);
         //     }
         // },
-        Some(("add", argv)) => {
-            for path in argv.values_of("PATH").unwrap() {
+        Some(("add", submatches)) => {
+            for path in submatches.values_of("PATH").unwrap() {
                 if std::path::Path::new(path).exists() {
                     sinkd::add(path);
                 } else {
                     println!("'{}' does not exist", path);
                 }
             }
-        },
-        Some(("ls", path)) => { sinkd::list(&path.values_of_lossy("PATHS").unwrap_or_else(|| {vec![]}));},
-        Some(("rm", _)) => { sinkd::remove();},
-        Some(("start", argv)) => { 
-            if argv.is_present("SERVER") {
-                // server::start(verbosity);
-            } else if !client::start(verbosity) { 
-                println!("unable to start client, take a look: {}", utils::LOG_PATH)
+        }
+        Some(("ls", submatches)) => {
+            sinkd::list(&submatches.values_of_lossy("PATHS").unwrap_or_else(|| vec![])); 
+        }
+        Some(("rm", _)) => {
+            sinkd::remove();
+        }
+        Some(("start", submatches)) => {
+            
+            if submatches.is_present("SERVER") {
+                server::start(verbosity);
+            } else {
+                if !client::start(verbosity) {
+                    println!("unable to start client, take a look: {}", utils::LOG_PATH)
+                }
             }
-        },
-        Some(("stop",    _)) => { sinkd::stop();},
-        Some(("restart", _)) => { sinkd::restart()},
-        Some(("log",     _)) => { sinkd::log()},
+        }
+        Some(("stop", _)) => {
+            sinkd::stop();
+        }
+        Some(("restart", _)) => sinkd::restart(),
+        Some(("log", _)) => sinkd::log(),
         _ => {}
     }
 }

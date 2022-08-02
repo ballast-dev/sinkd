@@ -68,7 +68,7 @@ impl log::Log for ShipLog {
 }
 
 pub fn init(clear_log: bool) -> Result<(), String> {
-    match utils::create_log_file(true) {
+    match utils::create_log_file(clear_log) {
         Err(e) => Err(e),
         Ok(_) => {
             ShipLog::init();
