@@ -31,8 +31,8 @@ fn dispatch(msg: &Option<mqtt::Message>) {
 }
 
 #[warn(unused_features)]
-pub fn start(verbosity: u8) -> bool {
-    if let Err(e) = shiplog::init(true) {
+pub fn start(verbosity: u8, clear_logs: bool) -> bool {
+    if let Err(e) = shiplog::init(clear_logs) {
         eprintln!("{}", e);
         return false;
     }
@@ -46,12 +46,12 @@ pub fn start(verbosity: u8) -> bool {
 
     return true;
 
-    // // TODO: need packager to setup file with correct permisions
+    // TODO: need packager to setup file with correct permisions
     // let daemon = Daemonize::new()
     //     .pid_file(utils::PID_PATH)
     //     .group("sinkd");
-    //     // .chown_pid_file(true)  // is optional, see `Daemonize` documentation
-    //     // .user("nobody")
+        // .chown_pid_file(true)  // is optional, see `Daemonize` documentation
+        // .user("nobody")
 
     // match daemon.start() {
     //     Ok(_) => {

@@ -42,8 +42,8 @@ enum State {
 //     - push out messsages with current status
 //     - interval (every 5 secs) of status
 
-pub fn start(verbosity: u8) {
-    if let Err(e) = shiplog::init(true) {
+pub fn start(verbosity: u8, clear_logs: bool) {
+    if let Err(e) = shiplog::init(clear_logs) {
         eprintln!("{}", e);
         process::exit(2);
     }
@@ -93,7 +93,7 @@ fn mqtt_entry(tx: mpsc::Sender<mqtt::Message>) -> ! {
             error!("FATAL could not create the mqtt server client: {}", e);
             process::exit(2);
         }
-        Ok(mut cli) => {
+        Ok(cli) => {
             // Initialize the consumer before connecting
             let msg_rx = cli.start_consuming();
             let lwt = mqtt::Message::new("sinkd/lost_conn", "sinkd server client lost connection", 1);

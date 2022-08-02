@@ -24,22 +24,6 @@ pub fn build_sinkd() -> App<'static> {
     App::new("sinkd")
         .about("deployable cloud")
         .version(env!("CARGO_PKG_VERSION"))
-        .subcommand(Command::new("init")
-            .display_order(1)
-            .about("Setup sinkd on client or server")
-            .arg(Arg::new("CLIENT")
-                .long("client")
-                .takes_value(false)
-                .help("initialize sinkd daemon on client")
-            )
-            .arg(Arg::new("SERVER")
-                .long("server")
-                .takes_value(false)
-                .conflicts_with("CLIENT")
-                .help("initialize sinkd daemon on server")
-            )
-            .override_usage("sinkd init [--client | --server]")
-        )
         .subcommand(Command::new("add")
             .about("Adds PATH to watch list\nlets sinkd become 'aware' of file or folder location provided")
             .arg(Arg::with_name("SHARE")
@@ -91,8 +75,8 @@ pub fn build_sinkd() -> App<'static> {
                 .conflicts_with("CLIENT")
                 .help("start sinkd in server mode")
             )
-            .arg(Arg::with_name("clear_logs")
-                .long("clear-log")
+            .arg(Arg::with_name("clear-logs")
+                .long("clear-logs")
                 .hidden(true)
                 .action(clap::ArgAction::SetTrue)
             )
@@ -129,13 +113,6 @@ fn main() {
     }
 
     match matches.subcommand() {
-        // ("init", Some(argv)) => {
-        //     if argv.is_present("SERVER") {
-        //         init::server(verbosity);
-        //     } else {
-        //         init::client(verbosity);
-        //     }
-        // },
         Some(("add", submatches)) => {
             for path in submatches.values_of("PATH").unwrap() {
                 if std::path::Path::new(path).exists() {
@@ -152,11 +129,11 @@ fn main() {
             sinkd::remove();
         }
         Some(("start", submatches)) => {
-            
+            let clear_logs = *submatches.get_one::<bool>("clear-logs").unwrap_or(&false);
             if submatches.is_present("SERVER") {
-                server::start(verbosity);
+                server::start(verbosity, clear_logs);
             } else {
-                if !client::start(verbosity) {
+                if !client::start(verbosity, clear_logs) {
                     println!("unable to start client, take a look: {}", utils::LOG_PATH)
                 }
             }
