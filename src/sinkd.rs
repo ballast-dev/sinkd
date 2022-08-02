@@ -6,16 +6,15 @@ use daemonize::Daemonize;
 use std::fs;
 use crate::shiplog;
 use crate::{config, utils};
-use crate::client;
 
 fn reload_config() {
     info!("reload config?")
 }
 
 pub fn add(file: &str) -> bool {
-    // adds entry to ~/.sinkd/sinkd.conf 
+    // adds entry to ~/.sinkd/sinkd.conf
     // tells daemon to read config again
-    // send a SIGHUP signal 
+    // send a SIGHUP signal
     // unsafe {
     //     let s: libc::sighandler_t = reload_config;
     //     libc::signal(libc::SIGHUP, s);
@@ -42,16 +41,15 @@ pub fn list(paths: &Vec<String>) {
     // }
 }
 
-
 pub fn stop() -> bool {
     if !utils::have_permissions() {
         eprintln!("Need to be root");
         return false;
     }
     match utils::get_pid() {
-        Err(e) => { 
+        Err(e) => {
             eprintln!("{}", e);
-            return false; 
+            return false;
         }
         Ok(pid) => {
             std::process::Command::new("kill")
@@ -62,14 +60,16 @@ pub fn stop() -> bool {
             println!("killed process {}", &pid);
 
             match utils::set_pid(0) {
-                Err(e) => { 
-                    eprintln!("{}", e); 
-                    return false; 
-                },
-                Ok(_) => { return true;  }
+                Err(e) => {
+                    eprintln!("{}", e);
+                    return false;
+                }
+                Ok(_) => {
+                    return true;
+                }
             }
         }
-    } 
+    }
 }
 
 pub fn restart() {

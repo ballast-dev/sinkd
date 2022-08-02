@@ -14,44 +14,73 @@ pub struct MsgStatus {
     cycle: u16,
 }
 
-pub struct MqttClient {
-    client: mqtt::AsyncClient
+pub struct MqttClient<'a> {
+    client: mqtt::AsyncClient,
+    topic: &'a str,
 }
 
-
-impl MqttClient {
-    //? Pass None to this constructor for localhost
-    pub fn new<C>(host: Option<&str>, mut callback: C) -> Result<MqttClient, String> 
-        where C: FnMut(&Option<mqtt::Message>) + 'static 
+impl MqttClient<'_> {
+    pub fn new<'a, C>(
+        host: Option<&str>,
+        topic: &'a str,
+        mut callback: C,
+    ) -> Result<MqttClient<'a>, String>
+    where
+        C: FnMut(&Option<mqtt::Message>) + 'static,
     {
-
-        let fq_host: String; 
+        let fq_host: String;
         match host {
-            Some("localhost") => { fq_host = String::from("tcp://localhost:1883"); }
-            Some(_str) => { fq_host = format!("tcp://{}:1883", _str); }
+            Some("localhost") => {
+                fq_host = String::from("tcp://localhost:1883");
+            }
+            Some(_str) => {
+                fq_host = format!("tcp://{}:1883", _str);
+            }
             None => {
                 error!("Need host string");
                 std::process::exit(-1);
             }
-            
         }
 
         match mqtt::AsyncClient::new(fq_host) {
             Err(e) => Err(format!("Error creating the client: {:?}", e)),
-            Ok(mut _c) => {
+            Ok(mut async_client) => {
                 // TODO: replumb for cleaner abstraction
-                _c.set_message_callback(move |_cli, msg| {callback(&msg)});
-                let mut mqtt_client = MqttClient { client: _c};
-                mqtt_client.connect();
-                Ok(mqtt_client)
+                async_client.set_message_callback(move |_cli, msg| callback(&msg));
+                let lwt =
+                    mqtt::Message::new("sinkd/lost_conn", "Async subscriber lost connection", 1);
+                let conn_opts = mqtt::ConnectOptionsBuilder::new()
+                    .keep_alive_interval(std::time::Duration::from_secs(20))
+                    .mqtt_version(mqtt::MQTT_VERSION_3_1_1)
+                    .clean_session(true)
+                    .will_message(lwt)
+                    .finalize();
+                async_client.connect(conn_opts.clone());
+                async_client.connect_with_callbacks(
+                    conn_opts,
+                    MqttClient::on_connect_success,
+                    MqttClient::on_connect_failure,
+                );
+
+                Ok(MqttClient {
+                    client: async_client,
+                    topic: topic,
+                })
             }
         }
     }
 
     pub fn publish(&mut self, arg: &str) {
-        if let Err(e) = self.client.try_publish(mqtt::Message::new("sinkd/", arg, 0)) {
+        if let Err(e) = self
+            .client
+            .try_publish(mqtt::Message::new("sinkd/", arg, 0))
+        {
             error!("{}", e)
         }
+    }
+
+    fn subscribe(&self) {
+        self.client.subscribe(self.topic, mqtt::QOS_0);
     }
 
     // Callback for a successful connection to the broker.
@@ -70,27 +99,17 @@ impl MqttClient {
     fn on_connect_failure(cli: &mqtt::AsyncClient, _msgid: u16, rc: i32) {
         println!("Connection attempt failed with error code {}.\n", rc);
         std::thread::sleep(std::time::Duration::from_millis(2500));
-        cli.reconnect_with_callbacks(MqttClient::on_connect_success, MqttClient::on_connect_failure);
-    }
-
-    fn connect(&mut self) {
-        let lwt = mqtt::Message::new("sinkd/lost_conn", "Async subscriber lost connection", 1);
-        let conn_opts = mqtt::ConnectOptionsBuilder::new()
-            .keep_alive_interval(std::time::Duration::from_secs(20))
-            .mqtt_version(mqtt::MQTT_VERSION_3_1_1)
-            .clean_session(true)
-            .will_message(lwt)
-            .finalize();
-        self.client.connect_with_callbacks(conn_opts, 
-                                           MqttClient::on_connect_success, 
-                                           MqttClient::on_connect_failure);
+        cli.reconnect_with_callbacks(
+            MqttClient::on_connect_success,
+            MqttClient::on_connect_failure,
+        );
     }
 
     pub fn disconnect(&mut self) {
         self.client.disconnect(
             mqtt::DisconnectOptionsBuilder::new()
-            .reason_code(mqtt::ReasonCode::default())
-            .finalize()
+                .reason_code(mqtt::ReasonCode::default())
+                .finalize(),
         );
     }
 }

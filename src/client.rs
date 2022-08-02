@@ -1,28 +1,33 @@
+use crate::{
+    config,
+    protocol::{self, MqttClient},
+    shiplog, utils,
+};
+use notify::{DebouncedEvent, Watcher};
+use paho_mqtt as mqtt;
 use std::{
     collections::HashSet,
     path::PathBuf,
     sync::mpsc,
     thread,
-    time::{Duration, Instant}
-};
-use notify::{DebouncedEvent, Watcher};
-use paho_mqtt as mqtt;
-use crate::{
-    config,
-    protocol,
-    shiplog,
-    utils
+    time::{Duration, Instant},
 };
 
+enum ServerType {
+    LOCAL,
+    REMOTE,
+}
+
+static server_type: ServerType = ServerType::LOCAL;
 
 fn init() -> Result<(), String> {
     match utils::create_log_file() {
         Err(e) => Err(e),
-        Ok(_) => { 
-            shiplog::ShipLog::init(); 
+        Ok(_) => {
+            shiplog::ShipLog::init();
             match utils::create_pid_file() {
                 Err(e) => Err(e),
-                Ok(_) => Ok(())
+                Ok(_) => Ok(()),
             }
         }
     }
@@ -39,28 +44,19 @@ fn dispatch(msg: &Option<mqtt::Message>) {
 
 #[warn(unused_features)]
 pub fn start(verbosity: u8) -> bool {
-
     if let Err(e) = init() {
         eprintln!("{}", e);
-        std::process::exit(1);
-    }
-   
-    // TODO need to read from config
-    if let Ok(_) = protocol::MqttClient::new(Some("localhost"), dispatch) {
-        // notify has a watch thread to watch to the files (endless loop)
-        // notify has a synch thread to rsync the changes (endless loop)
-        let notify_thread = thread::spawn(move || notify_entry());
-    
-        if let Err(_) = notify_thread.join() {
-            error!("Client synch thread error!");
-            std::process::exit(1);
-        }
-    
-        return true;
-
-    } else {
         return false;
     }
+
+    let notify_thread = thread::spawn(move || notify_entry());
+
+    if let Err(_) = notify_thread.join() {
+        error!("Client synch thread error!");
+        return false;
+    }
+
+    return true;
 
     // // TODO: need packager to setup file with correct permisions
     // let daemon = Daemonize::new()
@@ -78,13 +74,12 @@ pub fn start(verbosity: u8) -> bool {
     // }
 }
 
-
 fn notify_entry() {
-
     let (srv_addr, mut inode_map) = config::get();
-    let (notify_tx, notify_rx): (mpsc::Sender::<DebouncedEvent>, mpsc::Receiver::<DebouncedEvent>) = mpsc::channel();
-    let (synch_tx, synch_rx): (mpsc::Sender::<PathBuf>, mpsc::Receiver::<PathBuf>) = mpsc::channel();
-    
+    let (notify_tx, notify_rx): (mpsc::Sender<DebouncedEvent>, mpsc::Receiver<DebouncedEvent>) =
+        mpsc::channel();
+    let (synch_tx, synch_rx): (mpsc::Sender<PathBuf>, mpsc::Receiver<PathBuf>) = mpsc::channel();
+
     // keep the watchers alive!
     let _watchers = get_watchers(&inode_map, notify_tx);
 
@@ -95,7 +90,7 @@ fn notify_entry() {
     let synch_thread = thread::spawn(move || {
         synch_entry(&srv_addr, synch_rx);
     });
-    
+
     if let Err(_) = watch_thread.join() {
         error!("Client watch thread error!");
         std::process::exit(1);
@@ -121,9 +116,14 @@ fn update(event_path: PathBuf, inode_map: &mut config::InodeMap, synch_tx: &mpsc
     }
 }
 
-fn watch_entry(inode_map: &mut config::InodeMap, notify_rx: mpsc::Receiver<DebouncedEvent>, synch_tx: mpsc::Sender<PathBuf>) {
+fn watch_entry(
+    inode_map: &mut config::InodeMap,
+    notify_rx: mpsc::Receiver<DebouncedEvent>,
+    synch_tx: mpsc::Sender<PathBuf>,
+) {
     loop {
-        match notify_rx.recv() { // blocking call
+        match notify_rx.recv() {
+            // blocking call
             Ok(event) => {
                 match event {
                     DebouncedEvent::NoticeWrite(_) => {}  // do nothing
@@ -133,7 +133,7 @@ fn watch_entry(inode_map: &mut config::InodeMap, notify_rx: mpsc::Receiver<Debou
                     DebouncedEvent::Chmod(path) => update(path, inode_map, &synch_tx),
                     DebouncedEvent::Remove(path) => update(path, inode_map, &synch_tx),
                     DebouncedEvent::Rename(path, _) => update(path, inode_map, &synch_tx),
-                    DebouncedEvent::Rescan => {},
+                    DebouncedEvent::Rescan => {}
                     DebouncedEvent::Error(error, option_path) => {
                         info!(
                             "What was the error? {:?}\n the path should be: {:?}",
@@ -155,37 +155,57 @@ fn synch_entry(server_addr: &String, synch_rx: mpsc::Receiver<PathBuf>) {
     //? RSYNC options to consider
     // --delete-excluded (also delete excluded files)
     // --max-size=SIZE (limit size of transfers)
-    // --exclude 
+    // --exclude
 
-    let mut events = HashSet::new();
+    // TODO need to read from config
+    if let Ok(mut mqtt) = protocol::MqttClient::new(Some("localhost"), "sinkd/status", dispatch) {
+        // notify has a watch thread to watch to the files (endless loop)
+        // notify has a synch thread to rsync the changes (endless loop)
 
-    loop {
-        match synch_rx.try_recv() {
+        // Using Hashset to prevent repeated entries
+        let mut events = HashSet::new();
 
-            Ok(path) => {
-                debug!("received from synch channel");
-                events.insert(path);
-            },
-            Err(_) => { // buffered events
-                if !events.is_empty() {
-                    for path in events.drain() {
-                        fire_rsync(server_addr, &path);
-                    }
+        loop {
+            match synch_rx.try_recv() {
+                Ok(path) => {
+                    debug!("received from synch channel");
+                    events.insert(path);
                 }
-                // TODO: add 'system_interval' to config 
-                std::thread::sleep(Duration::from_secs(1));
-                debug!("synch loop...")
+                Err(_) => {
+                    // buffered events
+                    if !events.is_empty() {
+                        for path in events.drain() {
+                            //? is this where I send mqtt update?
+                            //? before synchronizing on the server need to figure out
+                            //? state of server...
+                            // need to tell the server to poll me
+
+                            mqtt.publish("dude man bro");
+
+                            fire_rsync(server_addr, &path);
+                        }
+                    }
+                    // TODO: add 'system_interval' to config
+                    std::thread::sleep(Duration::from_secs(1));
+                    debug!("synch loop...")
+                }
             }
         }
+    } else {
+        error!("FATAL: unable to create MQTT client");
     }
 }
 
-fn get_watchers(inode_map: &config::InodeMap, tx: mpsc::Sender<notify::DebouncedEvent>) -> Vec<notify::RecommendedWatcher> {
+fn get_watchers(
+    inode_map: &config::InodeMap,
+    tx: mpsc::Sender<notify::DebouncedEvent>,
+) -> Vec<notify::RecommendedWatcher> {
     let mut watchers: Vec<notify::RecommendedWatcher> = Vec::new();
 
     for (pathbuf, _) in inode_map.iter() {
         //TODO: use 'system_interval' to setup notification events
-        let mut watcher = notify::watcher(tx.clone(), Duration::from_secs(1)).expect("couldn't create watch");
+        let mut watcher =
+            notify::watcher(tx.clone(), Duration::from_secs(1)).expect("couldn't create watch");
 
         match watcher.watch(pathbuf, notify::RecursiveMode::Recursive) {
             Err(_) => {
@@ -227,9 +247,11 @@ fn fire_rsync(hostname: &String, src_path: &PathBuf) {
             error!("{:?}", x);
         }
         Ok(_) => {
-            info!("DID IT>> Called rsync src:{}  ->  dest:{}", 
-                    &src_path.display(), 
-                    &dest_path);
+            info!(
+                "DID IT>> Called rsync src:{}  ->  dest:{}",
+                &src_path.display(),
+                &dest_path
+            );
         }
     }
 }

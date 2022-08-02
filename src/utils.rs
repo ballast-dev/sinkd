@@ -1,16 +1,15 @@
 // Common Utilities
+use libc::{c_char, c_uint};
+use std::ffi::CString;
 use std::fmt;
 use std::path::PathBuf;
 use std::process;
-use libc::{c_char, c_uint};
-use std::ffi::CString;
 
 // TODO: need to wrap in os specific way
 pub const PID_PATH: &str = "/run/sinkd.pid";
 pub const LOG_PATH: &str = "/var/log/sinkd.log";
 
-
-extern {
+extern "C" {
     fn timestamp(ret_str: *mut c_char, size: c_uint, fmt_str: *const c_char);
 }
 
@@ -20,8 +19,8 @@ pub fn get_timestamp(fmt_str: &str) -> String {
 
     let _fmt_str = CString::new(fmt_str.as_bytes()).unwrap();
     let stamp: CString;
-    unsafe { 
-        timestamp(ret_ptr, 25, _fmt_str.as_ptr()); 
+    unsafe {
+        timestamp(ret_ptr, 25, _fmt_str.as_ptr());
         stamp = CString::from_raw(ret_ptr);
     }
     let v = stamp.into_bytes();
@@ -49,7 +48,7 @@ pub fn create_pid_file() -> Result<(), String> {
             Ok(_) => return Ok(()),
         }
     } else {
-        return Ok(());  // already created 
+        return Ok(()); // already created
     }
     // fs::File::create(PID_FILE).expect("unable to create pid file, permissions?");
     // let metadata = pid_file.metadata().unwrap();
@@ -72,13 +71,11 @@ pub fn create_log_file() -> Result<(), String> {
             Ok(_) => return Ok(()),
         }
     } else {
-        return Ok(());  // already created
+        return Ok(()); // already created
     }
 }
 
-
 pub fn get_pid() -> Result<u16, String> {
-
     // let user = env!("USER");
     // let sinkd_path = if cfg!(target_os = "macos") {
     //     path::Path::new("/Users").join(user).join(".sinkd")
@@ -87,7 +84,7 @@ pub fn get_pid() -> Result<u16, String> {
     // };
 
     let pid_file = PathBuf::from(PID_PATH);
-    
+
     if !pid_file.exists() {
         return Err(String::from("pid file not found"));
     } else {
@@ -110,7 +107,7 @@ pub fn get_pid() -> Result<u16, String> {
             }
         }
     }
-} 
+}
 
 pub fn set_pid(pid: u16) -> Result<(), String> {
     let pid_file = PathBuf::from(PID_PATH);
@@ -142,75 +139,75 @@ pub fn set_pid(pid: u16) -> Result<(), String> {
 }
 
 //--------------------
-// C O L O R S 
+// C O L O R S
 //--------------------
 #[allow(non_camel_case_types)]
 #[allow(dead_code)]
 pub enum Colors {
-// Foreground
-    BLACK           = 30,
-    RED             = 31,
-    GREEN           = 32,
-    YELLOW          = 33,
-    BLUE            = 34,
-    PURPLE          = 35,
-    CYAN            = 36,
-    WHITE           = 37,
-    BRIGHT_BLUE     = 94,
-    BRIGHT_PURPLE   = 95,
-// Background
-    BgBLACK         = 40,
-    BgRED           = 41,
-    BgGREEN         = 42,
-    BgYELLOW        = 43,
-    BgBLUE          = 44,
-    BgPURPLE        = 45,
-    BgCYAN          = 46,
-    BgWHITE         = 47,
+    // Foreground
+    BLACK = 30,
+    RED = 31,
+    GREEN = 32,
+    YELLOW = 33,
+    BLUE = 34,
+    PURPLE = 35,
+    CYAN = 36,
+    WHITE = 37,
+    BRIGHT_BLUE = 94,
+    BRIGHT_PURPLE = 95,
+    // Background
+    BgBLACK = 40,
+    BgRED = 41,
+    BgGREEN = 42,
+    BgYELLOW = 43,
+    BgBLUE = 44,
+    BgPURPLE = 45,
+    BgCYAN = 46,
+    BgWHITE = 47,
 }
 
 impl fmt::Display for Colors {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-       match *self {
-            Colors::BLACK          => write!(f, "30"),
-            Colors::RED            => write!(f, "31"),
-            Colors::GREEN          => write!(f, "32"),
-            Colors::YELLOW         => write!(f, "33"),
-            Colors::BLUE           => write!(f, "34"),
-            Colors::PURPLE         => write!(f, "35"),
-            Colors::CYAN           => write!(f, "36"),
-            Colors::WHITE          => write!(f, "37"),
-            Colors::BRIGHT_BLUE    => write!(f, "94"),
-            Colors::BRIGHT_PURPLE  => write!(f, "95"),
-            Colors::BgBLACK        => write!(f, "40"),
-            Colors::BgRED          => write!(f, "41"),
-            Colors::BgGREEN        => write!(f, "42"),
-            Colors::BgYELLOW       => write!(f, "43"),
-            Colors::BgBLUE         => write!(f, "44"),
-            Colors::BgPURPLE       => write!(f, "45"),
-            Colors::BgCYAN         => write!(f, "46"),
-            Colors::BgWHITE        => write!(f, "47"),
-      }
+        match *self {
+            Colors::BLACK => write!(f, "30"),
+            Colors::RED => write!(f, "31"),
+            Colors::GREEN => write!(f, "32"),
+            Colors::YELLOW => write!(f, "33"),
+            Colors::BLUE => write!(f, "34"),
+            Colors::PURPLE => write!(f, "35"),
+            Colors::CYAN => write!(f, "36"),
+            Colors::WHITE => write!(f, "37"),
+            Colors::BRIGHT_BLUE => write!(f, "94"),
+            Colors::BRIGHT_PURPLE => write!(f, "95"),
+            Colors::BgBLACK => write!(f, "40"),
+            Colors::BgRED => write!(f, "41"),
+            Colors::BgGREEN => write!(f, "42"),
+            Colors::BgYELLOW => write!(f, "43"),
+            Colors::BgBLUE => write!(f, "44"),
+            Colors::BgPURPLE => write!(f, "45"),
+            Colors::BgCYAN => write!(f, "46"),
+            Colors::BgWHITE => write!(f, "47"),
+        }
     }
 }
 
 #[allow(dead_code)]
 pub enum Attrs {
-// # Attributes
-    NORMAL          = 0,
-    BOLD            = 1,
-    UNDERLINE       = 4,
-    INVERSE         = 7, // foreground becomes background (vice-versa)
+    // # Attributes
+    NORMAL = 0,
+    BOLD = 1,
+    UNDERLINE = 4,
+    INVERSE = 7, // foreground becomes background (vice-versa)
 }
 
 impl fmt::Display for Attrs {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-       match *self {
-            Attrs::NORMAL    => write!(f, "0"),
-            Attrs::BOLD      => write!(f, "1"),
+        match *self {
+            Attrs::NORMAL => write!(f, "0"),
+            Attrs::BOLD => write!(f, "1"),
             Attrs::UNDERLINE => write!(f, "4"),
-            Attrs::INVERSE   => write!(f, "7"),
-       }
+            Attrs::INVERSE => write!(f, "7"),
+        }
     }
 }
 
@@ -226,12 +223,11 @@ pub fn format_fancy(arg: &str, attr: Attrs, color: Colors) -> String {
     format!("\u{1b}[{};{}m{}\u{1b}[0m", attr, color, arg)
 }
 
-
 fn gen_keys() -> bool {
     let shell = process::Command::new("sh")
         .stdout(process::Stdio::null())
         .arg("-c")
-        .arg("printf '\n\n' | ssh-keygen -t dsa")  // will *not* overwrite 
+        .arg("printf '\n\n' | ssh-keygen -t dsa") // will *not* overwrite
         .output()
         .unwrap();
 
@@ -274,15 +270,14 @@ fn copy_keys_to_remote(host: &str) -> bool {
         println!("ssh key loaded on remote system");
     }
 
-
     let shell = process::Command::new("sh")
         .arg("-c")
         .arg("eval $(ssh-agent) && ssh-add ~/.ssh/id_ed25519")
         .output()
         .unwrap();
-        
+
     let shell_stderr = String::from_utf8_lossy(&shell.stderr);
-    
+
     if shell_stderr.contains("not found") {
         println!("command not found: ssh-eval, is ssh installed?");
         return false;
@@ -294,7 +289,8 @@ fn copy_keys_to_remote(host: &str) -> bool {
 
 fn set_up_rsync_daemon(host: &str, pass: &str) {
     let connections = 5;
-    let command_str = format!(r#"ssh -t {} << EOF
+    let command_str = format!(
+        r#"ssh -t {} << EOF
     local HISTSIZE=0  
     echo {} | sudo -Sk mkdir /srv/sinkd
     echo {} | sudo -Sk groupadd sinkd 
@@ -315,17 +311,19 @@ pid file = /run/rsyncd.pid
 ENDCONF
     echo {} | sudo -Sk rsync --daemon
     EOF
-    "#, host, pass, pass, pass, pass, connections, pass);
+    "#,
+        host, pass, pass, pass, pass, connections, pass
+    );
 
     let shell = process::Command::new("sh")
-    .arg("-c")
-    .arg(command_str)
-    .stdout(process::Stdio::null())
-    .output()
-    .unwrap();
+        .arg("-c")
+        .arg(command_str)
+        .stdout(process::Stdio::null())
+        .output()
+        .unwrap();
 
     let shell_stderr = String::from_utf8_lossy(&shell.stderr);
-    
+
     if shell_stderr.contains("not found") {
         println!("command not found: ssh-eval, is ssh installed?");
     } else if shell_stderr.contains("denied") {
@@ -334,7 +332,6 @@ ENDCONF
         println!("loaded private key with ssh-agent, passwordless login enabled!");
         //~ Did it!
     }
-
 }
 
 pub fn setup_server(verbosity: u8, host: &str) {
@@ -351,7 +348,7 @@ pub fn setup_keys(verbosity: u8, host: &str) {
     if copy_keys_to_remote(host) {
         print_fancyln("finished setup", Attrs::NORMAL, Colors::GREEN)
     }
-    
+
     // let mut du_output_child = Command::new("du")
     //     .arg("-ah")
     //     .arg(&directory)

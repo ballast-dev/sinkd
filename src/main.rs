@@ -9,14 +9,14 @@ extern crate log;
 extern crate libc;
 extern crate rpassword;
 
-mod config;
 mod client;
-mod utils;
+mod config;
+mod protocol;
+mod server;
 mod shiplog;
 mod sinkd;
-mod server;
 mod test;
-mod protocol;
+mod utils;
 
 use clap::*;
 
@@ -108,21 +108,19 @@ pub fn build_sinkd() -> Command<'static> {
         )
 }
 
-
 #[allow(dead_code)]
 fn main() {
-
     println!("Running sinkd at {}", utils::get_timestamp("%Y%m%d-%T"));
-    
+
     // mqtt::listen();
     // std::process::exit(0);
     let matches = build_sinkd().get_matches();
     let mut verbosity: u8 = 0;
     match matches.occurrences_of("verbose") {
-        1 => verbosity = 1, 
+        1 => verbosity = 1,
         2 => verbosity = 2,
         3 => verbosity = 3,
-        _ => ()
+        _ => (),
     }
 
     match matches.subcommand() {

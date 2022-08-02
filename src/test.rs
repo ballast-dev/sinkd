@@ -20,5 +20,5 @@ fn config() {
 #[doc = "cargo test fancy -- --nocapture"]
 fn fancy() {
     use crate::utils::*;
-    print_fancyln("deploy the anchor matey!", Attrs::INVERSE, Colors::YELLOW); 
+    print_fancyln("deploy the anchor matey!", Attrs::INVERSE, Colors::YELLOW);
 }
