@@ -4,10 +4,13 @@
 // /___/\__/_/  |___/\__/_/   
 #![allow(unused_imports)]
 
-use crate::protocol;
 use paho_mqtt as mqtt;
-use std::{process, sync::mpsc, thread};
-
+use std::{
+    process, 
+    sync::mpsc, 
+    thread
+};
+use crate::shiplog;
 enum State {
     SYNCHING,
     READY,
@@ -39,16 +42,21 @@ enum State {
 //     - push out messsages with current status
 //     - interval (every 5 secs) of status
 
-pub fn start() {
-    if let Err(_) = std::process::Command::new("mosquitto").arg("-d").spawn() {
+pub fn start(verbosity: u8) {
+    if let Err(e) = shiplog::init(true) {
+        eprintln!("{}", e);
+        process::exit(2);
+    }
+
+    debug!("server:start >> initial");
+    if let Err(_) = process::Command::new("mosquitto").arg("-d").spawn() {
         eprintln!("mosquitto not installed or not in PATH");
         return;
     }
 
+    debug!("server:start >> spawning channel");
     let (msg_tx, msg_rx): (mpsc::Sender<mqtt::Message>, mpsc::Receiver<mqtt::Message>) =
         mpsc::channel();
-
-    // keep things alive between threads by calling outside of scope
 
     let mqtt_thread = thread::spawn(move || mqtt_entry(msg_tx));
 
@@ -56,11 +64,11 @@ pub fn start() {
 
     if let Err(_) = mqtt_thread.join() {
         error!("server:mqtt_thread join error!");
-        std::process::exit(1);
+        process::exit(1);
     }
     if let Err(_) = synch_thread.join() {
         error!("server::synch_thread join error!");
-        std::process::exit(1);
+        process::exit(1);
     }
 }
 
@@ -75,36 +83,72 @@ fn dispatch(msg: &Option<mqtt::Message>) {
 
 fn mqtt_entry(tx: mpsc::Sender<mqtt::Message>) -> ! {
     // TODO: Read from config
-    match mqtt::AsyncClient::new("tcp://localhost:1883") {
+     let opts = mqtt::CreateOptionsBuilder::new()
+                        .server_uri("tcp://localhost:1883")
+                        .client_id("sinkd_server")
+                        .finalize();
+    
+    match mqtt::Client::new(opts) {
         Err(e) => {
             error!("FATAL could not create the mqtt server client: {}", e);
-            std::process::exit(2);
+            process::exit(2);
         }
         Ok(mut cli) => {
-            let lwt = mqtt::Message::new("sinkd/lost_conn", "Async subscriber lost connection", 1);
+            // Initialize the consumer before connecting
+            let msg_rx = cli.start_consuming();
+            let lwt = mqtt::Message::new("sinkd/lost_conn", "sinkd server client lost connection", 1);
             let conn_opts = mqtt::ConnectOptionsBuilder::new()
                 .keep_alive_interval(std::time::Duration::from_secs(300)) // 5 mins should be enough
                 .mqtt_version(mqtt::MQTT_VERSION_3_1_1)
                 .clean_session(true)
                 .will_message(lwt)
                 .finalize();
-            cli.connect(conn_opts.clone());
-            cli.subscribe("sinkd/status", mqtt::QOS_0);
-            if cli.is_connected() {
-                let msg_rx = cli.start_consuming();
-                loop {
-                    if let Ok(msg) = msg_rx.try_recv() {
-                        tx.send(msg.unwrap()).unwrap();
-                    } else {
-                        std::thread::sleep(std::time::Duration::from_secs(1));
+
+            match cli.connect(conn_opts) {
+                Ok(rsp) => {
+                    if let Some(conn_rsp) = rsp.connect_response() {
+                        debug!(
+                            "Connected to: '{}' with MQTT version {}",
+                            conn_rsp.server_uri, conn_rsp.mqtt_version
+                        );
+                        if conn_rsp.session_present {
+                            debug!("  w/ client session already present on broker.");
+                        } else {
+                            // Register subscriptions on the server
+                            debug!("Subscribing to topics with requested QoS: {:?}...", mqtt::QOS_0);
+                            if let Err(e) = cli.subscribe("sinkd/status", mqtt::QOS_0) {
+                                error!("server:mqtt_entry >> could not subscribe to sinkd/status {}", e);
+                            }
+            
+                            // cli.subscribe_many(&subscriptions, &qos)
+                            //     .and_then(|rsp| {
+                            //         rsp.subscribe_many_response()
+                            //             .ok_or(mqtt::Error::General("Bad response"))
+                            //     })
+                            //     .and_then(|vqos| {
+                            //         println!("QoS granted: {:?}", vqos);
+                            //         Ok(())
+                            //     })
+                            //     .unwrap_or_else(|err| {
+                            //         println!("Error subscribing to topics: {:?}", err);
+                            //         cli.disconnect(None).unwrap();
+                            //         process::exit(1);
+                            //     });
+                        }
                     }
                 }
-            } else {
-                // TODO: create a fatal! macro
-                error!(
-                    "FATAL client could not connect to localhost:1883, is mosquitto -d running?"
-                );
-                std::process::exit(2);
+                Err(e) => {
+                    error!(
+                        "FATAL client could not connect to localhost:1883, is mosquitto -d running? {}", e
+                    );
+                    process::exit(2);
+                }
+            }
+            // start processing messages
+            loop {
+                if let Ok(msg) = msg_rx.recv() {
+                    tx.send(msg.unwrap()).unwrap();
+                }
             }
         }
     }
@@ -117,26 +161,27 @@ fn synch_entry(rx: mpsc::Receiver<mqtt::Message>) -> ! {
                 error!("server:synch_entry hangup on reciever?: {}", e);
             }
             Ok(msg) => {
-                let rsync_result = std::process::Command::new("rsync")
-                    .arg("-atR") // archive, timestamps, relative
-                    .arg("--delete")
-                    // TODO: to add --exclude [list of folders] from config
-                    // .arg(&src_path)
-                    // .arg(&dest_path)
-                    .spawn();
+                debug!("server:synch_entry >> {}", msg);
+                // let rsync_result = process::Command::new("rsync")
+                //     .arg("-atR") // archive, timestamps, relative
+                //     .arg("--delete")
+                //     // TODO: to add --exclude [list of folders] from config
+                //     // .arg(&src_path)
+                //     // .arg(&dest_path)
+                //     .spawn();
 
-                match rsync_result {
-                    Err(x) => {
-                        error!("{:?}", x);
-                    }
-                    Ok(_) => {
-                        info!(
-                            "DID IT>> Called rsync",
-                            // &src_path.display(),
-                            // &dest_path
-                        );
-                    }
-                }
+                // match rsync_result {
+                //     Err(x) => {
+                //         error!("{:?}", x);
+                //     }
+                //     Ok(_) => {
+                //         info!(
+                //             "DID IT>> Called rsync",
+                //             // &src_path.display(),
+                //             // &dest_path
+                //         );
+                //     }
+                // }
             }
         }
     }

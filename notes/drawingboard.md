@@ -55,7 +55,10 @@ __Hidden API__ for systemd not for user
 Config will be loaded from `/etc/sinkd.conf` but also searched in `~/.config/sinkd.conf` for particular user preferences
 1. Upon adding and removing files/folders the daemon will be told to reparse it's configuration 
     1. use MQTT
-    1. use a signal ... this might be better         
+    1. use a signal ... this might be better   
+
+### Considering removal of `add` and `rm` commands 
+This is in favor for a configuration first concept. When user modifies `/etc/sinkd.conf` or the `~/.config/sinkd` file then the program will reparse the contents and use them.       
 
 | client side | server side |
 | ----------- | ----------- |

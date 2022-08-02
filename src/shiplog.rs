@@ -66,3 +66,16 @@ impl log::Log for ShipLog {
 
     fn flush(&self) {}
 }
+
+pub fn init(clear_log: bool) -> Result<(), String> {
+    match utils::create_log_file(true) {
+        Err(e) => Err(e),
+        Ok(_) => {
+            ShipLog::init();
+            match utils::create_pid_file() {
+                Err(e) => Err(e),
+                Ok(_) => Ok(()),
+            }
+        }
+    }
+}

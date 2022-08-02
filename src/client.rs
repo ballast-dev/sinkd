@@ -1,7 +1,7 @@
 use crate::{
     config,
-    protocol::{self, MqttClient},
-    shiplog, utils,
+    protocol,
+    shiplog
 };
 use notify::{DebouncedEvent, Watcher};
 use paho_mqtt as mqtt;
@@ -20,18 +20,6 @@ enum ServerType {
 
 static server_type: ServerType = ServerType::LOCAL;
 
-fn init() -> Result<(), String> {
-    match utils::create_log_file() {
-        Err(e) => Err(e),
-        Ok(_) => {
-            shiplog::ShipLog::init();
-            match utils::create_pid_file() {
-                Err(e) => Err(e),
-                Ok(_) => Ok(()),
-            }
-        }
-    }
-}
 
 fn dispatch(msg: &Option<mqtt::Message>) {
     if let Some(msg) = msg {
@@ -44,7 +32,7 @@ fn dispatch(msg: &Option<mqtt::Message>) {
 
 #[warn(unused_features)]
 pub fn start(verbosity: u8) -> bool {
-    if let Err(e) = init() {
+    if let Err(e) = shiplog::init(true) {
         eprintln!("{}", e);
         return false;
     }

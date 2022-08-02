@@ -57,12 +57,12 @@ pub fn create_pid_file() -> Result<(), String> {
     // fs::set_permissions(&pid_path, permissions).expect("cannot set permission");
 }
 
-pub fn create_log_file() -> Result<(), String> {
+pub fn create_log_file(clear: bool) -> Result<(), String> {
     if !have_permissions() {
         return Err(String::from("Need to be root"));
     }
     let log_file = PathBuf::from(LOG_PATH);
-    if !log_file.exists() {
+    if !log_file.exists() || clear {
         match std::fs::File::create(&log_file) {
             Err(why) => {
                 let err_str = format!("cannot create {:?}, {:?}", log_file, why.kind());
