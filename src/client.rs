@@ -163,16 +163,22 @@ fn synch_entry(server_addr: &String, synch_rx: mpsc::Receiver<PathBuf>) {
                     // buffered events
                     if !events.is_empty() {
                         for path in events.drain() {
-                            //? is this where I send mqtt update?
-                            //? before synchronizing on the server need to figure out
-                            //? state of server...
-                            // need to tell the server to poll me
-
-                            // 1. send msg to server to update
-                            // 2. server updates FROM client
-                            // 3. server sends message back to client (UP_TO_DATE) 
-                            // 4. 
-
+                            //? STATE MACHINE 
+                            // 1. file event
+                            // 2. query server for status
+                            // 3. if not up to date, update
+                            // -- update algorithm --
+                            // - 1. rsync from server files into .sinkd/ (per directory)
+                            // - 2. compare files (stat on modify field?) (use meta data?)
+                            // - 3. conflicted files will be marked as file.sinkd
+                            // - 4. move everython from .sinkd/ to correct dir 
+                            // - 5. remove .sinkd/ 
+                            // - 6. make sinkd_num same as server
+                            // 4. send mqtt message topic=sinkd/update/client_name payload=dir,dir,dir...
+                            // 5. server calls rsync src=client dest=server
+                            // 6. server increments sinkd_num
+                            // 7. server mqtt publishes topic=sinkd/status payload=sinkd_num
+                            
                             mqtt.publish("dude man bro");
 
                             fire_rsync(server_addr, &path);

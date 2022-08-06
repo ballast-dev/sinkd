@@ -7,7 +7,7 @@
 use paho_mqtt as mqtt;
 use std::{
     process, 
-    sync::mpsc, 
+    sync::{mpsc, Arc, Mutex}, 
     thread
 };
 use crate::shiplog;
@@ -58,9 +58,10 @@ pub fn start(verbosity: u8, clear_logs: bool) {
     let (msg_tx, msg_rx): (mpsc::Sender<mqtt::Message>, mpsc::Receiver<mqtt::Message>) =
         mpsc::channel();
 
-    let mqtt_thread = thread::spawn(move || mqtt_entry(msg_tx));
-
-    let synch_thread = thread::spawn(move || synch_entry(msg_rx));
+    let bcast_cycle = Arc::new(Mutex::new(0));
+    let incr_cycle = Arc::clone(&bcast_cycle);
+    let mqtt_thread = thread::spawn(move || mqtt_entry(msg_tx, bcast_cycle));
+    let synch_thread = thread::spawn(move || synch_entry(msg_rx, incr_cycle));
 
     if let Err(_) = mqtt_thread.join() {
         error!("server:mqtt_thread join error!");
@@ -81,14 +82,10 @@ fn dispatch(msg: &Option<mqtt::Message>) {
     }
 }
 
-fn mqtt_entry(tx: mpsc::Sender<mqtt::Message>) -> ! {
+//? This thread is to ensure no lost messages from mqtt
+fn mqtt_entry(tx: mpsc::Sender<mqtt::Message>, cycle: Arc<Mutex<i32>>) -> ! {
     // TODO: Read from config
-     let opts = mqtt::CreateOptionsBuilder::new()
-                        .server_uri("tcp://localhost:1883")
-                        .client_id("sinkd_server")
-                        .finalize();
-    
-    match mqtt::Client::new(opts) {
+    match mqtt::Client::new("tcp://localhost:1883") {
         Err(e) => {
             error!("FATAL could not create the mqtt server client: {}", e);
             process::exit(2);
@@ -116,7 +113,7 @@ fn mqtt_entry(tx: mpsc::Sender<mqtt::Message>) -> ! {
                         } else {
                             // Register subscriptions on the server
                             debug!("Subscribing to topics with requested QoS: {:?}...", mqtt::QOS_0);
-                            if let Err(e) = cli.subscribe("sinkd/status", mqtt::QOS_0) {
+                            if let Err(e) = cli.subscribe("sinkd/update", mqtt::QOS_0) {
                                 error!("server:mqtt_entry >> could not subscribe to sinkd/status {}", e);
                             }
             
@@ -146,15 +143,18 @@ fn mqtt_entry(tx: mpsc::Sender<mqtt::Message>) -> ! {
             }
             // start processing messages
             loop {
-                if let Ok(msg) = msg_rx.recv() {
+                if let Ok(msg) = msg_rx.try_recv() {
                     tx.send(msg.unwrap()).unwrap();
+                } else {
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                    publish(&cli, &cycle.lock().unwrap().to_string());
                 }
             }
         }
     }
 }
 
-fn synch_entry(rx: mpsc::Receiver<mqtt::Message>) -> ! {
+fn synch_entry(rx: mpsc::Receiver<mqtt::Message>, cycle: Arc<Mutex<i32>>) -> ! {
     loop {
         match rx.recv() {
             Err(e) => {
@@ -175,14 +175,28 @@ fn synch_entry(rx: mpsc::Receiver<mqtt::Message>) -> ! {
                 //         error!("{:?}", x);
                 //     }
                 //     Ok(_) => {
-                //         info!(
-                //             "DID IT>> Called rsync",
-                //             // &src_path.display(),
-                //             // &dest_path
-                //         );
+                        // info!(
+                        //     "DID IT>> Called rsync",
+                        //     // &src_path.display(),
+                        //     // &dest_path
+                        // );
+                        let mut num = cycle.lock().unwrap();
+                        *num += 1;
+    
                 //     }
                 // }
             }
         }
+    }
+}
+
+
+fn publish<'a>(mqtt_client: &mqtt::Client, msg: &'a str) {
+    if let Err(e) = mqtt_client.publish(mqtt::Message::new(
+        "sinkd/status",
+        msg,
+        mqtt::QOS_0
+    )) {
+        error!("server:publish >> {}", e);
     }
 }
