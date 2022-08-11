@@ -1,16 +1,16 @@
 //    ____
 //   / __/__ _____  _____ ____
 //  _\ \/ -_) __/ |/ / -_) __/
-// /___/\__/_/  |___/\__/_/   
+// /___/\__/_/  |___/\__/_/
 #![allow(unused_imports)]
 
+use crate::shiplog;
 use paho_mqtt as mqtt;
 use std::{
-    process, 
-    sync::{mpsc, Arc, Mutex}, 
-    thread
+    process,
+    sync::{mpsc, Arc, Mutex},
+    thread,
 };
-use crate::shiplog;
 enum State {
     SYNCHING,
     READY,
@@ -93,7 +93,8 @@ fn mqtt_entry(tx: mpsc::Sender<mqtt::Message>, cycle: Arc<Mutex<i32>>) -> ! {
         Ok(cli) => {
             // Initialize the consumer before connecting
             let msg_rx = cli.start_consuming();
-            let lwt = mqtt::Message::new("sinkd/lost_conn", "sinkd server client lost connection", 1);
+            let lwt =
+                mqtt::Message::new("sinkd/lost_conn", "sinkd server client lost connection", 1);
             let conn_opts = mqtt::ConnectOptionsBuilder::new()
                 .keep_alive_interval(std::time::Duration::from_secs(300)) // 5 mins should be enough
                 .mqtt_version(mqtt::MQTT_VERSION_3_1_1)
@@ -111,26 +112,12 @@ fn mqtt_entry(tx: mpsc::Sender<mqtt::Message>, cycle: Arc<Mutex<i32>>) -> ! {
                         if conn_rsp.session_present {
                             debug!("  w/ client session already present on broker.");
                         } else {
-                            // Register subscriptions on the server
-                            debug!("Subscribing to topics with requested QoS: {:?}...", mqtt::QOS_0);
                             if let Err(e) = cli.subscribe("sinkd/update", mqtt::QOS_0) {
-                                error!("server:mqtt_entry >> could not subscribe to sinkd/status {}", e);
+                                error!(
+                                    "server:mqtt_entry >> could not subscribe to sinkd/status {}",
+                                    e
+                                );
                             }
-            
-                            // cli.subscribe_many(&subscriptions, &qos)
-                            //     .and_then(|rsp| {
-                            //         rsp.subscribe_many_response()
-                            //             .ok_or(mqtt::Error::General("Bad response"))
-                            //     })
-                            //     .and_then(|vqos| {
-                            //         println!("QoS granted: {:?}", vqos);
-                            //         Ok(())
-                            //     })
-                            //     .unwrap_or_else(|err| {
-                            //         println!("Error subscribing to topics: {:?}", err);
-                            //         cli.disconnect(None).unwrap();
-                            //         process::exit(1);
-                            //     });
                         }
                     }
                 }
@@ -141,7 +128,7 @@ fn mqtt_entry(tx: mpsc::Sender<mqtt::Message>, cycle: Arc<Mutex<i32>>) -> ! {
                     process::exit(2);
                 }
             }
-            // start processing messages
+
             loop {
                 if let Ok(msg) = msg_rx.try_recv() {
                     tx.send(msg.unwrap()).unwrap();
@@ -175,14 +162,14 @@ fn synch_entry(rx: mpsc::Receiver<mqtt::Message>, cycle: Arc<Mutex<i32>>) -> ! {
                 //         error!("{:?}", x);
                 //     }
                 //     Ok(_) => {
-                        // info!(
-                        //     "DID IT>> Called rsync",
-                        //     // &src_path.display(),
-                        //     // &dest_path
-                        // );
-                        let mut num = cycle.lock().unwrap();
-                        *num += 1;
-    
+                // info!(
+                //     "DID IT>> Called rsync",
+                //     // &src_path.display(),
+                //     // &dest_path
+                // );
+                let mut num = cycle.lock().unwrap();
+                *num += 1;
+
                 //     }
                 // }
             }
@@ -190,13 +177,8 @@ fn synch_entry(rx: mpsc::Receiver<mqtt::Message>, cycle: Arc<Mutex<i32>>) -> ! {
     }
 }
 
-
 fn publish<'a>(mqtt_client: &mqtt::Client, msg: &'a str) {
-    if let Err(e) = mqtt_client.publish(mqtt::Message::new(
-        "sinkd/status",
-        msg,
-        mqtt::QOS_0
-    )) {
+    if let Err(e) = mqtt_client.publish(mqtt::Message::new("sinkd/status", msg, mqtt::QOS_0)) {
         error!("server:publish >> {}", e);
     }
 }

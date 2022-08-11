@@ -76,7 +76,7 @@ impl ConfigParser {
         if let Err(e) = self.load_sys_config() {
             match e {
                 ParseError::InvalidSyntax(syn) => error!("{}", syn),
-                _ => error!("{}", e)
+                _ => error!("{}", e),
             }
             return false;
         }

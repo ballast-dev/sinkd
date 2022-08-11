@@ -123,7 +123,11 @@ fn main() {
             }
         }
         Some(("ls", submatches)) => {
-            sinkd::list(&submatches.values_of_lossy("PATHS").unwrap_or_else(|| vec![])); 
+            sinkd::list(
+                &submatches
+                    .values_of_lossy("PATHS")
+                    .unwrap_or_else(|| vec![]),
+            );
         }
         Some(("rm", _)) => {
             sinkd::remove();

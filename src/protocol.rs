@@ -39,7 +39,7 @@ impl MqttClient {
 
         match mqtt::AsyncClient::new(fq_host) {
             Err(e) => Err(format!("Error creating the client: {:?}", e)),
-            Ok(mut async_client) => {
+            Ok(async_client) => {
                 // TODO: replumb for cleaner abstraction
                 async_client.set_message_callback(move |_cli, msg| callback(&msg));
                 let lwt =
@@ -64,12 +64,9 @@ impl MqttClient {
         }
     }
 
-    pub fn publish(&mut self, arg: &str) {
-        if let Err(e) = self
-            .client
-            .try_publish(mqtt::Message::new("sinkd/", arg, 0))
-        {
-            error!("{}", e)
+    pub fn publish(&mut self, msg: mqtt::Message) {
+        if let Err(e) = self.client.try_publish(msg) {
+            error!("Unable to publish: {}", e);
         }
     }
 

@@ -112,30 +112,26 @@ pub fn get_pid() -> Result<u16, String> {
 pub fn set_pid(pid: u16) -> Result<(), String> {
     let pid_file = PathBuf::from(PID_PATH);
     if !pid_file.exists() {
-        return Err(String::from("pid file not found"))
-    } 
+        return Err(String::from("pid file not found"));
+    }
 
     if pid == 0 {
-
         unsafe {
             let c_str = CString::new(PID_PATH).unwrap();
             libc::unlink(c_str.into_raw());
         }
-        return Ok(())
-
+        return Ok(());
     } else {
-
         match std::fs::write(pid_file, pid.to_ne_bytes()) {
             Err(err) => {
                 let err_str = format!("couldn't clear pid in ~/.sinkd/pid\n{}", err);
                 return Err(err_str);
             }
             Ok(()) => {
-                return Ok(());  
-            } 
+                return Ok(());
+            }
         }
     }
-
 }
 
 //--------------------
@@ -344,7 +340,7 @@ pub fn setup_keys(verbosity: u8, host: &str) {
         print_fancyln("Unable to generate keys", Attrs::NORMAL, Colors::RED);
         return;
     }
-    
+
     if copy_keys_to_remote(host) {
         print_fancyln("finished setup", Attrs::NORMAL, Colors::GREEN)
     }

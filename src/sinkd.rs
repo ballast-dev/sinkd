@@ -2,10 +2,10 @@
 #![allow(unused_variables)]
 #![allow(unused_imports)]
 
-use daemonize::Daemonize;
-use std::fs;
 use crate::shiplog;
 use crate::{config, utils};
+use daemonize::Daemonize;
+use std::fs;
 
 fn reload_config() {
     info!("reload config?")

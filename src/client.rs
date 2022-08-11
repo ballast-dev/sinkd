@@ -1,8 +1,4 @@
-use crate::{
-    config,
-    protocol,
-    shiplog
-};
+use crate::{config, protocol, shiplog};
 use notify::{DebouncedEvent, Watcher};
 use paho_mqtt as mqtt;
 use std::{
@@ -19,7 +15,6 @@ enum ServerType {
 }
 
 static server_type: ServerType = ServerType::LOCAL;
-
 
 fn dispatch(msg: &Option<mqtt::Message>) {
     if let Some(msg) = msg {
@@ -50,8 +45,8 @@ pub fn start(verbosity: u8, clear_logs: bool) -> bool {
     // let daemon = Daemonize::new()
     //     .pid_file(utils::PID_PATH)
     //     .group("sinkd");
-        // .chown_pid_file(true)  // is optional, see `Daemonize` documentation
-        // .user("nobody")
+    // .chown_pid_file(true)  // is optional, see `Daemonize` documentation
+    // .user("nobody")
 
     // match daemon.start() {
     //     Ok(_) => {
@@ -112,25 +107,23 @@ fn watch_entry(
     loop {
         match notify_rx.recv() {
             // blocking call
-            Ok(event) => {
-                match event {
-                    DebouncedEvent::Create(path) => update(path, inode_map, &synch_tx),
-                    DebouncedEvent::Write(path) => update(path, inode_map, &synch_tx),
-                    DebouncedEvent::Chmod(path) => update(path, inode_map, &synch_tx),
-                    DebouncedEvent::Remove(path) => update(path, inode_map, &synch_tx),
-                    DebouncedEvent::Rename(path, _) => update(path, inode_map, &synch_tx),
-                    DebouncedEvent::Rescan => {}
-                    DebouncedEvent::NoticeWrite(_) => {}
-                    DebouncedEvent::NoticeRemove(_) => {}
-                    DebouncedEvent::Error(error, option_path) => {
-                        info!(
-                            "What was the error? {:?}\n the path should be: {:?}",
-                            error.to_string(),
-                            option_path.unwrap()
-                        );
-                    }
+            Ok(event) => match event {
+                DebouncedEvent::Create(path) => update(path, inode_map, &synch_tx),
+                DebouncedEvent::Write(path) => update(path, inode_map, &synch_tx),
+                DebouncedEvent::Chmod(path) => update(path, inode_map, &synch_tx),
+                DebouncedEvent::Remove(path) => update(path, inode_map, &synch_tx),
+                DebouncedEvent::Rename(path, _) => update(path, inode_map, &synch_tx),
+                DebouncedEvent::Rescan => {}
+                DebouncedEvent::NoticeWrite(_) => {}
+                DebouncedEvent::NoticeRemove(_) => {}
+                DebouncedEvent::Error(error, option_path) => {
+                    info!(
+                        "What was the error? {:?}\n the path should be: {:?}",
+                        error.to_string(),
+                        option_path.unwrap()
+                    );
                 }
-            }
+            },
             Err(e) => {
                 error!("FATAL: notify mpsc::channel hung up in watch_entry {:?}", e);
                 panic!()
@@ -144,16 +137,40 @@ fn synch_entry(server_addr: &String, synch_rx: mpsc::Receiver<PathBuf>) {
     // --delete-excluded (also delete excluded files)
     // --max-size=SIZE (limit size of transfers)
     // --exclude
+    let mut hostname = String::new();
+    match std::process::Command::new("uname").arg("-n").output() {
+        Err(e) => error!("uname didn't work? {}", e),
+        Ok(output) => {
+            hostname = String::from_utf8(output.stdout.to_ascii_lowercase()).unwrap_or_else(|_| {
+                error!("invalid string from uname -a");
+                String::from("invalid")
+            });
+            info!("{:?}", hostname);
+        }
+    }
 
     // TODO need to read from config
-    if let Ok(mut mqtt) = protocol::MqttClient::new(Some("localhost"), dispatch) {
-        // notify has a watch thread to watch to the files (endless loop)
-        // notify has a synch thread to rsync the changes (endless loop)
+    if let Ok(mut mqtt) = protocol::MqttClient::new(Some(server_addr), dispatch) {
         mqtt.subscribe("sinkd/status");
         // Using Hashset to prevent repeated entries
         let mut events = HashSet::new();
 
         loop {
+            //? STATE MACHINE
+            // 1. file event
+            // 2. query server for status
+            // 3. if not up to date, update
+            // -- update algorithm --
+            // - 1. rsync from server files into .sinkd/ (per directory)
+            // - 2. compare files (stat on modify field?) (use meta data?)
+            // - 3. conflicted files will be marked as file.sinkd
+            // - 4. move everython from .sinkd/ to correct dir
+            // - 5. remove .sinkd/
+            // - 6. make sinkd_num same as server
+            // 4. send mqtt message topic=sinkd/update/client_name payload=dir,dir,dir...
+            // 5. server calls rsync src=client dest=server
+            // 6. server increments sinkd_num
+            // 7. server mqtt publishes topic=sinkd/status payload=sinkd_num
             match synch_rx.try_recv() {
                 Ok(path) => {
                     debug!("received from synch channel");
@@ -163,25 +180,13 @@ fn synch_entry(server_addr: &String, synch_rx: mpsc::Receiver<PathBuf>) {
                     // buffered events
                     if !events.is_empty() {
                         for path in events.drain() {
-                            //? STATE MACHINE 
-                            // 1. file event
-                            // 2. query server for status
-                            // 3. if not up to date, update
-                            // -- update algorithm --
-                            // - 1. rsync from server files into .sinkd/ (per directory)
-                            // - 2. compare files (stat on modify field?) (use meta data?)
-                            // - 3. conflicted files will be marked as file.sinkd
-                            // - 4. move everython from .sinkd/ to correct dir 
-                            // - 5. remove .sinkd/ 
-                            // - 6. make sinkd_num same as server
-                            // 4. send mqtt message topic=sinkd/update/client_name payload=dir,dir,dir...
-                            // 5. server calls rsync src=client dest=server
-                            // 6. server increments sinkd_num
-                            // 7. server mqtt publishes topic=sinkd/status payload=sinkd_num
-                            
-                            mqtt.publish("dude man bro");
-
-                            fire_rsync(server_addr, &path);
+                            let msg = mqtt::Message::new(
+                                format!("sinkd/update/{:?}", hostname),
+                                path.to_str().unwrap(),
+                                mqtt::QOS_0,
+                            );
+                            mqtt.publish(msg);
+                            // fire_rsync(server_addr, &path);
                         }
                     }
                     // TODO: add 'system_interval' to config
