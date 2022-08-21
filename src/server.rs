@@ -3,44 +3,14 @@
 //  _\ \/ -_) __/ |/ / -_) __/
 // /___/\__/_/  |___/\__/_/
 #![allow(unused_imports)]
-
-use crate::shiplog;
+extern crate serde;
+use crate::{shiplog, ipc};
 use paho_mqtt as mqtt;
 use std::{
     process,
     sync::{mpsc, Arc, Mutex},
     thread,
 };
-enum State {
-    SYNCHING,
-    READY,
-}
-
-// `sinkd start` starts up the client daemon
-// `sinkd start -s,--server` will start up the server daemon (maybe check for client daemon?)
-
-// - (pkgr) mkdir /srv/sinkd
-// - (pkgr) chmod 2770 /srv/sinkd (for setgid, not recursive for user permissions to retain)
-// - (pkgr) cd /srv/sinkd/ && umask 5007
-// - (pkgr) create systemd unit file with appropriate flags
-// - (pkgr) enable service
-// - (pkgr) start service >> which calls sinkd::server::start()
-
-// ## Server
-// 1. setup mqtt daemon on this machine
-// 1. mqtt subscribe to `sinkd/update`
-// 1. mqtt publish to `sinkd/status`
-// 1. *listening thread*
-//     - receive packets from clients
-//     - update broadcast to current status
-//     - add request to `synch_queue`
-// 1. *synching thread*
-//     - process `sync_queue`
-//     - sets state to `SYNCHING` when processing request
-//     - once done with all requests set state to `READY`
-// 1. *broadcast thread*
-//     - push out messsages with current status
-//     - interval (every 5 secs) of status
 
 pub fn start(verbosity: u8, clear_logs: bool) {
     if let Err(e) = shiplog::init(clear_logs) {
@@ -87,14 +57,17 @@ fn mqtt_entry(tx: mpsc::Sender<mqtt::Message>, cycle: Arc<Mutex<i32>>) -> ! {
     // TODO: Read from config
     match mqtt::Client::new("tcp://localhost:1883") {
         Err(e) => {
-            error!("FATAL could not create the mqtt server client: {}", e);
+            error!("FATAL: unable to create mqtt server client: {}", e);
             process::exit(2);
         }
         Ok(cli) => {
             // Initialize the consumer before connecting
             let msg_rx = cli.start_consuming();
-            let lwt =
-                mqtt::Message::new("sinkd/lost_conn", "sinkd server client lost connection", 1);
+            let lwt = mqtt::Message::new(
+                "sinkd/lost_conn", 
+                "sinkd server client lost connection", 
+                1
+            );
             let conn_opts = mqtt::ConnectOptionsBuilder::new()
                 .keep_alive_interval(std::time::Duration::from_secs(300)) // 5 mins should be enough
                 .mqtt_version(mqtt::MQTT_VERSION_3_1_1)
@@ -113,10 +86,7 @@ fn mqtt_entry(tx: mpsc::Sender<mqtt::Message>, cycle: Arc<Mutex<i32>>) -> ! {
                             debug!("  w/ client session already present on broker.");
                         } else {
                             if let Err(e) = cli.subscribe("sinkd/update", mqtt::QOS_0) {
-                                error!(
-                                    "server:mqtt_entry >> could not subscribe to sinkd/status {}",
-                                    e
-                                );
+                                error!("unable to subscribe to sinkd/status {}", e);
                             }
                         }
                     }
@@ -149,6 +119,12 @@ fn synch_entry(rx: mpsc::Receiver<mqtt::Message>, cycle: Arc<Mutex<i32>>) -> ! {
             }
             Ok(msg) => {
                 debug!("server:synch_entry >> {}", msg);
+
+                //? RSYNC options to consider
+                // --delete-excluded (also delete excluded files)
+                // --max-size=SIZE (limit size of transfers)
+                // --exclude
+
                 // let rsync_result = process::Command::new("rsync")
                 //     .arg("-atR") // archive, timestamps, relative
                 //     .arg("--delete")

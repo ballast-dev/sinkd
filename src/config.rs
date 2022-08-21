@@ -1,3 +1,4 @@
+use serde::{Serialize, Deserialize};
 // Serialized structures from Configuration
 use std::{
     collections::HashMap,

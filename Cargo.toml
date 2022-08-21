@@ -10,8 +10,8 @@ clap = "3.2.6"
 # crossbeam = "0.8"
 notify = "4.0.17"
 regex = "1.4.5"
-serde = "1.0.125"
-serde_derive = "1.0.125"
+serde = {version = "1.0.125", features = ["derive"]}
+bincode = "1.2.0"
 toml = "0.5.8"
 daemonize = "0.4.1"
 # "std" is to enable set_boxed_logger

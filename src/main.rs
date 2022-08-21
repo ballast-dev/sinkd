@@ -2,8 +2,7 @@ extern crate clap;
 extern crate notify;
 extern crate regex;
 extern crate toml;
-#[macro_use]
-extern crate serde_derive;
+extern crate serde;
 #[macro_use]
 extern crate log;
 extern crate libc;
@@ -11,7 +10,7 @@ extern crate rpassword;
 
 mod client;
 mod config;
-mod protocol;
+mod ipc;
 mod server;
 mod shiplog;
 mod sinkd;

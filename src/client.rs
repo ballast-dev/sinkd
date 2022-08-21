@@ -1,4 +1,4 @@
-use crate::{config, protocol, shiplog};
+use crate::{config, ipc, shiplog};
 use notify::{DebouncedEvent, Watcher};
 use paho_mqtt as mqtt;
 use std::{
@@ -9,12 +9,20 @@ use std::{
     time::{Duration, Instant},
 };
 
-enum ServerType {
-    LOCAL,
-    REMOTE,
+fn get_hostname() -> String {
+    match std::process::Command::new("uname").arg("-n").output() {
+        Err(e) => {
+            error!("uname didn't work? {}", e);
+            String::from("uname-error")
+        },
+        Ok(output) => {
+            String::from_utf8(output.stdout.to_ascii_lowercase()).unwrap_or_else(|_| {
+                error!("invalid string from uname -a");
+                String::from("invalid-name")
+            })
+        }
+    }
 }
-
-static server_type: ServerType = ServerType::LOCAL;
 
 fn dispatch(msg: &Option<mqtt::Message>) {
     if let Some(msg) = msg {
@@ -32,14 +40,32 @@ pub fn start(verbosity: u8, clear_logs: bool) -> bool {
         return false;
     }
 
-    let notify_thread = thread::spawn(move || notify_entry());
+    let (srv_addr, mut inode_map) = config::get();
+    let (notify_tx, notify_rx): (mpsc::Sender<DebouncedEvent>, mpsc::Receiver<DebouncedEvent>) =
+        mpsc::channel();
+    let (synch_tx, synch_rx): (mpsc::Sender<PathBuf>, mpsc::Receiver<PathBuf>) = mpsc::channel();
 
-    if let Err(_) = notify_thread.join() {
+    // keep the watchers alive!
+    let _watchers = get_watchers(&inode_map, notify_tx);
+
+    let watch_thread = thread::spawn(move || {
+        watch_entry(&mut inode_map, notify_rx, synch_tx);
+    });
+
+    let synch_thread = thread::spawn(move || {
+        mqtt_entry(&srv_addr, synch_rx);
+    });
+
+    if let Err(_) = watch_thread.join() {
+        error!("Client watch thread error!");
+        return false;
+    }
+    if let Err(_) = synch_thread.join() {
         error!("Client synch thread error!");
         return false;
     }
 
-    return true;
+    true
 
     // TODO: need packager to setup file with correct permisions
     // let daemon = Daemonize::new()
@@ -57,32 +83,6 @@ pub fn start(verbosity: u8, clear_logs: bool) -> bool {
     // }
 }
 
-fn notify_entry() {
-    let (srv_addr, mut inode_map) = config::get();
-    let (notify_tx, notify_rx): (mpsc::Sender<DebouncedEvent>, mpsc::Receiver<DebouncedEvent>) =
-        mpsc::channel();
-    let (synch_tx, synch_rx): (mpsc::Sender<PathBuf>, mpsc::Receiver<PathBuf>) = mpsc::channel();
-
-    // keep the watchers alive!
-    let _watchers = get_watchers(&inode_map, notify_tx);
-
-    let watch_thread = thread::spawn(move || {
-        watch_entry(&mut inode_map, notify_rx, synch_tx);
-    });
-
-    let synch_thread = thread::spawn(move || {
-        synch_entry(&srv_addr, synch_rx);
-    });
-
-    if let Err(_) = watch_thread.join() {
-        error!("Client watch thread error!");
-        std::process::exit(1);
-    }
-    if let Err(_) = synch_thread.join() {
-        error!("Client synch thread error!");
-        std::process::exit(1);
-    }
-}
 
 fn update(event_path: PathBuf, inode_map: &mut config::InodeMap, synch_tx: &mpsc::Sender<PathBuf>) {
     for (inode_path, inode) in inode_map {
@@ -132,25 +132,11 @@ fn watch_entry(
     }
 }
 
-fn synch_entry(server_addr: &String, synch_rx: mpsc::Receiver<PathBuf>) {
-    //? RSYNC options to consider
-    // --delete-excluded (also delete excluded files)
-    // --max-size=SIZE (limit size of transfers)
-    // --exclude
-    let mut hostname = String::new();
-    match std::process::Command::new("uname").arg("-n").output() {
-        Err(e) => error!("uname didn't work? {}", e),
-        Ok(output) => {
-            hostname = String::from_utf8(output.stdout.to_ascii_lowercase()).unwrap_or_else(|_| {
-                error!("invalid string from uname -a");
-                String::from("invalid")
-            });
-            info!("{:?}", hostname);
-        }
-    }
+fn mqtt_entry(server_addr: &String, synch_rx: mpsc::Receiver<PathBuf>) {
 
+    let hostname = get_hostname();
     // TODO need to read from config
-    if let Ok(mut mqtt) = protocol::MqttClient::new(Some(server_addr), dispatch) {
+    if let Ok(mut mqtt) = ipc::MqttClient::new(Some(server_addr), dispatch) {
         mqtt.subscribe("sinkd/status");
         // Using Hashset to prevent repeated entries
         let mut events = HashSet::new();

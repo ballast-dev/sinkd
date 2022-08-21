@@ -1,18 +1,30 @@
 use paho_mqtt as mqtt;
+use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct MsgUpdate {
-    user: String,
-    path: String,
-    date: String,
-    cycle: u16,
+pub enum Status {
+    Edits, // Needed to show new eidts
+    Sinkd,
+    Cache,  // to move files off to .sinkd_cache/ folders
+    Updating,
+    Behind,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct MsgStatus {
-    date: String,
-    cycle: u16,
+pub struct Payload<'a> {
+    pub hostname: &'a str,
+    pub user: &'a str,
+    pub paths: Vec<&'a str>,
+    pub date: &'a str,
+    pub cycle: u32,
+    pub status: Status
 }
+
+// impl<'a> Payload<'a> {
+//     pub fn from(hostname: &'a str, user: &'a str, paths: Vec<&'a str>, date: &'a str, cycle: u32) -> Payload<'a> {
+//         Payload { hostname, user, paths, date, cycle}
+//     }
+// }
 
 pub struct MqttClient {
     client: mqtt::AsyncClient,
