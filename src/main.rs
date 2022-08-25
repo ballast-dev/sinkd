@@ -1,8 +1,8 @@
 extern crate clap;
 extern crate notify;
 extern crate regex;
-extern crate toml;
 extern crate serde;
+extern crate toml;
 #[macro_use]
 extern crate log;
 extern crate libc;

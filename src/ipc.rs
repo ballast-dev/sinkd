@@ -1,11 +1,12 @@
+use bincode;
 use paho_mqtt as mqtt;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Status {
-    Edits, // Needed to show new eidts
+    Edits, // Needed to show new edits
     Sinkd,
-    Cache,  // to move files off to .sinkd_cache/ folders
+    Cache, // to move files off to .sinkd_cache/ folders
     Updating,
     Behind,
 }
@@ -14,17 +15,36 @@ pub enum Status {
 pub struct Payload<'a> {
     pub hostname: &'a str,
     pub user: &'a str,
-    pub paths: Vec<&'a str>,
+    pub path: &'a str, // one path per packet
     pub date: &'a str,
     pub cycle: u32,
-    pub status: Status
+    pub status: Status,
 }
 
-// impl<'a> Payload<'a> {
-//     pub fn from(hostname: &'a str, user: &'a str, paths: Vec<&'a str>, date: &'a str, cycle: u32) -> Payload<'a> {
-//         Payload { hostname, user, paths, date, cycle}
-//     }
-// }
+pub fn packed<'a>(
+    hostname: &'a str,
+    user: &'a str,
+    path: &'a str,
+    date: &'a str,
+    cycle: u32,
+    status: Status,
+) -> Result<Vec<u8>, ()> {
+    let payload = Payload {
+        hostname,
+        user,
+        path,
+        date,
+        cycle,
+        status,
+    };
+    match bincode::serialize(&payload) {
+        Err(e) => {
+            error!("FATAL, bincode::serialize >> {}", e);
+            Err(())
+        }
+        Ok(stream) => return Ok(stream),
+    }
+}
 
 pub struct MqttClient {
     client: mqtt::AsyncClient,

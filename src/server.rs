@@ -4,9 +4,10 @@
 // /___/\__/_/  |___/\__/_/
 #![allow(unused_imports)]
 extern crate serde;
-use crate::{shiplog, ipc};
+use crate::{ipc, shiplog};
 use paho_mqtt as mqtt;
 use std::{
+    path::PathBuf,
     process,
     sync::{mpsc, Arc, Mutex},
     thread,
@@ -63,11 +64,8 @@ fn mqtt_entry(tx: mpsc::Sender<mqtt::Message>, cycle: Arc<Mutex<i32>>) -> ! {
         Ok(cli) => {
             // Initialize the consumer before connecting
             let msg_rx = cli.start_consuming();
-            let lwt = mqtt::Message::new(
-                "sinkd/lost_conn", 
-                "sinkd server client lost connection", 
-                1
-            );
+            let lwt =
+                mqtt::Message::new("sinkd/lost_conn", "sinkd server client lost connection", 1);
             let conn_opts = mqtt::ConnectOptionsBuilder::new()
                 .keep_alive_interval(std::time::Duration::from_secs(300)) // 5 mins should be enough
                 .mqtt_version(mqtt::MQTT_VERSION_3_1_1)
@@ -156,5 +154,41 @@ fn synch_entry(rx: mpsc::Receiver<mqtt::Message>, cycle: Arc<Mutex<i32>>) -> ! {
 fn publish<'a>(mqtt_client: &mqtt::Client, msg: &'a str) {
     if let Err(e) = mqtt_client.publish(mqtt::Message::new("sinkd/status", msg, mqtt::QOS_0)) {
         error!("server:publish >> {}", e);
+    }
+}
+
+// TODO: move to it's own file
+fn fire_rsync(hostname: &String, src_path: &PathBuf) {
+    // debug!("username: {}, hostname: {}, path: {}", username, hostname, path.display());
+
+    // Agnostic pathing allows sinkd not to care about user folder structure
+    let dest_path: String;
+    if hostname.starts_with('/') {
+        // TODO: packager should set up folder '/srv/sinkd'
+        dest_path = String::from("/srv/sinkd/");
+    } else {
+        // user permissions should persist regardless
+        dest_path = format!("sinkd@{}:/srv/sinkd/", &hostname);
+    }
+
+    let rsync_result = std::process::Command::new("rsync")
+        .arg("-atR") // archive, timestamps, relative
+        .arg("--delete")
+        // TODO: to add --exclude [list of folders] from config
+        .arg(&src_path)
+        .arg(&dest_path)
+        .spawn();
+
+    match rsync_result {
+        Err(x) => {
+            error!("{:?}", x);
+        }
+        Ok(_) => {
+            info!(
+                "DID IT>> Called rsync src:{}  ->  dest:{}",
+                &src_path.display(),
+                &dest_path
+            );
+        }
     }
 }

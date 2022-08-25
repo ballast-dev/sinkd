@@ -1,4 +1,4 @@
-use crate::{config, ipc, shiplog};
+use crate::{config, ipc, shiplog, utils};
 use notify::{DebouncedEvent, Watcher};
 use paho_mqtt as mqtt;
 use std::{
@@ -9,18 +9,31 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// Both macOS and Linux have the uname command
 fn get_hostname() -> String {
     match std::process::Command::new("uname").arg("-n").output() {
         Err(e) => {
             error!("uname didn't work? {}", e);
             String::from("uname-error")
-        },
-        Ok(output) => {
-            String::from_utf8(output.stdout.to_ascii_lowercase()).unwrap_or_else(|_| {
-                error!("invalid string from uname -a");
-                String::from("invalid-name")
-            })
         }
+        Ok(output) => String::from_utf8(output.stdout.to_ascii_lowercase()).unwrap_or_else(|_| {
+            error!("invalid string from uname -a");
+            String::from("invalid-hostname")
+        }),
+    }
+}
+
+/// Both macOS and Linux have the whoami command
+fn get_username() -> String {
+    match std::process::Command::new("whoami").output() {
+        Err(e) => {
+            error!("whoami didn't work? {}", e);
+            String::from("whoami error")
+        }
+        Ok(output) => String::from_utf8(output.stdout.to_ascii_lowercase()).unwrap_or_else(|_| {
+            error!("invalid string from whoami");
+            String::from("invalid-username")
+        }),
     }
 }
 
@@ -83,7 +96,6 @@ pub fn start(verbosity: u8, clear_logs: bool) -> bool {
     // }
 }
 
-
 fn update(event_path: PathBuf, inode_map: &mut config::InodeMap, synch_tx: &mpsc::Sender<PathBuf>) {
     for (inode_path, inode) in inode_map {
         if event_path.starts_with(inode_path) {
@@ -133,8 +145,8 @@ fn watch_entry(
 }
 
 fn mqtt_entry(server_addr: &String, synch_rx: mpsc::Receiver<PathBuf>) {
-
     let hostname = get_hostname();
+    let username = get_username();
     // TODO need to read from config
     if let Ok(mut mqtt) = ipc::MqttClient::new(Some(server_addr), dispatch) {
         mqtt.subscribe("sinkd/status");
@@ -166,13 +178,20 @@ fn mqtt_entry(server_addr: &String, synch_rx: mpsc::Receiver<PathBuf>) {
                     // buffered events
                     if !events.is_empty() {
                         for path in events.drain() {
-                            let msg = mqtt::Message::new(
-                                format!("sinkd/update/{:?}", hostname),
-                                path.to_str().unwrap(),
-                                mqtt::QOS_0,
-                            );
-                            mqtt.publish(msg);
-                            // fire_rsync(server_addr, &path);
+                            if let Ok(packet) = ipc::packed(
+                                &hostname,
+                                &username,
+                                &path.to_str().unwrap(),
+                                &utils::get_timestamp("%Y%m%d"),
+                                1,
+                                ipc::Status::Edits,
+                            ) {
+                                mqtt.publish(mqtt::Message::new(
+                                    "sinkd/client",
+                                    packet,
+                                    mqtt::QOS_0,
+                                ));
+                            }
                         }
                     }
                     // TODO: add 'system_interval' to config
@@ -209,40 +228,4 @@ fn get_watchers(
         }
     }
     return watchers;
-}
-
-// TODO: move to it's own file
-fn fire_rsync(hostname: &String, src_path: &PathBuf) {
-    // debug!("username: {}, hostname: {}, path: {}", username, hostname, path.display());
-
-    // Agnostic pathing allows sinkd not to care about user folder structure
-    let dest_path: String;
-    if hostname.starts_with('/') {
-        // TODO: packager should set up folder '/srv/sinkd'
-        dest_path = String::from("/srv/sinkd/");
-    } else {
-        // user permissions should persist regardless
-        dest_path = format!("sinkd@{}:/srv/sinkd/", &hostname);
-    }
-
-    let rsync_result = std::process::Command::new("rsync")
-        .arg("-atR") // archive, timestamps, relative
-        .arg("--delete")
-        // TODO: to add --exclude [list of folders] from config
-        .arg(&src_path)
-        .arg(&dest_path)
-        .spawn();
-
-    match rsync_result {
-        Err(x) => {
-            error!("{:?}", x);
-        }
-        Ok(_) => {
-            info!(
-                "DID IT>> Called rsync src:{}  ->  dest:{}",
-                &src_path.display(),
-                &dest_path
-            );
-        }
-    }
 }

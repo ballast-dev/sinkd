@@ -1,4 +1,4 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 // Serialized structures from Configuration
 use std::{
     collections::HashMap,
@@ -150,8 +150,7 @@ impl ConfigParser {
             Ok(output) => match toml::from_str(&output) {
                 Err(error) => {
                     let err_str = format!("couldn't parse '{}' {}", &config_file, error);
-                    let invalid_syntax = ParseError::InvalidSyntax(err_str);
-                    return Err(invalid_syntax);
+                    return Err(ParseError::InvalidSyntax(err_str));
                 }
                 Ok(toml_parsed) => {
                     debug!("user config parsed????");
