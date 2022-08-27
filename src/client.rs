@@ -148,60 +148,65 @@ fn mqtt_entry(server_addr: &String, synch_rx: mpsc::Receiver<PathBuf>) {
     let hostname = get_hostname();
     let username = get_username();
     // TODO need to read from config
-    if let Ok(mut mqtt) = ipc::MqttClient::new(Some(server_addr), dispatch) {
-        mqtt.subscribe("sinkd/status");
-        // Using Hashset to prevent repeated entries
-        let mut events = HashSet::new();
+    match ipc::MqttClient::new(Some(server_addr), dispatch) {
+        Ok(mut mqtt) => {
+            mqtt.subscribe("sinkd/server");
+            // Using Hashset to prevent repeated entries
+            let mut events = HashSet::new();
 
-        loop {
-            //? STATE MACHINE
-            // 1. file event
-            // 2. query server for status
-            // 3. if not up to date, update
-            // -- update algorithm --
-            // - 1. rsync from server files into .sinkd/ (per directory)
-            // - 2. compare files (stat on modify field?) (use meta data?)
-            // - 3. conflicted files will be marked as file.sinkd
-            // - 4. move everython from .sinkd/ to correct dir
-            // - 5. remove .sinkd/
-            // - 6. make sinkd_num same as server
-            // 4. send mqtt message topic=sinkd/update/client_name payload=dir,dir,dir...
-            // 5. server calls rsync src=client dest=server
-            // 6. server increments sinkd_num
-            // 7. server mqtt publishes topic=sinkd/status payload=sinkd_num
-            match synch_rx.try_recv() {
-                Ok(path) => {
-                    debug!("received from synch channel");
-                    events.insert(path);
-                }
-                Err(_) => {
-                    // buffered events
-                    if !events.is_empty() {
-                        for path in events.drain() {
-                            if let Ok(packet) = ipc::packed(
-                                &hostname,
-                                &username,
-                                &path.to_str().unwrap(),
-                                &utils::get_timestamp("%Y%m%d"),
-                                1,
-                                ipc::Status::Edits,
-                            ) {
-                                mqtt.publish(mqtt::Message::new(
-                                    "sinkd/client",
-                                    packet,
-                                    mqtt::QOS_0,
-                                ));
+            loop {
+                //? STATE MACHINE
+                // 1. file event
+                // 2. query server for status
+                // 3. if not up to date, update
+                // -- update algorithm --
+                // - 1. rsync from server files into .sinkd/ (per directory)
+                // - 2. compare files (stat on modify field?) (use meta data?)
+                // - 3. conflicted files will be marked as file.sinkd
+                // - 4. move everython from .sinkd/ to correct dir
+                // - 5. remove .sinkd/
+                // - 6. make sinkd_num same as server
+                // 4. send mqtt message topic=sinkd/update/client_name payload=dir,dir,dir...
+                // 5. server calls rsync src=client dest=server
+                // 6. server increments sinkd_num
+                // 7. server mqtt publishes topic=sinkd/status payload=sinkd_num
+                match synch_rx.try_recv() {
+                    Ok(path) => {
+                        debug!("received from synch channel");
+                        events.insert(path);
+                    }
+                    Err(_) => {
+                        // buffered events
+                        if !events.is_empty() {
+                            for path in events.drain() {
+                                if let Ok(packet) = ipc::packed(
+                                    &hostname,
+                                    &username,
+                                    &path.to_str().unwrap(),
+                                    &utils::get_timestamp("%Y%m%d"),
+                                    1,
+                                    ipc::Status::Edits,
+                                ) {
+                                    mqtt.publish(mqtt::Message::new(
+                                        "sinkd/client",
+                                        packet,
+                                        mqtt::QOS_0,
+                                    ));
+                                }
                             }
                         }
+                        // TODO: add 'system_interval' to config
+                        std::thread::sleep(Duration::from_secs(1));
+                        debug!("synch loop...")
                     }
-                    // TODO: add 'system_interval' to config
-                    std::thread::sleep(Duration::from_secs(1));
-                    debug!("synch loop...")
                 }
             }
         }
-    } else {
-        error!("FATAL: unable to create MQTT client");
+        Err(e) => {
+            error!("FATAL: unable to create MQTT client, {}", e);
+            // TODO: need to handle closing of multiple threads and print out to user fatal errors
+            // TODO: on stderr 
+        }
     }
 }
 

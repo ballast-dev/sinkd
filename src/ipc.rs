@@ -61,6 +61,11 @@ impl MqttClient {
                 fq_host = String::from("tcp://localhost:1883");
             }
             Some(_str) => {
+                if _str.starts_with("/") {
+                    return Err(String::from(
+                        "did you intend on localhost?, check '/etc/sinkd.conf'",
+                    ));
+                }
                 fq_host = format!("tcp://{}:1883", _str);
             }
             None => {

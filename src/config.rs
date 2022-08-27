@@ -153,7 +153,6 @@ impl ConfigParser {
                     return Err(ParseError::InvalidSyntax(err_str));
                 }
                 Ok(toml_parsed) => {
-                    debug!("user config parsed????");
                     //? toml_parsed is converted into Rust via serde lib
                     let user_config: UserParser = toml_parsed;
                     return Ok(user_config);

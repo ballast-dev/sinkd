@@ -19,7 +19,7 @@ def remove_files(tlds: list):
 
 def create_files(folder: str, filenum: int, delay: float = 0.01):
 
-    os.mkdir(folder)
+    os.makedirs(folder)
     for i in range(filenum):
         print(f"touching file{i} with delay:{delay}")
         time.sleep(delay)
