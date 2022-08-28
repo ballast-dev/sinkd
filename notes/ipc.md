@@ -67,12 +67,12 @@ __out of sinkd__
 > highest cycle number is considered more up to date. So for example if A has a cycle of 1 and B has 
 > a cycle of 2 then B synchronizes and A updates to B's edits. 
 
-
 |Step|Client|Server|
 |:-|:-:|:-:|
 |1|file event||
 |2|filter paths for redundancy||
 |3|send Status::Edits|check cycle number|
+<<<<<<< HEAD
 |4|wait for server to synchronize|ignore request, send Status:Behind|
 |?|what to do about changes while waiting| somehow link up to cycle number|
 |5|once finished send status:Sinkd|all is good|

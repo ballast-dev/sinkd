@@ -4,6 +4,7 @@ use std::ffi::CString;
 use std::fmt;
 use std::path::PathBuf;
 use std::process;
+use std::sync::Mutex;
 
 // TODO: need to wrap in os specific way
 pub const PID_PATH: &str = "/run/sinkd.pid";
@@ -378,4 +379,24 @@ pub fn setup_keys(verbosity: u8, host: &str) {
     //         );
     //     }
     // }
+}
+
+pub fn fatal(mutex: &Mutex<bool>) {
+    match mutex.lock() {
+        Ok(mut cond) => *cond = true,
+        Err(e) => {
+            error!("FATAL couldn't unlock mutex aborting: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+pub fn exited(mutex: &Mutex<bool>) -> bool {
+    match mutex.lock() {
+        Ok(cond) => *cond,
+        Err(e) => {
+            error!("FATAL couldn't unlock mutex aborting: {}", e);
+            true
+        }
+    }
 }

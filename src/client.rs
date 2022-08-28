@@ -4,7 +4,7 @@ use paho_mqtt as mqtt;
 use std::{
     collections::HashSet,
     path::PathBuf,
-    sync::mpsc,
+    sync::{mpsc, Arc, Mutex},
     thread,
     time::{Duration, Instant},
 };
@@ -58,15 +58,18 @@ pub fn start(verbosity: u8, clear_logs: bool) -> bool {
         mpsc::channel();
     let (synch_tx, synch_rx): (mpsc::Sender<PathBuf>, mpsc::Receiver<PathBuf>) = mpsc::channel();
 
+    let exit_cond = Arc::new(Mutex::new(false));
+    let exit_cond2 = Arc::clone(&exit_cond);
+
     // keep the watchers alive!
     let _watchers = get_watchers(&inode_map, notify_tx);
 
     let watch_thread = thread::spawn(move || {
-        watch_entry(&mut inode_map, notify_rx, synch_tx);
+        watch_entry(&mut inode_map, notify_rx, synch_tx, &*exit_cond);
     });
 
     let synch_thread = thread::spawn(move || {
-        mqtt_entry(&srv_addr, synch_rx);
+        mqtt_entry(&srv_addr, synch_rx, &*exit_cond2);
     });
 
     if let Err(_) = watch_thread.join() {
@@ -115,8 +118,13 @@ fn watch_entry(
     inode_map: &mut config::InodeMap,
     notify_rx: mpsc::Receiver<DebouncedEvent>,
     synch_tx: mpsc::Sender<PathBuf>,
+    exit_cond: &Mutex<bool>,
 ) {
     loop {
+        if utils::exited(&exit_cond) {
+            break;
+        }
+
         match notify_rx.recv() {
             // blocking call
             Ok(event) => match event {
@@ -138,13 +146,13 @@ fn watch_entry(
             },
             Err(e) => {
                 error!("FATAL: notify mpsc::channel hung up in watch_entry {:?}", e);
-                panic!()
+                utils::fatal(&exit_cond);
             }
         }
     }
 }
 
-fn mqtt_entry(server_addr: &String, synch_rx: mpsc::Receiver<PathBuf>) {
+fn mqtt_entry(server_addr: &String, synch_rx: mpsc::Receiver<PathBuf>, exit_cond: &Mutex<bool>) {
     let hostname = get_hostname();
     let username = get_username();
     // TODO need to read from config
@@ -170,6 +178,11 @@ fn mqtt_entry(server_addr: &String, synch_rx: mpsc::Receiver<PathBuf>) {
                 // 5. server calls rsync src=client dest=server
                 // 6. server increments sinkd_num
                 // 7. server mqtt publishes topic=sinkd/status payload=sinkd_num
+
+                if utils::exited(&exit_cond) {
+                    break;
+                }
+    
                 match synch_rx.try_recv() {
                     Ok(path) => {
                         debug!("received from synch channel");
@@ -204,10 +217,8 @@ fn mqtt_entry(server_addr: &String, synch_rx: mpsc::Receiver<PathBuf>) {
         }
         Err(e) => {
             error!("FATAL: unable to create MQTT client, {}", e);
-            // TODO: need to handle closing of multiple threads and print out to user fatal errors
-            // TODO: on stderr 
+            utils::fatal(&exit_cond);
         }
-    }
 }
 
 fn get_watchers(
