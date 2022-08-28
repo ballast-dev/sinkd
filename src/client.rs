@@ -182,7 +182,7 @@ fn mqtt_entry(server_addr: &String, synch_rx: mpsc::Receiver<PathBuf>, exit_cond
                 if utils::exited(&exit_cond) {
                     break;
                 }
-    
+
                 match synch_rx.try_recv() {
                     Ok(path) => {
                         debug!("received from synch channel");
@@ -219,8 +219,8 @@ fn mqtt_entry(server_addr: &String, synch_rx: mpsc::Receiver<PathBuf>, exit_cond
             error!("FATAL: unable to create MQTT client, {}", e);
             utils::fatal(&exit_cond);
         }
+    }
 }
-
 fn get_watchers(
     inode_map: &config::InodeMap,
     tx: mpsc::Sender<notify::DebouncedEvent>,
