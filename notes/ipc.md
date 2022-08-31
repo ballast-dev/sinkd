@@ -63,20 +63,19 @@ ___
 ## Order of operations
 __out of sinkd__ 
 
-> the thought is "last write wins" which means if client A and B have edits and different cycle numbers
-> highest cycle number is considered more up to date. So for example if A has a cycle of 1 and B has 
-> a cycle of 2 then B synchronizes and A updates to B's edits. 
-
 |Step|Client|Server|
 |:-|:-:|:-:|
 |1|file event||
 |2|filter paths for redundancy||
 |3|send Status::Edits|check cycle number|
-<<<<<<< HEAD
 |4|wait for server to synchronize|ignore request, send Status:Behind|
 |?|what to do about changes while waiting| somehow link up to cycle number|
+|5|move out-of-date stuff into `/var/sinkd_old/<abs_paths>`||
+|6|send ipc::Packet status=CACHED|call rsync|
+|7|notify user in logs, or notification|| 
 |5|once finished send status:Sinkd|all is good|
 
+TODO: somehow plug into notification of OS
 __sinkd__ 
 
 |Step|Client|Server|
@@ -114,3 +113,12 @@ __sinkd__
 
 ### roadmap
 1. `sinkd status` print out if synchronizing
+
+
+# Tobin's Comments
+---
+I think that the idea of 'last write wins' needs to be configurable. 
+1. last write wins
+2. Always ask when conflict occurs
+    - e.g. Host (`hostname`) has made an edit to file (`filepath`). Would you like to accept your changes or the changes from `hostname`
+3. auto-resolve with a list of hashes (server states)
