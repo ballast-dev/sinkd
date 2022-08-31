@@ -17,7 +17,7 @@ mod sinkd;
 mod test;
 mod utils;
 
-use clap::*;
+use clap::{*, parser::ValuesRef};
 
 pub fn build_sinkd() -> App<'static> {
     App::new("sinkd")
@@ -94,6 +94,10 @@ pub fn build_sinkd() -> App<'static> {
             .multiple_occurrences(true)
             .help("verbose output")
         )
+        .arg(Arg::with_name("reconfigure")
+            .long("reconfigure")
+            .help("verbose output")
+        )
 }
 
 #[allow(dead_code)]
@@ -111,6 +115,15 @@ fn main() {
         _ => (),
     }
 
+    match matches.occurrences_of("reconfigure") {
+        0 => (),
+        _ => {
+            // sinkd::reparse();
+            println!("Reloaded configuration");
+            return;
+        }
+    }
+
     match matches.subcommand() {
         Some(("add", submatches)) => {
             for path in submatches.values_of("PATH").unwrap() {
@@ -122,11 +135,15 @@ fn main() {
             }
         }
         Some(("ls", submatches)) => {
-            sinkd::list(
-                &submatches
-                    .values_of_lossy("PATHS")
-                    .unwrap_or_else(|| vec![]),
-            );
+            if !submatches.args_present() {
+                sinkd::list(None);
+            } else {
+                let vals: Vec<&str> = submatches.get_many::<String>("PATHS")
+                    .unwrap()
+                    .map(|s| s.as_str())
+                    .collect();
+                sinkd::list(Some(&vals))
+            }
         }
         Some(("rm", _)) => {
             sinkd::remove();
@@ -146,6 +163,8 @@ fn main() {
         }
         Some(("restart", _)) => sinkd::restart(),
         Some(("log", _)) => sinkd::log(),
-        _ => {}
+        _ => {
+            println!("TODO: print help");
+        }
     }
 }

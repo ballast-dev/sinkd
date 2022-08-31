@@ -23,12 +23,19 @@ pub fn add(file: &str) -> bool {
     return true; // able to watch directory
 }
 
-pub fn list(paths: &Vec<String>) {
+pub fn list<'a>(paths: Option<&Vec<&'a str>>) {
     //TODO need to list system shares
-    for path in paths {
-        println!("path: {}", path);
+    match paths {
+        Some(paths) => {
+            for path in paths {
+                println!("path: {}", path);
+            }
+            let user = env!("USER");
+        },
+        None => {
+            println!("no paths were given!")
+        }
     }
-    let user = env!("USER");
     // match config::ConfigParser::get_user_config(user) {
     //     Ok(usr_cfg) => {
     //         for anchor in &usr_cfg.anchors {

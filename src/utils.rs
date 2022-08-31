@@ -382,7 +382,7 @@ pub fn setup_keys(verbosity: u8, host: &str) {
 }
 
 /// Notify the sibling thread that a fatal condition has occured
-/// Log error upon lock failure and exit immediately 
+/// Log error upon lock failure and exit immediately
 pub fn fatal(mutex: &Mutex<bool>) {
     match mutex.lock() {
         Ok(mut cond) => *cond = true,
