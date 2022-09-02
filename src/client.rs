@@ -9,6 +9,78 @@ use std::{
     time::{Duration, Instant},
 };
 
+
+// fn create_mqtt_client(host: &str) -> mqtt::Client {
+//     // Create the client. Use an ID for a persistent session.
+//     // A real system should try harder to use a unique ID.
+//     // let create_opts = mqtt::CreateOptionsBuilder::new()
+//     //     .server_uri(host)
+//     //     .client_id("rust_sync_consumer")
+//     //     .finalize();
+
+//     let cli = mqtt::Client::new(host).unwrap_or_else(|e| {
+//         println!("Error creating the client: {:?}", e);
+//         process::exit(1);
+//     });
+
+//     // Initialize the consumer before connecting
+//     let rx = cli.start_consuming();
+
+//     // Define the set of options for the connection
+//     let lwt = mqtt::MessageBuilder::new()
+//         .topic("test")
+//         .payload("Sync consumer lost connection")
+//         .finalize();
+
+//     let conn_opts = mqtt::ConnectOptionsBuilder::new()
+//         .keep_alive_interval(Duration::from_secs(20))
+//         .clean_session(false)
+//         .will_message(lwt)
+//         .finalize();
+
+//     let subscriptions = ["test", "hello"];
+//     let qos = [1, 1];
+
+//     // Make the connection to the broker
+//     println!("Connecting to the MQTT broker...");
+//     match cli.connect(conn_opts) {
+//         Ok(rsp) => {
+//             if let Some(conn_rsp) = rsp.connect_response() {
+//                 println!(
+//                     "Connected to: '{}' with MQTT version {}",
+//                     conn_rsp.server_uri, conn_rsp.mqtt_version
+//                 );
+//                 if conn_rsp.session_present {
+//                     println!("  w/ client session already present on broker.");
+//                 }
+//                 else {
+//                     // Register subscriptions on the server
+//                     println!("Subscribing to topics with requested QoS: {:?}...", qos);
+
+//                     cli.subscribe_many(&subscriptions, &qos)
+//                         .and_then(|rsp| {
+//                             rsp.subscribe_many_response()
+//                                 .ok_or(mqtt::Error::General("Bad response"))
+//                         })
+//                         .and_then(|vqos| {
+//                             println!("QoS granted: {:?}", vqos);
+//                             Ok(())
+//                         })
+//                         .unwrap_or_else(|err| {
+//                             println!("Error subscribing to topics: {:?}", err);
+//                             cli.disconnect(None).unwrap();
+//                             process::exit(1);
+//                         });
+//                 }
+//             }
+//         }
+//         Err(e) => {
+//             println!("Error connecting to the broker: {:?}", e);
+//             process::exit(1);
+//         }
+//     }
+// }
+
 /// Both macOS and Linux have the uname command
 fn get_hostname() -> String {
     match std::process::Command::new("uname").arg("-n").output() {
@@ -47,13 +119,10 @@ fn dispatch(msg: &Option<mqtt::Message>) {
 }
 
 #[warn(unused_features)]
-pub fn start(verbosity: u8, clear_logs: bool) -> bool {
-    if let Err(e) = shiplog::init(clear_logs) {
-        eprintln!("{}", e);
-        return false;
-    }
+pub fn start(verbosity: u8, clear_logs: bool) -> Result<(), String> {
+    shiplog::init(clear_logs)?;
+    let (srv_addr, mut inode_map) = config::get()?;
 
-    let (srv_addr, mut inode_map) = config::get();
     let (notify_tx, notify_rx): (mpsc::Sender<DebouncedEvent>, mpsc::Receiver<DebouncedEvent>) =
         mpsc::channel();
     let (synch_tx, synch_rx): (mpsc::Sender<PathBuf>, mpsc::Receiver<PathBuf>) = mpsc::channel();
@@ -72,16 +141,14 @@ pub fn start(verbosity: u8, clear_logs: bool) -> bool {
         mqtt_entry(&srv_addr, synch_rx, &*exit_cond2);
     });
 
-    if let Err(_) = watch_thread.join() {
-        error!("Client watch thread error!");
-        return false;
+    if let Err(error) = watch_thread.join() {
+        return Err(format!("Client watch thread error! {:?}", error));
     }
-    if let Err(_) = synch_thread.join() {
-        error!("Client synch thread error!");
-        return false;
+    if let Err(error) = synch_thread.join() {
+        return Err(format!("Client synch thread error! {:?}", error));
     }
 
-    true
+    Ok(())
 
     // TODO: need packager to setup file with correct permisions
     // let daemon = Daemonize::new()
@@ -156,6 +223,10 @@ fn mqtt_entry(server_addr: &String, synch_rx: mpsc::Receiver<PathBuf>, exit_cond
     let hostname = get_hostname();
     let username = get_username();
     // TODO need to read from config
+    let mut status = Arc::new(Mutex::new(ipc::Status::Sinkd));
+
+
+
     match ipc::MqttClient::new(Some(server_addr), dispatch) {
         Ok(mut mqtt) => {
             mqtt.subscribe("sinkd/server");
@@ -182,6 +253,8 @@ fn mqtt_entry(server_addr: &String, synch_rx: mpsc::Receiver<PathBuf>, exit_cond
                 if utils::exited(&exit_cond) {
                     break;
                 }
+
+
 
                 match synch_rx.try_recv() {
                     Ok(path) => {

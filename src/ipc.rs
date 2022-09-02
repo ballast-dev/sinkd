@@ -1,8 +1,10 @@
 use bincode;
 use paho_mqtt as mqtt;
 use serde::{Deserialize, Serialize};
+use crate::{ipc};
+use std::sync::Mutex;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(PartialEq, Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum Status {
     Edits, // Needed to show new edits
     Sinkd,

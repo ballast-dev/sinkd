@@ -1,10 +1,11 @@
 // Common Utilities
 use libc::{c_char, c_uint};
 use std::ffi::CString;
-use std::fmt;
 use std::path::PathBuf;
 use std::process;
 use std::sync::Mutex;
+
+use crate::fancy;
 
 // TODO: need to wrap in os specific way
 pub const PID_PATH: &str = "/run/sinkd.pid";
@@ -36,7 +37,7 @@ pub fn have_permissions() -> bool {
 
 pub fn create_pid_file() -> Result<(), String> {
     if !have_permissions() {
-        return Err(String::from("Need to be root"));
+        return Err(String::from("need to be root"));
     }
     let pid_file = PathBuf::from(PID_PATH);
     if !pid_file.exists() {
@@ -135,90 +136,6 @@ pub fn set_pid(pid: u16) -> Result<(), String> {
     }
 }
 
-//--------------------
-// C O L O R S
-//--------------------
-#[allow(non_camel_case_types)]
-#[allow(dead_code)]
-pub enum Colors {
-    // Foreground
-    BLACK = 30,
-    RED = 31,
-    GREEN = 32,
-    YELLOW = 33,
-    BLUE = 34,
-    PURPLE = 35,
-    CYAN = 36,
-    WHITE = 37,
-    BRIGHT_BLUE = 94,
-    BRIGHT_PURPLE = 95,
-    // Background
-    BgBLACK = 40,
-    BgRED = 41,
-    BgGREEN = 42,
-    BgYELLOW = 43,
-    BgBLUE = 44,
-    BgPURPLE = 45,
-    BgCYAN = 46,
-    BgWHITE = 47,
-}
-
-impl fmt::Display for Colors {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Colors::BLACK => write!(f, "30"),
-            Colors::RED => write!(f, "31"),
-            Colors::GREEN => write!(f, "32"),
-            Colors::YELLOW => write!(f, "33"),
-            Colors::BLUE => write!(f, "34"),
-            Colors::PURPLE => write!(f, "35"),
-            Colors::CYAN => write!(f, "36"),
-            Colors::WHITE => write!(f, "37"),
-            Colors::BRIGHT_BLUE => write!(f, "94"),
-            Colors::BRIGHT_PURPLE => write!(f, "95"),
-            Colors::BgBLACK => write!(f, "40"),
-            Colors::BgRED => write!(f, "41"),
-            Colors::BgGREEN => write!(f, "42"),
-            Colors::BgYELLOW => write!(f, "43"),
-            Colors::BgBLUE => write!(f, "44"),
-            Colors::BgPURPLE => write!(f, "45"),
-            Colors::BgCYAN => write!(f, "46"),
-            Colors::BgWHITE => write!(f, "47"),
-        }
-    }
-}
-
-#[allow(dead_code)]
-pub enum Attrs {
-    // # Attributes
-    NORMAL = 0,
-    BOLD = 1,
-    UNDERLINE = 4,
-    INVERSE = 7, // foreground becomes background (vice-versa)
-}
-
-impl fmt::Display for Attrs {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Attrs::NORMAL => write!(f, "0"),
-            Attrs::BOLD => write!(f, "1"),
-            Attrs::UNDERLINE => write!(f, "4"),
-            Attrs::INVERSE => write!(f, "7"),
-        }
-    }
-}
-
-pub fn print_fancy(arg: &str, attr: Attrs, color: Colors) {
-    print!("{}", format!("\u{1b}[{};{}m{}\u{1b}[0m", attr, color, arg));
-}
-
-pub fn print_fancyln(arg: &str, attr: Attrs, color: Colors) {
-    println!("{}", format!("\u{1b}[{};{}m{}\u{1b}[0m", attr, color, arg));
-}
-
-pub fn format_fancy(arg: &str, attr: Attrs, color: Colors) -> String {
-    format!("\u{1b}[{};{}m{}\u{1b}[0m", attr, color, arg)
-}
 
 fn gen_keys() -> bool {
     let shell = process::Command::new("sh")
@@ -338,12 +255,12 @@ pub fn setup_server(verbosity: u8, host: &str) {
 
 pub fn setup_keys(verbosity: u8, host: &str) {
     if !gen_keys() {
-        print_fancyln("Unable to generate keys", Attrs::NORMAL, Colors::RED);
+        fancy::print_fancyln("Unable to generate keys", fancy::Attrs::NORMAL, fancy::Colors::RED);
         return;
     }
 
     if copy_keys_to_remote(host) {
-        print_fancyln("finished setup", Attrs::NORMAL, Colors::GREEN)
+        fancy::print_fancyln("finished setup", fancy::Attrs::NORMAL, fancy::Colors::GREEN)
     }
 
     // let mut du_output_child = Command::new("du")
@@ -393,6 +310,14 @@ pub fn fatal(mutex: &Mutex<bool>) {
     }
 }
 
+/// Based on Rust manual it is better practice to exit from main.
+/// Firing up an Error all the way back to main is preferred to
+/// clean up all heap and stack allocated memory.
+pub fn abort<'a>(report: &'a str) -> Result<(), ()> {
+    error!("{}", report);
+    Err(())
+}
+
 /// Return status of shared mutex amoung threads
 /// if unable to lock then return true which signifies program has exited
 pub fn exited(mutex: &Mutex<bool>) -> bool {
@@ -404,3 +329,12 @@ pub fn exited(mutex: &Mutex<bool>) -> bool {
         }
     }
 }
+
+// use home_dir which should work on the *nixes
+// if let Some(home) = env::home_dir() {
+//     use crate::utils::{Attrs::*, Colors::*};
+//     print_fancyln(format!("HOME{} ==>> print off environment", home.display()).as_str(), BOLD, GREEN);
+//     for (key, value) in env::vars_os() {
+//         println!("{:?}: {:?}", key, value);
+//     }
+// }

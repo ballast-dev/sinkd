@@ -7,6 +7,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+use crate::utils;
+
 // these are serially parsable
 #[derive(Debug, Serialize, Deserialize)]
 struct Anchor {
@@ -42,20 +44,19 @@ struct UserParser {
 enum ParseError {
     FileNotFound,
     InvalidSyntax(String),
-    ReadOnly,
     NoUserFound,
 }
 
-impl std::fmt::Display for ParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match &*self {
-            ParseError::FileNotFound => write!(f, "file not found"),
-            ParseError::InvalidSyntax(err) => write!(f, "invalid syntax {}", err),
-            ParseError::ReadOnly => write!(f, "readonly"),
-            ParseError::NoUserFound => write!(f, "no user found"),
-        }
-    }
-}
+// impl std::fmt::Display for ParseError {
+//     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+//         match &*self {
+//             ParseError::FileNotFound => write!(f, "file not found"),
+//             ParseError::InvalidSyntax(err) => write!(f, "invalid syntax {}", err),
+//             ParseError::ReadOnly => write!(f, "readonly"),
+//             ParseError::NoUserFound => write!(f, "no user found"),
+//         }
+//     }
+// }
 
 struct ConfigParser {
     sys: SysParser,
@@ -72,35 +73,39 @@ impl ConfigParser {
         }
     }
 
-    //? packager will take care of loading files
-    fn load_configs(&mut self) -> bool {
+    /// If just system configs are used that is enough.
+    /// The storage of files will be on a group name basis.
+    /// The name shall be config driven? Maybe a temp file to 
+    /// store the hash of this sinkd group...
+    fn load_configs(&mut self) -> Result<(), String> {
         if let Err(e) = self.load_sys_config() {
             match e {
-                ParseError::InvalidSyntax(syn) => error!("{}", syn),
-                _ => error!("{}", e),
+                ParseError::InvalidSyntax(syn) => {
+                    return Err(format!("Invalid sytax in '/etc/sinkd.conf': {}", syn));
+                },
+                ParseError::FileNotFound => {
+                    return Err(format!("File not found: '/etc/sinkd.conf'"));
+                },                
+                _ => {
+                    return Err(format!("sysconfig unknown condition"));
+                }
             }
-            return false;
         }
 
-        if let Err(e) = self.load_user_configs() {
-            error!("{}", e);
-            return false;
-        }
-
-        true
+        // TODO: create a "sinkd group" in /etc/sinkd.conf
+        // TODO: to store the server files in, i.e. /srv/sinkd/<group_name>/<abs_path>
+        if let Err(ParseError::NoUserFound) = self.load_user_configs() {
+            warn!("No user was loaded into sinkd, using only system configs");
+        } 
+        Ok(())
     }
 
     fn load_sys_config(&mut self) -> Result<(), ParseError> {
         match fs::read_to_string("/etc/sinkd.conf") {
-            Err(error) => {
-                error!("unable to open /etc/sinkd.conf, {}", error);
-                return Err(ParseError::FileNotFound);
-            }
+            Err(_) => Err(ParseError::FileNotFound),
             Ok(output) => match toml::from_str(&output) {
                 Err(error) => {
-                    // error!("couldn't parse '/etc/sinkd.conf' {}", error);
-                    let invalid_syntax = ParseError::InvalidSyntax(error.to_string());
-                    Err(invalid_syntax)
+                    Err(ParseError::InvalidSyntax(error.to_string()))
                 }
                 Ok(toml_parsed) => {
                     //? toml_parsed is converted into Rust via serde lib
@@ -114,14 +119,23 @@ impl ConfigParser {
     fn load_user_configs(&mut self) -> Result<(), ParseError> {
         let mut _user_loaded = false;
         for user in &self.sys.users {
-            match ConfigParser::get_user_config(user) {
+            let user_config = format!("'/home/{}/.config/sinkd.conf'", user);
+            match ConfigParser::get_user_config(&user_config) {
                 Ok(_usr_cfg) => {
                     let _ = &self.users.insert(user.clone(), _usr_cfg);
                     _user_loaded = true;
                     continue;
                 }
-                Err(_) => {
-                    warn!("user '{}' not found", user)
+                Err(error) => {
+                    match error {
+                        ParseError::FileNotFound => {
+                            error!("File not found: {}", user_config);
+                        }
+                        ParseError::InvalidSyntax(syntax) => {
+                            error!("Invalid syntax in: {}: {}", user_config, syntax);
+                        }
+                        _ => () 
+                    }
                 }
             }
         }
@@ -131,31 +145,16 @@ impl ConfigParser {
         Ok(())
     }
 
-    fn get_user_config(username: &str) -> Result<UserParser, ParseError> {
-        // use home_dir which should work on the *nixes
-        // if let Some(home) = env::home_dir() {
-        //     use crate::utils::{Attrs::*, Colors::*};
-        //     print_fancyln(format!("HOME{} ==>> print off environment", home.display()).as_str(), BOLD, GREEN);
-        //     for (key, value) in env::vars_os() {
-        //         println!("{:?}: {:?}", key, value);
-        //     }
-        // }
-        let config_file = format!("/home/{}/.config/sinkd.conf", &username);
-
-        match fs::read_to_string(&config_file) {
-            Err(error) => {
-                error!("unable to open {}, {}", &config_file, error);
-                return Err(ParseError::FileNotFound);
-            }
+    fn get_user_config(user_config: &str) -> Result<UserParser, ParseError> {
+        match fs::read_to_string(&user_config) {
+            Err(_) => Err(ParseError::FileNotFound),
             Ok(output) => match toml::from_str(&output) {
                 Err(error) => {
-                    let err_str = format!("couldn't parse '{}' {}", &config_file, error);
-                    return Err(ParseError::InvalidSyntax(err_str));
+                    Err(ParseError::InvalidSyntax(error.to_string()))
                 }
                 Ok(toml_parsed) => {
-                    //? toml_parsed is converted into Rust via serde lib
                     let user_config: UserParser = toml_parsed;
-                    return Ok(user_config);
+                    Ok(user_config)
                 }
             },
         }
@@ -172,12 +171,9 @@ pub struct Inode {
 
 pub type InodeMap = HashMap<PathBuf, Inode>;
 
-pub fn get() -> (String, InodeMap) {
+pub fn get() -> Result<(String, InodeMap), String> {
     let mut parser = ConfigParser::new();
-    if !parser.load_configs() {
-        error!("FATAL couldn't load configurations");
-        panic!("FATAL couldn't load configurations")
-    }
+    parser.load_configs()?;
 
     let mut inode_map: InodeMap = HashMap::new();
 
@@ -189,24 +185,31 @@ pub fn get() -> (String, InodeMap) {
             last_event: Instant::now(),
             event: false,
         });
-        // } else {
-        //     error!("[sys_config] inode_map already contains path(key): {}", &anchor.path.display());
-        // }
     }
     for (_, cfg) in parser.users.iter() {
         for anchor in &cfg.anchors {
-            // if !inode_map.contains_key(&anchor.path) {
             inode_map.entry(anchor.path.clone()).or_insert(Inode {
                 excludes: anchor.excludes.clone(),
                 interval: Duration::from_secs(anchor.interval),
                 last_event: Instant::now(),
                 event: false,
             });
-            // } else {
-            //     error!("[usr_config] inode_map already contains path(key): {}", &anchor.path.display());
-            // }
         }
     }
+    let srv_addr = resolve_server_addr(&parser.sys.server_addr)?;
+    Ok((srv_addr, inode_map))
+}
 
-    return (parser.sys.server_addr, inode_map);
+
+fn resolve_server_addr(addr: &str) -> Result<String, String> {
+    match addr {
+        "localhost" => Ok(String::from("tcp://localhost:1883")),
+        _str => {
+            if _str.starts_with("/") {
+                Err(format!("Found {}, did you intend on localhost?, check '/etc/sinkd.conf'", _str))
+            } else {
+                Ok(format!("tcp://{}:1883", _str))
+            }
+        }
+    }
 }

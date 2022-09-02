@@ -10,6 +10,8 @@ extern crate rpassword;
 
 mod client;
 mod config;
+mod daemon;
+mod fancy;
 mod ipc;
 mod server;
 mod shiplog;
@@ -17,7 +19,7 @@ mod sinkd;
 mod test;
 mod utils;
 
-use clap::{*, parser::ValuesRef};
+use clap::{App, Arg, Command};
 
 pub fn build_sinkd() -> App<'static> {
     App::new("sinkd")
@@ -153,7 +155,8 @@ fn main() {
             if submatches.is_present("SERVER") {
                 server::start(verbosity, clear_logs);
             } else {
-                if !client::start(verbosity, clear_logs) {
+                if let Err(error) = client::start(verbosity, clear_logs) {
+                    eprintln!("{}", error);
                     println!("unable to start client, take a look: {}", utils::LOG_PATH)
                 }
             }

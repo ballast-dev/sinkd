@@ -7,6 +7,7 @@ use crate::{config, utils};
 use daemonize::Daemonize;
 use std::fs;
 
+
 fn reload_config() {
     info!("reload config?")
 }
@@ -23,7 +24,7 @@ pub fn add(file: &str) -> bool {
     return true; // able to watch directory
 }
 
-pub fn list<'a>(paths: Option<&Vec<&'a str>>) {
+pub fn list(paths: Option<&Vec<&str>>) {
     //TODO need to list system shares
     match paths {
         Some(paths) => {
