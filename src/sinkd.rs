@@ -7,7 +7,6 @@ use crate::{config, utils};
 use daemonize::Daemonize;
 use std::fs;
 
-
 fn reload_config() {
     info!("reload config?")
 }
@@ -32,7 +31,7 @@ pub fn list(paths: Option<&Vec<&str>>) {
                 println!("path: {}", path);
             }
             let user = env!("USER");
-        },
+        }
         None => {
             println!("no paths were given!")
         }

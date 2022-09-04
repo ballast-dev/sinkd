@@ -75,17 +75,17 @@ impl ConfigParser {
 
     /// If just system configs are used that is enough.
     /// The storage of files will be on a group name basis.
-    /// The name shall be config driven? Maybe a temp file to 
+    /// The name shall be config driven? Maybe a temp file to
     /// store the hash of this sinkd group...
     fn load_configs(&mut self) -> Result<(), String> {
         if let Err(e) = self.load_sys_config() {
             match e {
                 ParseError::InvalidSyntax(syn) => {
                     return Err(format!("Invalid sytax in '/etc/sinkd.conf': {}", syn));
-                },
+                }
                 ParseError::FileNotFound => {
                     return Err(format!("File not found: '/etc/sinkd.conf'"));
-                },                
+                }
                 _ => {
                     return Err(format!("sysconfig unknown condition"));
                 }
@@ -96,7 +96,7 @@ impl ConfigParser {
         // TODO: to store the server files in, i.e. /srv/sinkd/<group_name>/<abs_path>
         if let Err(ParseError::NoUserFound) = self.load_user_configs() {
             warn!("No user was loaded into sinkd, using only system configs");
-        } 
+        }
         Ok(())
     }
 
@@ -104,9 +104,7 @@ impl ConfigParser {
         match fs::read_to_string("/etc/sinkd.conf") {
             Err(_) => Err(ParseError::FileNotFound),
             Ok(output) => match toml::from_str(&output) {
-                Err(error) => {
-                    Err(ParseError::InvalidSyntax(error.to_string()))
-                }
+                Err(error) => Err(ParseError::InvalidSyntax(error.to_string())),
                 Ok(toml_parsed) => {
                     //? toml_parsed is converted into Rust via serde lib
                     self.sys = toml_parsed;
@@ -126,17 +124,15 @@ impl ConfigParser {
                     _user_loaded = true;
                     continue;
                 }
-                Err(error) => {
-                    match error {
-                        ParseError::FileNotFound => {
-                            error!("File not found: {}", user_config);
-                        }
-                        ParseError::InvalidSyntax(syntax) => {
-                            error!("Invalid syntax in: {}: {}", user_config, syntax);
-                        }
-                        _ => () 
+                Err(error) => match error {
+                    ParseError::FileNotFound => {
+                        error!("File not found: {}", user_config);
                     }
-                }
+                    ParseError::InvalidSyntax(syntax) => {
+                        error!("Invalid syntax in: {}: {}", user_config, syntax);
+                    }
+                    _ => (),
+                },
             }
         }
         if !_user_loaded {
@@ -149,9 +145,7 @@ impl ConfigParser {
         match fs::read_to_string(&user_config) {
             Err(_) => Err(ParseError::FileNotFound),
             Ok(output) => match toml::from_str(&output) {
-                Err(error) => {
-                    Err(ParseError::InvalidSyntax(error.to_string()))
-                }
+                Err(error) => Err(ParseError::InvalidSyntax(error.to_string())),
                 Ok(toml_parsed) => {
                     let user_config: UserParser = toml_parsed;
                     Ok(user_config)
@@ -200,13 +194,15 @@ pub fn get() -> Result<(String, InodeMap), String> {
     Ok((srv_addr, inode_map))
 }
 
-
 fn resolve_server_addr(addr: &str) -> Result<String, String> {
     match addr {
         "localhost" => Ok(String::from("tcp://localhost:1883")),
         _str => {
             if _str.starts_with("/") {
-                Err(format!("Found {}, did you intend on localhost?, check '/etc/sinkd.conf'", _str))
+                Err(format!(
+                    "Found {}, did you intend on localhost?, check '/etc/sinkd.conf'",
+                    _str
+                ))
             } else {
                 Ok(format!("tcp://{}:1883", _str))
             }

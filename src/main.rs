@@ -140,7 +140,8 @@ fn main() {
             if !submatches.args_present() {
                 sinkd::list(None);
             } else {
-                let vals: Vec<&str> = submatches.get_many::<String>("PATHS")
+                let vals: Vec<&str> = submatches
+                    .get_many::<String>("PATHS")
                     .unwrap()
                     .map(|s| s.as_str())
                     .collect();

@@ -136,7 +136,6 @@ pub fn set_pid(pid: u16) -> Result<(), String> {
     }
 }
 
-
 fn gen_keys() -> bool {
     let shell = process::Command::new("sh")
         .stdout(process::Stdio::null())
@@ -255,7 +254,11 @@ pub fn setup_server(verbosity: u8, host: &str) {
 
 pub fn setup_keys(verbosity: u8, host: &str) {
     if !gen_keys() {
-        fancy::print_fancyln("Unable to generate keys", fancy::Attrs::NORMAL, fancy::Colors::RED);
+        fancy::print_fancyln(
+            "Unable to generate keys",
+            fancy::Attrs::NORMAL,
+            fancy::Colors::RED,
+        );
         return;
     }
 
