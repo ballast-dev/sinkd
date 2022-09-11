@@ -303,6 +303,7 @@ pub fn setup_keys(verbosity: u8, host: &str) {
 
 /// Notify the sibling thread that a fatal condition has occured
 /// Log error upon lock failure and exit immediately
+/// TODO: make an optional parameter that will report on the error
 pub fn fatal(mutex: &Mutex<bool>) {
     match mutex.lock() {
         Ok(mut cond) => *cond = true,
@@ -316,7 +317,7 @@ pub fn fatal(mutex: &Mutex<bool>) {
 /// Based on Rust manual it is better practice to exit from main.
 /// Firing up an Error all the way back to main is preferred to
 /// clean up all heap and stack allocated memory.
-pub fn abort<'a>(report: &'a str) -> Result<(), ()> {
+pub fn abort(report: &str) -> Result<(), ()> {
     error!("{}", report);
     Err(())
 }

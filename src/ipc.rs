@@ -1,8 +1,6 @@
-use crate::ipc;
 use bincode;
 use paho_mqtt as mqtt;
 use serde::{Deserialize, Serialize};
-use std::sync::Mutex;
 
 #[derive(PartialEq, Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum Status {
@@ -16,35 +14,57 @@ pub enum Status {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Payload<'a> {
     pub hostname: &'a str,
-    pub user: &'a str,
+    pub username: &'a str,
     pub path: &'a str, // one path per packet
     pub date: &'a str,
     pub cycle: u32,
     pub status: Status,
 }
 
-pub fn packed<'a>(
-    hostname: &'a str,
-    user: &'a str,
-    path: &'a str,
-    date: &'a str,
-    cycle: u32,
-    status: Status,
-) -> Result<Vec<u8>, ()> {
-    let payload = Payload {
-        hostname,
-        user,
-        path,
-        date,
-        cycle,
-        status,
-    };
-    match bincode::serialize(&payload) {
-        Err(e) => {
-            error!("FATAL, bincode::serialize >> {}", e);
-            Err(())
+impl<'a> Payload<'a> {
+    pub fn new() -> Payload<'a> {
+        Payload {
+            hostname: "hostname",
+            username: "user",
+            path: "",
+            date: "2022Jan4",
+            cycle: 0,
+            status: Status::Sinkd,
         }
+    }
+    pub fn from(
+        hostname: &'a str,
+        username: &'a str,
+        path: &'a str,
+        date: &'a str,
+        cycle: u32,
+        status: Status,
+    ) -> Payload<'a> {
+        Payload {
+            hostname,
+            username,
+            path,
+            date,
+            cycle,
+            status,
+        }
+    }
+}
+
+pub fn encode(payload: Payload) -> Result<Vec<u8>, mqtt::Error> {
+    match bincode::serialize(&payload) {
+        Err(e) => Err(mqtt::Error::GeneralString(format!(
+            "FATAL, bincode::serialize >> {}",
+            e
+        ))),
         Ok(stream) => return Ok(stream),
+    }
+}
+
+pub fn decode(bytes: &Vec<u8>) -> Result<Payload, mqtt::Error> {
+    match bincode::deserialize(bytes) {
+        Err(e) => Err(mqtt::Error::General("FATAL, bincode could not deserialize")),
+        Ok(payload) => Ok(payload),
     }
 }
 

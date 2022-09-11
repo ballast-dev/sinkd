@@ -7,8 +7,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::utils;
-
 // these are serially parsable
 #[derive(Debug, Serialize, Deserialize)]
 struct Anchor {
@@ -117,7 +115,7 @@ impl ConfigParser {
     fn load_user_configs(&mut self) -> Result<(), ParseError> {
         let mut _user_loaded = false;
         for user in &self.sys.users {
-            let user_config = format!("'/home/{}/.config/sinkd.conf'", user);
+            let user_config = format!("/home/{}/.config/sinkd.conf", user);
             match ConfigParser::get_user_config(&user_config) {
                 Ok(_usr_cfg) => {
                     let _ = &self.users.insert(user.clone(), _usr_cfg);

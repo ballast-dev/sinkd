@@ -7,10 +7,10 @@ build = "src/build.rs"
 
 [dependencies]
 clap = "3.2.6"
-# crossbeam = "0.8"
+crossbeam = "0.8"
 notify = "4.0.17"
 regex = "1.4.5"
-serde = {version = "1.0.125", features = ["derive"]}
+serde = { version = "1.0.125", features = ["derive"] }
 bincode = "1.2.0"
 toml = "0.5.8"
 daemonize = "0.4.1"

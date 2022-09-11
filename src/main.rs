@@ -1,4 +1,5 @@
 extern crate clap;
+extern crate crossbeam;
 extern crate notify;
 extern crate regex;
 extern crate serde;

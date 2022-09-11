@@ -1,8 +1,9 @@
 use crate::{config, ipc, shiplog, utils};
+use crossbeam::channel::TryRecvError;
+use mqtt::Message;
+use mqtt::Receiver;
 use notify::{DebouncedEvent, Watcher};
 use paho_mqtt as mqtt;
-use mqtt::Receiver;
-use mqtt::Message;
 use std::{
     collections::HashSet,
     path::PathBuf,
@@ -11,7 +12,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-fn create_mqtt_client(host: &str) -> Result<(mqtt::Client, Receiver<Option<Message>>), mqtt::Error> {
+fn create_mqtt_client(
+    host: &str,
+) -> Result<(mqtt::Client, Receiver<Option<Message>>), mqtt::Error> {
     // Create the client. Use an ID for a persistent session.
     // A real system should try harder to use a unique ID.
     // let create_opts = mqtt::CreateOptionsBuilder::new()
@@ -24,19 +27,21 @@ fn create_mqtt_client(host: &str) -> Result<(mqtt::Client, Receiver<Option<Messa
     // Initialize the consumer before connecting
     let rx = cli.start_consuming();
 
-    // Define the set of options for the connection
+    // Define last will message
     let lwt = mqtt::MessageBuilder::new()
-        .topic("test")
+        .topic("sinkd/server")
         .payload("Sync consumer lost connection")
         .finalize();
 
+    // Define the set of options for the connection
     let conn_opts = mqtt::ConnectOptionsBuilder::new()
         .keep_alive_interval(Duration::from_secs(20))
-        .clean_session(false)
+        .mqtt_version(mqtt::MQTT_VERSION_3_1_1)
+        .clean_session(true)
         .will_message(lwt)
         .finalize();
 
-    let subscriptions = ["sinkd/server", "hello"];
+    let subscriptions = ["sinkd/clients"];
     let qos = [1, 1];
 
     // Make the connection to the broker
@@ -49,11 +54,12 @@ fn create_mqtt_client(host: &str) -> Result<(mqtt::Client, Receiver<Option<Messa
                     con_rsp.server_uri, con_rsp.mqtt_version
                 );
                 if con_rsp.session_present {
-                    Err(mqtt::Error::General("client session already present on broker"))
+                    Err(mqtt::Error::General(
+                        "client session already present on broker",
+                    ))
                 } else {
                     // Register subscriptions on the server
                     debug!("Subscribing to topics with requested QoS: {:?}...", qos);
-
 
                     cli.subscribe_many(&subscriptions, &qos)
                         .and_then(|rsp| {
@@ -64,19 +70,20 @@ fn create_mqtt_client(host: &str) -> Result<(mqtt::Client, Receiver<Option<Messa
                             debug!("QoS granted: {:?}", vqos);
                             Ok(())
                         })?;
-                        // .unwrap_or_else(|err| {
-                        //     cli.disconnect(None).unwrap();
-                        //     return Err(mqtt::Error::GeneralString(format!("Error subscribing to topics: {:?}", err)));
-                        // });
+                    // .unwrap_or_else(|err| {
+                    //     cli.disconnect(None).unwrap();
+                    //     return Err(mqtt::Error::GeneralString(format!("Error subscribing to topics: {:?}", err)));
+                    // });
                     Ok((cli, rx))
                 }
             } else {
                 Err(mqtt::Error::General("no connection response?"))
             }
         }
-        Err(e) => {
-            Err(mqtt::Error::GeneralString(format!("Error connecting to the broker: {:?}", e)))
-        }
+        Err(e) => Err(mqtt::Error::GeneralString(format!(
+            "Error connecting to the broker: {:?}",
+            e
+        ))),
     }
 }
 
@@ -137,7 +144,10 @@ pub fn start(verbosity: u8, clear_logs: bool) -> Result<(), String> {
     });
 
     let synch_thread = thread::spawn(move || {
-        mqtt_entry(&srv_addr, synch_rx, &*exit_cond2);
+        if let Err(error) = mqtt_entry(&srv_addr, synch_rx, &*exit_cond2) {
+            utils::fatal(&*exit_cond2);
+            error!("FATAL condition in mqtt thread, {}", error);
+        }
     });
 
     if let Err(error) = watch_thread.join() {
@@ -191,7 +201,7 @@ fn watch_entry(
             break;
         }
 
-        match notify_rx.recv() {
+        match notify_rx.try_recv() {
             // blocking call
             Ok(event) => match event {
                 DebouncedEvent::Create(path) => update(path, inode_map, &synch_tx),
@@ -210,44 +220,73 @@ fn watch_entry(
                     );
                 }
             },
-            Err(e) => {
-                error!("FATAL: notify mpsc::channel hung up in watch_entry {:?}", e);
-                utils::fatal(&exit_cond);
-            }
+            Err(err) => match err {
+                mpsc::TryRecvError::Empty => {
+                    std::thread::sleep(std::time::Duration::from_millis(200))
+                }
+                mpsc::TryRecvError::Disconnected => {
+                    error!("FATAL: notify_rx hung up in watch_entry");
+                    utils::fatal(&exit_cond);
+                }
+            },
         }
     }
 }
 
-fn mqtt_entry(server_addr: &str, synch_rx: mpsc::Receiver<PathBuf>, exit_cond: &Mutex<bool>) -> Result<(), mqtt::Error> {
+fn mqtt_entry(
+    server_addr: &str,
+    synch_rx: mpsc::Receiver<PathBuf>,
+    exit_cond: &Mutex<bool>,
+) -> Result<(), mqtt::Error> {
     let hostname = get_hostname();
     let username = get_username();
     // TODO need to read from config
 
-    if let Err(e) = create_mqtt_client(server_addr) {
-        debug!("{}", e);
-        return Err(mqtt::Error::General("unable to create mqtt client"));
-    }
-
     let (mqtt_client, mqtt_rx) = create_mqtt_client(server_addr)?;
-    
+
     // Using Hashset to prevent repeated entries
     let mut events = HashSet::new();
+    // client messages will publish to server
+    let mut curr_msg = mqtt::Message::new("sinkd/server", "", mqtt::QOS_1);
+    let mut received = false;
 
     loop {
         // Check to make sure other thread didn't exit
         if utils::exited(&exit_cond) {
-           return Err(mqtt::Error::General("exit condition reached")) 
+            return Err(mqtt::Error::General("exit condition reached"));
         }
 
         // process mqtt traffic
         match mqtt_rx.try_recv() {
-            // hope that no messages are lost... 
-            Ok(message) => if let Some(msg) = message {
-                debug!("client got message!: {}", msg);
-            }, 
-            Err(e) => {
-                return Err(mqtt::Error::General("mqtt_rx hung up?"));
+            // hope that no messages are lost...
+            Ok(message) => {
+                if let Some(msg) = message {
+                    debug!("client got message!: {}", msg);
+                    curr_msg = msg;
+                    received = true;
+                }
             }
+            Err(e) => match e {
+                TryRecvError::Disconnected => return Err(mqtt::Error::General("mqtt_rx hung up?")),
+                TryRecvError::Empty => received = false,
+            },
+        }
+
+        if received {
+            let timestamp = utils::get_timestamp("%Y%m%d");
+            let payload = ipc::Payload::from(
+                &hostname,
+                &username,
+                &timestamp,
+                std::str::from_utf8(curr_msg.payload()).unwrap(),
+                1,
+                ipc::Status::Sinkd,
+            );
+            mqtt_client.publish(mqtt::Message::new(
+                "sinkd/server",
+                ipc::encode(payload)?,
+                mqtt::QOS_1,
+            ))?;
         }
 
         // process file events
@@ -256,35 +295,36 @@ fn mqtt_entry(server_addr: &str, synch_rx: mpsc::Receiver<PathBuf>, exit_cond: &
                 debug!("received from synch channel");
                 events.insert(path);
             }
-            Err(_) => { // buffered events
+            Err(_) => {
+                // buffered events
                 if !events.is_empty() {
+                    let timestamp = utils::get_timestamp("%Y%m%d");
                     for path in events.drain() {
-                        if let Ok(packet) = ipc::packed(
+                        let payload = ipc::Payload::from(
                             &hostname,
                             &username,
+                            &timestamp,
                             &path.to_str().unwrap(),
-                            &utils::get_timestamp("%Y%m%d"),
                             1,
                             ipc::Status::Edits,
-                        ) {
-                            mqtt_client.publish(mqtt::Message::new(
-                                "sinkd/client",
-                                packet,
-                                mqtt::QOS_1,
-                            ));
-                        }
+                        );
+                        mqtt_client.publish(mqtt::Message::new(
+                            "sinkd/server",
+                            ipc::encode(payload)?,
+                            mqtt::QOS_1,
+                        ))?;
                     }
                 }
-                // TODO: add 'system_interval' to config
-                std::thread::sleep(Duration::from_secs(1));
-                debug!("synch loop...")
             }
         }
+        // TODO: add 'system_interval' to config
+        std::thread::sleep(Duration::from_secs(1));
+        debug!("synch loop...")
     }
-    Err(e) => {
-        error!("FATAL: unable to create MQTT client, {}", e);
-        utils::fatal(&exit_cond);
-    }
+    // Err(e) => {
+    //     error!("FATAL: unable to create MQTT client, {}", e);
+    //     utils::fatal(&exit_cond);
+    // }
 }
 fn get_watchers(
     inode_map: &config::InodeMap,
