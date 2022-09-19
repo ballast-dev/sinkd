@@ -342,3 +342,31 @@ pub fn exited(mutex: &Mutex<bool>) -> bool {
 //         println!("{:?}: {:?}", key, value);
 //     }
 // }
+
+/// Both macOS and Linux have the uname command
+pub fn get_hostname() -> String {
+    match std::process::Command::new("uname").arg("-n").output() {
+        Err(e) => {
+            error!("uname didn't work? {}", e);
+            String::from("uname-error")
+        }
+        Ok(output) => String::from_utf8(output.stdout.to_ascii_lowercase()).unwrap_or_else(|_| {
+            error!("invalid string from uname -a");
+            String::from("invalid-hostname")
+        }),
+    }
+}
+
+/// Both macOS and Linux have the whoami command
+pub fn get_username() -> String {
+    match std::process::Command::new("whoami").output() {
+        Err(e) => {
+            error!("whoami didn't work? {}", e);
+            String::from("whoami error")
+        }
+        Ok(output) => String::from_utf8(output.stdout.to_ascii_lowercase()).unwrap_or_else(|_| {
+            error!("invalid string from whoami");
+            String::from("invalid-username")
+        }),
+    }
+}

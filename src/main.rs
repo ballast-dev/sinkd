@@ -11,7 +11,6 @@ extern crate rpassword;
 
 mod client;
 mod config;
-mod daemon;
 mod fancy;
 mod ipc;
 mod server;
