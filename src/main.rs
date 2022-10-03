@@ -11,6 +11,7 @@ extern crate rpassword;
 
 mod client;
 mod config;
+mod defs;
 mod fancy;
 mod ipc;
 mod server;
@@ -153,13 +154,19 @@ fn main() {
         }
         Some(("start", submatches)) => {
             let clear_logs = *submatches.get_one::<bool>("clear-logs").unwrap_or(&false);
-            if submatches.is_present("SERVER") {
-                server::start(verbosity, clear_logs);
-            } else {
-                if let Err(error) = client::start(verbosity, clear_logs) {
-                    eprintln!("{}", error);
-                    println!("unable to start client, take a look: {}", utils::LOG_PATH)
+            if submatches.args_present() {
+                println!("Logging to: '{}'", utils::LOG_PATH);
+                if submatches.is_present("SERVER") {
+                    if let Err(e) = server::start(verbosity, clear_logs) {
+                        eprintln!("{}", e);
+                    }
+                } else if submatches.is_present("CLIENT") {
+                    if let Err(e) = client::start(verbosity, clear_logs) {
+                        eprintln!("{}", e);
+                    }
                 }
+            } else {
+                eprintln!("Need know which to start --server or --client?")
             }
         }
         Some(("stop", _)) => {

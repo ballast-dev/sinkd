@@ -130,11 +130,8 @@ fn mqtt_entry(
     let mut status = ipc::Status::Sinkd;
     // TODO need to read from config
 
-    let (mqtt_client, mqtt_rx) = ipc::MqttClient::new(
-        Some(server_addr), 
-        &["sinkd/server"],
-        "sinkd/clients"
-    )?;
+    let (mqtt_client, mqtt_rx) =
+        ipc::MqttClient::new(Some(server_addr), &["sinkd/server"], "sinkd/clients")?;
 
     loop {
         // Check to make sure other thread didn't exit
@@ -155,7 +152,7 @@ fn mqtt_entry(
                         ipc::Status::Cache => {
                             // server is telling us to sinkd::cache()
                         }
-                        ipc::Status::Behind => {}, // server is telling us to update?
+                        ipc::Status::Behind => {} // server is telling us to update?
                         ipc::Status::Updating => {
                             // if the server is Updating dont check cycle number
                             // may need to track state

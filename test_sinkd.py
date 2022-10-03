@@ -17,13 +17,13 @@ def remove_files(tlds: list):
                 print(e)
 
 
-def create_files(folder: str, filenum: int, delay: float = 0.01):
+def create_files(folder: Path, filenum: int, delay: float = 0.01):
 
     os.makedirs(folder)
     for i in range(filenum):
         print(f"touching file{i} with delay:{delay}")
         time.sleep(delay)
-        filepath = Path(folder, f"file{i}")
+        filepath = folder.joinpath(f"file{i}")
         subprocess.run(["touch", filepath])
 
 

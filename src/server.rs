@@ -13,35 +13,47 @@ use std::{
     thread,
 };
 
-pub fn start(verbosity: u8, clear_logs: bool) {
-    if let Err(e) = shiplog::init(clear_logs) {
-        eprintln!("{}", e);
-        process::exit(2);
-    }
-
-    debug!("server:start >> initial");
-    if let Err(_) = process::Command::new("mosquitto").arg("-d").spawn() {
-        eprintln!("mosquitto not installed or not in PATH");
-        return;
+pub fn start(verbosity: u8, clear_logs: bool) -> Result<(), String> {
+    shiplog::init(clear_logs)?;
+    debug!("server:start >> mosquitto daemon");
+    if let Err(spawn_error) = process::Command::new("mosquitto").arg("-d").spawn() {
+        return Err(format!(
+            "Is mosquitto installed and in path? >> {}",
+            spawn_error.to_string()
+        ));
     }
 
     debug!("server:start >> spawning channel");
     let (msg_tx, msg_rx): (mpsc::Sender<mqtt::Message>, mpsc::Receiver<mqtt::Message>) =
         mpsc::channel();
 
+    let exit_cond = Arc::new(Mutex::new(false));
+    let exit_cond2 = Arc::clone(&exit_cond);
+
     let bcast_cycle = Arc::new(Mutex::new(0));
     let incr_cycle = Arc::clone(&bcast_cycle);
-    let mqtt_thread = thread::spawn(move || mqtt_entry(msg_tx, bcast_cycle));
-    let synch_thread = thread::spawn(move || synch_entry(msg_rx, incr_cycle));
 
-    if let Err(_) = mqtt_thread.join() {
-        error!("server:mqtt_thread join error!");
+    // error handling must be done within the threads
+    let mqtt_thread = thread::spawn(move || {
+        if let Err(err) = mqtt_entry(msg_tx, exit_cond, bcast_cycle, verbosity) {
+            error!("{}", err);
+        }
+    });
+    let synch_thread = thread::spawn(move || {
+        if let Err(err) = synch_entry(msg_rx, exit_cond2, incr_cycle, verbosity) {
+            error!("{}", err);
+        }
+    });
+
+    if let Err(mqtt_thread_err) = mqtt_thread.join() {
+        error!("server:mqtt_thread join error! >> {:?}", mqtt_thread_err);
         process::exit(1);
     }
-    if let Err(_) = synch_thread.join() {
-        error!("server::synch_thread join error!");
+    if let Err(synch_thread_err) = synch_thread.join() {
+        error!("server::synch_thread join error! >> {:?}", synch_thread_err);
         process::exit(1);
     }
+    Ok(())
 }
 
 fn dispatch(msg: &Option<mqtt::Message>) {
@@ -54,8 +66,15 @@ fn dispatch(msg: &Option<mqtt::Message>) {
 }
 
 //? This thread is to ensure no lost messages from mqtt
-fn mqtt_entry(tx: mpsc::Sender<mqtt::Message>, cycle: Arc<Mutex<i32>>) -> ! {
-    // TODO: Read from config
+fn mqtt_entry(
+    tx: mpsc::Sender<mqtt::Message>,
+    exit_cond: Arc<Mutex<bool>>,
+    cycle: Arc<Mutex<i32>>,
+    verbosity: u8,
+) -> Result<(), mqtt::Error> {
+    let (mqtt_client, mqtt_rx) =
+        ipc::MqttClient::new(Some("localhost"), &["sinkd/clients"], "sinkd/server")?;
+
     match mqtt::Client::new("tcp://localhost:1883") {
         Err(e) => {
             error!("FATAL: unable to create mqtt server client: {}", e);
@@ -109,7 +128,12 @@ fn mqtt_entry(tx: mpsc::Sender<mqtt::Message>, cycle: Arc<Mutex<i32>>) -> ! {
     }
 }
 
-fn synch_entry(rx: mpsc::Receiver<mqtt::Message>, cycle: Arc<Mutex<i32>>) -> ! {
+fn synch_entry(
+    rx: mpsc::Receiver<mqtt::Message>,
+    exit_cond: Arc<Mutex<bool>>,
+    cycle: Arc<Mutex<i32>>,
+    verbosity: u8,
+) -> Result<(), String> {
     loop {
         match rx.recv() {
             Err(e) => {
