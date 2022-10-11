@@ -1,4 +1,4 @@
-use crate::{config, ipc, shiplog, utils};
+use crate::{config, defs::Outcome, ipc, shiplog, utils};
 use crossbeam::channel::TryRecvError;
 use notify::{DebouncedEvent, Watcher};
 use paho_mqtt as mqtt;
@@ -10,6 +10,13 @@ use std::{
     time::{Duration, Instant},
 };
 
+pub enum State {
+    Caching,
+    Sinking,
+    Behind,
+    UpToDate,
+}
+
 #[warn(unused_features)]
 pub fn start(verbosity: u8, clear_logs: bool) -> Result<(), String> {
     shiplog::init(clear_logs)?;
@@ -17,7 +24,7 @@ pub fn start(verbosity: u8, clear_logs: bool) -> Result<(), String> {
 
     let (notify_tx, notify_rx): (mpsc::Sender<DebouncedEvent>, mpsc::Receiver<DebouncedEvent>) =
         mpsc::channel();
-    let (synch_tx, synch_rx): (mpsc::Sender<PathBuf>, mpsc::Receiver<PathBuf>) = mpsc::channel();
+    let (event_tx, event_rx): (mpsc::Sender<PathBuf>, mpsc::Receiver<PathBuf>) = mpsc::channel();
 
     let exit_cond = Arc::new(Mutex::new(false));
     let exit_cond2 = Arc::clone(&exit_cond);
@@ -26,11 +33,11 @@ pub fn start(verbosity: u8, clear_logs: bool) -> Result<(), String> {
     let _watchers = get_watchers(&inode_map, notify_tx);
 
     let watch_thread = thread::spawn(move || {
-        watch_entry(&mut inode_map, notify_rx, synch_tx, &*exit_cond);
+        watch_entry(&mut inode_map, notify_rx, event_tx, &*exit_cond);
     });
 
     let synch_thread = thread::spawn(move || {
-        if let Err(error) = mqtt_entry(&srv_addr, synch_rx, &*exit_cond2) {
+        if let Err(error) = synch_entry(&srv_addr, event_rx, &*exit_cond2) {
             utils::fatal(&*exit_cond2);
             error!("FATAL condition in mqtt thread, {}", error);
         }
@@ -40,7 +47,7 @@ pub fn start(verbosity: u8, clear_logs: bool) -> Result<(), String> {
         return Err(format!("Client watch thread error! {:?}", error));
     }
     if let Err(error) = synch_thread.join() {
-        return Err(format!("Client synch thread error! {:?}", error));
+        return Err(format!("Client mqtt thread error! {:?}", error));
     }
 
     Ok(())
@@ -61,7 +68,15 @@ pub fn start(verbosity: u8, clear_logs: bool) -> Result<(), String> {
     // }
 }
 
-fn update(event_path: PathBuf, inode_map: &mut config::InodeMap, synch_tx: &mpsc::Sender<PathBuf>) {
+// This will check the event path against the known paths passed at config time
+// Only top level paths are sent to the synch thread if the watched directory has exceeded
+// interval. In other words events are filtered against intervals (per inode) and added
+// to the synch queue.
+fn interval_add(
+    event_path: PathBuf,
+    inode_map: &mut config::InodeMap,
+    synch_tx: &mpsc::Sender<PathBuf>,
+) {
     for (inode_path, inode) in inode_map {
         if event_path.starts_with(inode_path) {
             let now = Instant::now();
@@ -79,7 +94,7 @@ fn update(event_path: PathBuf, inode_map: &mut config::InodeMap, synch_tx: &mpsc
 fn watch_entry(
     inode_map: &mut config::InodeMap,
     notify_rx: mpsc::Receiver<DebouncedEvent>,
-    synch_tx: mpsc::Sender<PathBuf>,
+    event_tx: mpsc::Sender<PathBuf>,
     exit_cond: &Mutex<bool>,
 ) {
     loop {
@@ -90,11 +105,11 @@ fn watch_entry(
         match notify_rx.try_recv() {
             // blocking call
             Ok(event) => match event {
-                DebouncedEvent::Create(path) => update(path, inode_map, &synch_tx),
-                DebouncedEvent::Write(path) => update(path, inode_map, &synch_tx),
-                DebouncedEvent::Chmod(path) => update(path, inode_map, &synch_tx),
-                DebouncedEvent::Remove(path) => update(path, inode_map, &synch_tx),
-                DebouncedEvent::Rename(path, _) => update(path, inode_map, &synch_tx),
+                DebouncedEvent::Create(path) => interval_add(path, inode_map, &event_tx),
+                DebouncedEvent::Write(path) => interval_add(path, inode_map, &event_tx),
+                DebouncedEvent::Chmod(path) => interval_add(path, inode_map, &event_tx),
+                DebouncedEvent::Remove(path) => interval_add(path, inode_map, &event_tx),
+                DebouncedEvent::Rename(path, _) => interval_add(path, inode_map, &event_tx),
                 DebouncedEvent::Rescan => {}
                 DebouncedEvent::NoticeWrite(_) => {}
                 DebouncedEvent::NoticeRemove(_) => {}
@@ -119,15 +134,14 @@ fn watch_entry(
     }
 }
 
-fn mqtt_entry(
+fn synch_entry(
     server_addr: &str,
-    synch_rx: mpsc::Receiver<PathBuf>,
+    event_rx: mpsc::Receiver<PathBuf>,
     exit_cond: &Mutex<bool>,
-) -> Result<(), mqtt::Error> {
+) -> Outcome<()> {
     let mut payload = ipc::Payload::new();
     // Using Hashset to prevent repeated entries
-    let mut events = HashSet::new();
-    let mut status = ipc::Status::Sinkd;
+    let mut state = State::UpToDate;
     // TODO need to read from config
 
     let (mqtt_client, mqtt_rx) =
@@ -140,24 +154,36 @@ fn mqtt_entry(
         }
 
         // process mqtt traffic from server
+        // first check latest message from server then send payload
         match mqtt_rx.try_recv() {
             // hope that no messages are lost...
             Ok(message) => {
                 if let Some(msg) = message {
-                    debug!("client got message!: {}", msg);
+                    debug!("client>> got message!: {}", msg);
                     let pyld = ipc::decode(msg.payload())?;
                     match pyld.status {
-                        ipc::Status::Sinkd => {} // server should never send this
-                        ipc::Status::Edits => {} // server should never send this,
-                        ipc::Status::Cache => {
-                            // server is telling us to sinkd::cache()
-                        }
-                        ipc::Status::Behind => {} // server is telling us to update?
-                        ipc::Status::Updating => {
-                            // if the server is Updating dont check cycle number
-                            // may need to track state
+                        ipc::Status::NotReady(reason) => match reason {
+                            ipc::Reason::Sinking => {
+                                std::thread::sleep(Duration::from_secs(5));
+                            }
+                            ipc::Reason::Behind => {
+                                // spawn rsync on the client?
+                                // wait for server to be ready then clone down
+                            }
+                            ipc::Reason::Other => todo!(),
+                        },
+                        ipc::Status::Ready => {
+                            payload.paths = filter_file_events(&event_rx)?;
+                            payload.hostname = utils::get_hostname();
+                            payload.username = utils::get_username();
+                            payload.date = utils::get_timestamp("%Y%m%d");
+                            payload.cycle += 1;
+                            payload.status = ipc::Status::Ready;
+                            mqtt_client.publish(&mut payload)?;
                         }
                     }
+                } else {
+                    error!("client>> mqtt_thread: empty message?");
                 }
             }
             Err(e) => match e {
@@ -183,25 +209,6 @@ fn mqtt_entry(
         //     ))?;
         // }
 
-        // process file events
-        match synch_rx.try_recv() {
-            Ok(path) => {
-                debug!("received from synch channel");
-                events.insert(path);
-            }
-            Err(_) => {
-                // buffered events
-                if !events.is_empty() {
-                    for path in events.drain() {
-                        // TODO: need to account for serveral users
-                        payload.path = String::from(path.to_str().unwrap());
-                        payload.cycle += 1;
-                        payload.status = ipc::Status::Edits;
-                        mqtt_client.publish(&mut payload)?;
-                    }
-                }
-            }
-        }
         // TODO: add 'system_interval' to config
         std::thread::sleep(Duration::from_secs(1));
         debug!("synch loop...")
@@ -239,3 +246,37 @@ fn get_watchers(
 fn cache(path: &str) -> Result<(), String> {
     Ok(())
 }
+
+// Will loop on file events until queue (channel) is empty
+// Using a HashSet to filter out redundancies will return
+// sanitized list of paths ready to send to sinkd server
+// TODO: need to account for serveral users
+fn filter_file_events(event_rx: &mpsc::Receiver<PathBuf>) -> Outcome<Vec<String>> {
+    let mut path_set = HashSet::<PathBuf>::new();
+    loop {
+        match event_rx.try_recv() {
+            // only top level paths are passed
+            Ok(path) => {
+                debug!("Adding file to path_set");
+                path_set.insert(path);
+            }
+            Err(err) => match err {
+                mpsc::TryRecvError::Disconnected => {
+                    return Err(mqtt::Error::General("event_rx disconnected"))
+                }
+                mpsc::TryRecvError::Empty => break, // Ready to send!
+            },
+        }
+    }
+    
+    // buffered events
+    let mut event_paths = vec![];
+    if !path_set.is_empty() {
+        for path in path_set.drain() {
+            event_paths.push(String::from(path.to_str().unwrap()));
+        }
+    }
+    Ok(event_paths)
+}
+
+// let ep = vec![ path_set.drain().map(|s| String::from(s.to_str().unwrap())).collect() ];

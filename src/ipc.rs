@@ -7,19 +7,24 @@ use serde::{Deserialize, Serialize};
 use crate::utils;
 
 #[derive(PartialEq, Clone, Copy, Debug, Serialize, Deserialize)]
-pub enum Status {
-    Edits, // Needed to show new edits
-    Sinkd,
-    Cache, // to move files off to .sinkd_cache/ folders
-    Updating,
+pub enum Reason {
+    Sinking,
     Behind,
+    Other
 }
 
+#[derive(PartialEq, Clone, Copy, Debug, Serialize, Deserialize)]
+pub enum Status {
+    NotReady(Reason),
+    Ready,
+}
+
+/// Only time a Payload is sent is to say "new edits"
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Payload {
     pub hostname: String,
     pub username: String,
-    pub path: String, // one path per packet
+    pub paths: Vec<String>,
     pub date: String,
     pub cycle: u32,
     pub status: Status,
@@ -30,16 +35,16 @@ impl Payload {
         Payload {
             hostname: utils::get_hostname(),
             username: utils::get_username(),
-            path: String::from(""),
+            paths: vec![],
             date: String::from("2022Jan4"),
             cycle: 0,
-            status: Status::Sinkd,
+            status: Status::Ready,
         }
     }
     pub fn from(
         hostname: String,
         username: String,
-        path: String,
+        paths: Vec<String>,
         date: String,
         cycle: u32,
         status: Status,
@@ -47,7 +52,7 @@ impl Payload {
         Payload {
             hostname,
             username,
-            path,
+            paths,
             date,
             cycle,
             status,
