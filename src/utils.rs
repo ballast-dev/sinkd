@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::process;
 use std::sync::Mutex;
 
-use crate::fancy;
+use crate::{fancy, ipc};
 
 // TODO: need to wrap in os specific way
 pub const PID_PATH: &str = "/run/sinkd.pid";
@@ -350,10 +350,15 @@ pub fn get_hostname() -> String {
             error!("uname didn't work? {}", e);
             String::from("uname-error")
         }
-        Ok(output) => String::from_utf8(output.stdout.to_ascii_lowercase()).unwrap_or_else(|_| {
-            error!("invalid string from uname -a");
-            String::from("invalid-hostname")
-        }),
+        Ok(output) => {
+            let mut v = output.stdout.to_ascii_lowercase();
+            v.truncate(v.len() - 1); // strip newline
+            debug!("{}", std::str::from_utf8(&v).unwrap());
+            String::from_utf8(v).unwrap_or_else(|_| {
+                error!("invalid string from uname -a");
+                String::from("invalid-hostname")
+            })
+        }
     }
 }
 
@@ -364,9 +369,55 @@ pub fn get_username() -> String {
             error!("whoami didn't work? {}", e);
             String::from("whoami error")
         }
-        Ok(output) => String::from_utf8(output.stdout.to_ascii_lowercase()).unwrap_or_else(|_| {
-            error!("invalid string from whoami");
-            String::from("invalid-username")
-        }),
+        Ok(output) => {
+            let mut v = output.stdout.to_ascii_lowercase();
+            v.truncate(v.len() - 1); // strip newline
+            debug!("{}", std::str::from_utf8(&v).unwrap());
+            String::from_utf8(v).unwrap_or_else(|_| {
+                error!("invalid string from whoami");
+                String::from("invalid-username")
+            })
+        }
     }
+}
+
+pub fn rsync(payload: ipc::Payload) {
+    // debug!("username: {}, hostname: {}, path: {}", username, hostname, path.display());
+    //? RSYNC options to consider
+    // --delete-excluded (also delete excluded files)
+    // --max-size=SIZE (limit size of transfers)
+    // --exclude
+
+    // Agnostic pathing allows sinkd not to care about user folder structure
+
+    debug!("{}", payload);
+    // let dest_path: String;
+    // if hostname.starts_with('/') {
+    //     // TODO: packager should set up folder '/srv/sinkd'
+    //     dest_path = String::from("/srv/sinkd/");
+    // } else {
+    //     // user permissions should persist regardless
+    //     dest_path = format!("sinkd@{}:/srv/sinkd/", &hostname);
+    // }
+
+    // let rsync_result = std::process::Command::new("rsync")
+    //     .arg("-atR") // archive, timestamps, relative
+    //     .arg("--delete")
+    //     // TODO: to add --exclude [list of folders] from config
+    //     .arg(&src_path)
+    //     .arg(&dest_path)
+    //     .spawn();
+
+    // match rsync_result {
+    //     Err(x) => {
+    //         error!("{:?}", x);
+    //     }
+    //     Ok(_) => {
+    //         info!(
+    //             "DID IT>> Called rsync src:{}  ->  dest:{}",
+    //             &src_path.display(),
+    //             &dest_path
+    //         );
+    //     }
+    // }
 }

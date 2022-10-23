@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import glob
 import os
 import shutil
@@ -29,6 +30,7 @@ def create_files(folder: Path, filenum: int, delay: float = 0.01):
 
 if __name__ == "__main__":
     TLD = "/home/tony/dmz/client"
+    subprocess.
     remove_files([TLD])
     boom_folder = Path(TLD, "boom")
     create_files(boom_folder, 3, 0.5)

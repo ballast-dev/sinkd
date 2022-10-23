@@ -4,7 +4,7 @@
 // /___/\__/_/  |___/\__/_/
 #![allow(unused_imports)]
 extern crate serde;
-use crate::{ipc, shiplog};
+use crate::{ipc, shiplog, utils};
 use paho_mqtt as mqtt;
 use std::{
     path::PathBuf,
@@ -15,16 +15,9 @@ use std::{
 
 pub fn start(verbosity: u8, clear_logs: bool) -> Result<(), String> {
     shiplog::init(clear_logs)?;
-    debug!("server:start >> mosquitto daemon");
-    if let Err(spawn_error) = process::Command::new("mosquitto").arg("-d").spawn() {
-        return Err(format!(
-            "Is mosquitto installed and in path? >> {}",
-            spawn_error.to_string()
-        ));
-    }
+    start_mosquitto()?; // always spawns on localhost
 
-    debug!("server:start >> spawning channel");
-    let (msg_tx, msg_rx): (mpsc::Sender<mqtt::Message>, mpsc::Receiver<mqtt::Message>) =
+    let (msg_tx, msg_rx): (mpsc::Sender<ipc::Payload>, mpsc::Receiver<ipc::Payload>) =
         mpsc::channel();
 
     let exit_cond = Arc::new(Mutex::new(false));
@@ -65,9 +58,22 @@ fn dispatch(msg: &Option<mqtt::Message>) {
     }
 }
 
+//? This command will not spawn new instances
+//? if mosquitto already active.
+pub fn start_mosquitto() -> Result<(), String> {
+    debug!("server:start >> mosquitto daemon");
+    if let Err(spawn_error) = process::Command::new("mosquitto").arg("-d").spawn() {
+        return Err(format!(
+            "Is mosquitto installed and in path? >> {}",
+            spawn_error.to_string()
+        ));
+    }
+    Ok(())
+}
+
 //? This thread is to ensure no lost messages from mqtt
 fn mqtt_entry(
-    tx: mpsc::Sender<mqtt::Message>,
+    synch_tx: mpsc::Sender<ipc::Payload>,
     exit_cond: Arc<Mutex<bool>>,
     cycle: Arc<Mutex<i32>>,
     verbosity: u8,
@@ -77,12 +83,15 @@ fn mqtt_entry(
 
     match mqtt::Client::new("tcp://localhost:1883") {
         Err(e) => {
-            error!("FATAL: unable to create mqtt server client: {}", e);
-            process::exit(2);
+            utils::fatal(&exit_cond);
+            return Err(mqtt::Error::GeneralString(format!(
+                "FATAL: unable to create mqtt server client: {}",
+                e
+            )));
         }
         Ok(cli) => {
             // Initialize the consumer before connecting
-            let msg_rx = cli.start_consuming();
+            let mqtt_rx = cli.start_consuming();
             let lwt =
                 mqtt::Message::new("sinkd/lost_conn", "sinkd server client lost connection", 1);
             let conn_opts = mqtt::ConnectOptionsBuilder::new()
@@ -109,44 +118,67 @@ fn mqtt_entry(
                     }
                 }
                 Err(e) => {
-                    error!(
-                        "FATAL client could not connect to localhost:1883, is mosquitto -d running? {}", e
-                    );
-                    process::exit(2);
+                    utils::fatal(&exit_cond);
+                    return Err(mqtt::Error::GeneralString(
+                        format!("FATAL client could not connect to localhost:1883, is mosquitto -d running? {}", e)
+                    ));
                 }
             }
 
             loop {
-                if let Ok(msg) = msg_rx.try_recv() {
-                    tx.send(msg.unwrap()).unwrap();
-                } else {
-                    std::thread::sleep(std::time::Duration::from_millis(500));
-                    publish(&cli, &cycle.lock().unwrap().to_string());
+                if utils::exited(&exit_cond) {
+                    return Err(mqtt::Error::General(
+                        "server>> synch thread exited, aborting mqtt thread",
+                    ));
+                }
+                match mqtt_rx.try_recv() {
+                    Ok(msg) => {
+                        // ! process mqtt messages
+                        let payload = ipc::decode(msg.unwrap().payload())?;
+                        synch_tx.send(payload).unwrap();
+                    }
+                    Err(err) => match err {
+                        crossbeam::channel::TryRecvError::Empty => {
+                            std::thread::sleep(std::time::Duration::from_millis(1500));
+                            debug!("server>> mqtt loop...")
+                        }
+                        crossbeam::channel::TryRecvError::Disconnected => {
+                            utils::fatal(&exit_cond);
+                            return Err(mqtt::Error::General(
+                                "server>> mqtt_rx channel disconnected",
+                            ));
+                        }
+                    },
                 }
             }
         }
     }
 }
 
+/// The engine behind sinkd is rsync
+/// With mqtt messages that are relevant invoke this and mirror current client
+/// to this server
 fn synch_entry(
-    rx: mpsc::Receiver<mqtt::Message>,
+    synch_rx: mpsc::Receiver<ipc::Payload>,
     exit_cond: Arc<Mutex<bool>>,
     cycle: Arc<Mutex<i32>>,
     verbosity: u8,
 ) -> Result<(), String> {
     loop {
-        match rx.recv() {
+        if utils::exited(&exit_cond) {
+            return Err(String::from(
+                "server>> mqtt_thread exited, aborting synch thread",
+            ));
+        }
+        match synch_rx.recv() {
+            // blocking to
             Err(e) => {
                 error!("server:synch_entry hangup on reciever?: {}", e);
             }
-            Ok(msg) => {
-                debug!("server:synch_entry >> {}", msg);
+            Ok(payload) => {
+                debug!("server:synch_entry >> got message from mqtt_thread!");
 
-                //? RSYNC options to consider
-                // --delete-excluded (also delete excluded files)
-                // --max-size=SIZE (limit size of transfers)
-                // --exclude
-
+                utils::rsync(payload);
                 // let rsync_result = process::Command::new("rsync")
                 //     .arg("-atR") // archive, timestamps, relative
                 //     .arg("--delete")
@@ -165,6 +197,7 @@ fn synch_entry(
                 //     // &src_path.display(),
                 //     // &dest_path
                 // );
+
                 let mut num = cycle.lock().unwrap();
                 *num += 1;
 
@@ -172,47 +205,12 @@ fn synch_entry(
                 // }
             }
         }
+        std::thread::sleep(std::time::Duration::from_secs(1));
     }
 }
 
 fn publish<'a>(mqtt_client: &mqtt::Client, msg: &'a str) {
     if let Err(e) = mqtt_client.publish(mqtt::Message::new("sinkd/status", msg, mqtt::QOS_0)) {
         error!("server:publish >> {}", e);
-    }
-}
-
-// TODO: move to it's own file
-fn fire_rsync(hostname: &String, src_path: &PathBuf) {
-    // debug!("username: {}, hostname: {}, path: {}", username, hostname, path.display());
-
-    // Agnostic pathing allows sinkd not to care about user folder structure
-    let dest_path: String;
-    if hostname.starts_with('/') {
-        // TODO: packager should set up folder '/srv/sinkd'
-        dest_path = String::from("/srv/sinkd/");
-    } else {
-        // user permissions should persist regardless
-        dest_path = format!("sinkd@{}:/srv/sinkd/", &hostname);
-    }
-
-    let rsync_result = std::process::Command::new("rsync")
-        .arg("-atR") // archive, timestamps, relative
-        .arg("--delete")
-        // TODO: to add --exclude [list of folders] from config
-        .arg(&src_path)
-        .arg(&dest_path)
-        .spawn();
-
-    match rsync_result {
-        Err(x) => {
-            error!("{:?}", x);
-        }
-        Ok(_) => {
-            info!(
-                "DID IT>> Called rsync src:{}  ->  dest:{}",
-                &src_path.display(),
-                &dest_path
-            );
-        }
     }
 }

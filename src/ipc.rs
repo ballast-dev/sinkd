@@ -1,4 +1,7 @@
-use std::time::Duration;
+use std::{
+    fmt::{self, write},
+    time,
+};
 
 use bincode;
 use paho_mqtt as mqtt;
@@ -10,13 +13,30 @@ use crate::utils;
 pub enum Reason {
     Sinking,
     Behind,
-    Other
+    Other,
 }
 
 #[derive(PartialEq, Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum Status {
     NotReady(Reason),
     Ready,
+}
+
+impl fmt::Display for Status {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            Status::NotReady(reason) => {
+                write!(f, "NotReady(");
+                match reason {
+                    Reason::Sinking => write!(f, "Sinking"),
+                    Reason::Behind => write!(f, "Behind"),
+                    Reason::Other => write!(f, "Other"),
+                };
+                write!(f, ")")
+            }
+            Status::Ready => write!(f, "Ready"),
+        }
+    }
 }
 
 /// Only time a Payload is sent is to say "new edits"
@@ -60,6 +80,25 @@ impl Payload {
     }
 }
 
+impl fmt::Display for Payload {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "hostname: {}, username: {}, paths: [",
+            self.hostname, self.username,
+        )
+        .unwrap();
+        for path in &self.paths {
+            write!(f, "{}, ", path).unwrap();
+        }
+        write!(
+            f,
+            "], date: {}, cycle: {}, status: {}",
+            self.date, self.cycle, self.status
+        )
+    }
+}
+
 pub fn encode(payload: &Payload) -> Result<Vec<u8>, mqtt::Error> {
     match bincode::serialize(payload) {
         Err(e) => Err(mqtt::Error::GeneralString(format!(
@@ -89,7 +128,11 @@ impl MqttClient {
         subscriptions: &[&str],
         publish_topic: &str,
     ) -> Result<(Self, mqtt::Receiver<Option<mqtt::Message>>), mqtt::Error> {
-        let cli = mqtt::Client::new(resolve_host(host)?)?;
+        let opts = mqtt::CreateOptionsBuilder::new()
+            .server_uri(resolve_host(host)?)
+            .client_id(utils::get_hostname())
+            .finalize();
+        let cli = mqtt::Client::new(opts)?;
 
         // Initialize the consumer before connecting
         let rx = cli.start_consuming();
@@ -102,7 +145,7 @@ impl MqttClient {
 
         // Define the set of options for the connection
         let conn_opts = mqtt::ConnectOptionsBuilder::new()
-            .keep_alive_interval(Duration::from_secs(20))
+            .keep_alive_interval(time::Duration::from_secs(20))
             .mqtt_version(mqtt::MQTT_VERSION_3_1_1)
             .clean_session(true)
             .will_message(lwt)

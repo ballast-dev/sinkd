@@ -36,17 +36,17 @@ pub fn start(verbosity: u8, clear_logs: bool) -> Result<(), String> {
         watch_entry(&mut inode_map, notify_rx, event_tx, &*exit_cond);
     });
 
-    let synch_thread = thread::spawn(move || {
-        if let Err(error) = synch_entry(&srv_addr, event_rx, &*exit_cond2) {
+    let mqtt_thread = thread::spawn(move || {
+        if let Err(error) = mqtt_entry(&srv_addr, event_rx, &*exit_cond2) {
             utils::fatal(&*exit_cond2);
-            error!("FATAL condition in mqtt thread, {}", error);
+            error!("client>> FATAL condition in mqtt_entry, {}", error);
         }
     });
 
     if let Err(error) = watch_thread.join() {
         return Err(format!("Client watch thread error! {:?}", error));
     }
-    if let Err(error) = synch_thread.join() {
+    if let Err(error) = mqtt_thread.join() {
         return Err(format!("Client mqtt thread error! {:?}", error));
     }
 
@@ -134,7 +134,7 @@ fn watch_entry(
     }
 }
 
-fn synch_entry(
+fn mqtt_entry(
     server_addr: &str,
     event_rx: mpsc::Receiver<PathBuf>,
     exit_cond: &Mutex<bool>,
@@ -268,7 +268,7 @@ fn filter_file_events(event_rx: &mpsc::Receiver<PathBuf>) -> Outcome<Vec<String>
             },
         }
     }
-    
+
     // buffered events
     let mut event_paths = vec![];
     if !path_set.is_empty() {

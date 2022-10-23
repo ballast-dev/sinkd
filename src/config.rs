@@ -188,22 +188,5 @@ pub fn get() -> Result<(String, InodeMap), String> {
             });
         }
     }
-    let srv_addr = resolve_server_addr(&parser.sys.server_addr)?;
-    Ok((srv_addr, inode_map))
-}
-
-fn resolve_server_addr(addr: &str) -> Result<String, String> {
-    match addr {
-        "localhost" => Ok(String::from("tcp://localhost:1883")),
-        _str => {
-            if _str.starts_with("/") {
-                Err(format!(
-                    "Found {}, did you intend on localhost?, check '/etc/sinkd.conf'",
-                    _str
-                ))
-            } else {
-                Ok(format!("tcp://{}:1883", _str))
-            }
-        }
-    }
+    Ok((parser.sys.server_addr, inode_map))
 }
