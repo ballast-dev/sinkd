@@ -105,10 +105,8 @@ pub fn build_sinkd() -> App<'static> {
 
 #[allow(dead_code)]
 fn main() {
-    println!("Running sinkd at {}", utils::get_timestamp("%Y%m%d-%T"));
+    println!("Running sinkd at {}", utils::get_timestamp("%T"));
 
-    // mqtt::listen();
-    // std::process::exit(0);
     let matches = build_sinkd().get_matches();
     let mut verbosity: u8 = 0;
     match matches.occurrences_of("verbose") {

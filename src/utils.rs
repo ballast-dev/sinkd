@@ -10,19 +10,21 @@ use crate::{fancy, ipc};
 // TODO: need to wrap in os specific way
 pub const PID_PATH: &str = "/run/sinkd.pid";
 pub const LOG_PATH: &str = "/var/log/sinkd.log";
+const TIMESTAMP_LENGTH: u8 = 25;
 
+#[link(name="timestamp", kind="static")]
 extern "C" {
     fn timestamp(ret_str: *mut c_char, size: c_uint, fmt_str: *const c_char);
 }
 
 pub fn get_timestamp(fmt_str: &str) -> String {
-    let ret_str = CString::new(Vec::with_capacity(25)).unwrap();
+    let ret_str = CString::new(Vec::with_capacity(TIMESTAMP_LENGTH.into())).unwrap();
     let ret_ptr: *mut c_char = ret_str.into_raw();
 
     let _fmt_str = CString::new(fmt_str.as_bytes()).unwrap();
     let stamp: CString;
     unsafe {
-        timestamp(ret_ptr, 25, _fmt_str.as_ptr());
+        timestamp(ret_ptr, TIMESTAMP_LENGTH.into(), _fmt_str.as_ptr());
         stamp = CString::from_raw(ret_ptr);
     }
     let v = stamp.into_bytes();

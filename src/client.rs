@@ -75,7 +75,7 @@ pub fn start(verbosity: u8, clear_logs: bool) -> Result<(), String> {
 fn interval_add(
     event_path: PathBuf,
     inode_map: &mut config::InodeMap,
-    synch_tx: &mpsc::Sender<PathBuf>,
+    event_tx: &mpsc::Sender<PathBuf>,
 ) {
     for (inode_path, inode) in inode_map {
         if event_path.starts_with(inode_path) {
@@ -84,7 +84,7 @@ fn interval_add(
             if elapse >= inode.interval {
                 debug!("EVENT>> elapse: {}", elapse.as_secs());
                 inode.last_event = now;
-                synch_tx.send(inode_path.clone()).unwrap(); // to kick off synch thread
+                event_tx.send(inode_path.clone()).unwrap(); // to kick off synch thread
             }
             break;
         }

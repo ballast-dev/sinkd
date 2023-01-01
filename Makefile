@@ -9,3 +9,8 @@ container:
 .PHONY: build 
 build:
 	sudo docker exec sinkd cargo build
+
+.PHONY: dev
+dev:
+	cargo rustc -- -Awarnings
+	./target/debug/sinkd

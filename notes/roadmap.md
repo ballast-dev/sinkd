@@ -27,3 +27,8 @@ Nice tip: https://gist.github.com/trendels/6582e95012f6c7fc6542
 
 ## Virtual file system mounting
 Could be useful
+
+## Brad's thoughts
+1. Install hook, to install environment
+1. Use X server in docker to run gui apps
+1. take everything with you, environment/gui/apps/dotfiles (this is it!)
