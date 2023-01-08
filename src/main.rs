@@ -20,22 +20,29 @@ mod sinkd;
 mod test;
 mod utils;
 
-use clap::{App, Arg, Command};
+use clap::{Arg, ArgAction, Command};
 
-pub fn build_sinkd() -> App<'static> {
-    App::new("sinkd")
+pub fn build_sinkd() -> Command {
+    Command::new("sinkd")
         .about("deployable cloud")
         .version(env!("CARGO_PKG_VERSION"))
+// let cfg = Arg::new("config")
+//       .short('c')
+//       .long("config")
+//       .action(ArgAction::Set)
+//       .value_name("FILE")
+//       .help("Provides a config file to myprog");
         .subcommand(Command::new("add")
             .about("Adds PATH to watch list\nlets sinkd become 'aware' of file or folder location provided")
-            .arg(Arg::with_name("SHARE")
+            .arg(Arg::new("share")
                 .short('s')
                 .long("share")
+                .value_name("SHARE")
                 .help("add watch for multiple users")
             )
             .arg(Arg::new("PATH")
                 .required(true)
-                .multiple_occurrences(true) // CAREFUL: this will consume other arguments
+                .num_args(1..)
                 .help("sinkd starts watching path")
             )
             .override_usage("sinkd add FILE [FILE..]")
@@ -47,7 +54,7 @@ pub fn build_sinkd() -> App<'static> {
                 // need to revisit, should user have explicit control
                 // possible -r flag for recursive 
                 .required(false)
-                .multiple_occurrences(true) // CAREFUL: this will consume other arguments
+                .num_args(0..)
                 .help("list watched files and directories")
             )
             .override_usage("sinkd ls [PATH..]")
@@ -57,29 +64,29 @@ pub fn build_sinkd() -> App<'static> {
             .about("Removes PATH from list of watched directories")
             .arg(Arg::new("PATH")
                 .required(true)
-                .multiple_occurrences(true) // CAREFUL: this will consume other arguments
+                .num_args(1..)
             )
             .override_usage("sinkd rm PATH")
         )
         .subcommand(Command::new("start")
             .about("Starts the daemon")
-            .usage("sinkd start [--client | --server]")
-            .arg(Arg::with_name("CLIENT")
+            .override_usage("sinkd start [--client | --server]")
+            .arg(Arg::new("CLIENT")
                 .short('c')
                 .long("client")
-                .takes_value(false)
+                .action(ArgAction::SetTrue)
                 .help("start sinkd in client mode")
             )
-            .arg(Arg::with_name("SERVER")
+            .arg(Arg::new("SERVER")
                 .short('s')
                 .long("server")
-                .takes_value(false)
+                .num_args(0)
                 .conflicts_with("CLIENT")
                 .help("start sinkd in server mode")
             )
-            .arg(Arg::with_name("clear-logs")
+            .arg(Arg::new("clear-logs")
                 .long("clear-logs")
-                .hidden(true)
+                .hide(true)
                 .action(clap::ArgAction::SetTrue)
             )
         )
@@ -92,15 +99,15 @@ pub fn build_sinkd() -> App<'static> {
         .subcommand(Command::new("log")
             .about("test out logging")
         )
-        .arg(Arg::with_name("verbose")
+        .arg(Arg::new("verbose")
             .short('v')
-            .multiple_occurrences(true)
+            .action(ArgAction::Count)
             .help("verbose output")
         )
-        .arg(Arg::with_name("reconfigure")
-            .long("reconfigure")
-            .help("verbose output")
-        )
+        // .arg(Arg::new("reconfigure")
+        //     .long("reconfigure")
+        //     .help("verbose output")
+        // )
 }
 
 #[allow(dead_code)]
@@ -108,33 +115,28 @@ fn main() {
     println!("Running sinkd at {}", utils::get_timestamp("%T"));
 
     let matches = build_sinkd().get_matches();
-    let mut verbosity: u8 = 0;
-    match matches.occurrences_of("verbose") {
-        1 => verbosity = 1,
-        2 => verbosity = 2,
-        3 => verbosity = 3,
-        _ => (),
-    }
-
-    match matches.occurrences_of("reconfigure") {
-        0 => (),
-        _ => {
-            // sinkd::reparse();
-            println!("Reloaded configuration");
-            return;
-        }
-    }
+    let verbosity = matches.get_count("verbose");
+    println!("verbosity!: {}", verbosity);
+    
+    // match matches.occurrences_of("reconfigure") {
+    //     0 => (),
+    //     _ => {
+    //         // sinkd::reparse();
+    //         println!("Reloaded configuration");
+    //         return;
+    //     }
+    // }
 
     match matches.subcommand() {
-        Some(("add", submatches)) => {
-            for path in submatches.values_of("PATH").unwrap() {
-                if std::path::Path::new(path).exists() {
-                    sinkd::add(path);
-                } else {
-                    println!("'{}' does not exist", path);
-                }
-            }
-        }
+        // Some(("add", submatches)) => {
+        //     for path in submatches.values_of("PATH").unwrap() {
+        //         if std::path::Path::new(path).exists() {
+        //             sinkd::add(path);
+        //         } else {
+        //             println!("'{}' does not exist", path);
+        //         }
+        //     }
+        // }
         Some(("ls", submatches)) => {
             if !submatches.args_present() {
                 sinkd::list(None);
@@ -154,15 +156,15 @@ fn main() {
             let clear_logs = *submatches.get_one::<bool>("clear-logs").unwrap_or(&false);
             if submatches.args_present() {
                 println!("Logging to: '{}'", utils::LOG_PATH);
-                if submatches.is_present("SERVER") {
-                    if let Err(e) = server::start(verbosity, clear_logs) {
-                        eprintln!("{}", e);
-                    }
-                } else if submatches.is_present("CLIENT") {
-                    if let Err(e) = client::start(verbosity, clear_logs) {
-                        eprintln!("{}", e);
-                    }
-                }
+                // if submatches.is_present("SERVER") {
+                //     if let Err(e) = server::start(verbosity, clear_logs) {
+                //         eprintln!("{}", e);
+                //     }
+                // } else if submatches.is_present("CLIENT") {
+                //     if let Err(e) = client::start(verbosity, clear_logs) {
+                //         eprintln!("{}", e);
+                //     }
+                // }
             } else {
                 eprintln!("Need know which to start --server or --client?")
             }
