@@ -46,5 +46,5 @@ attach:
 rm-image:
     @docker rmi -f alpine
 
-run *args:
+run *args: build-no-warn
     @./target/debug/sinkd {{args}}

@@ -20,6 +20,7 @@ mod sinkd;
 mod test;
 mod utils;
 
+use std::path::Path;
 use clap::{Arg, ArgAction, Command};
 
 pub fn build_sinkd() -> Command {
@@ -38,10 +39,12 @@ pub fn build_sinkd() -> Command {
                 .short('s')
                 .long("share")
                 .value_name("SHARE")
+                .num_args(1)
+                .action(ArgAction::Set)
                 .help("add watch for multiple users")
             )
-            .arg(Arg::new("PATH")
-                .required(true)
+            .arg(Arg::new("path")
+                // .required(true)
                 .num_args(1..)
                 .help("sinkd starts watching path")
             )
@@ -104,10 +107,6 @@ pub fn build_sinkd() -> Command {
             .action(ArgAction::Count)
             .help("verbose output")
         )
-        // .arg(Arg::new("reconfigure")
-        //     .long("reconfigure")
-        //     .help("verbose output")
-        // )
 }
 
 #[allow(dead_code)]
@@ -118,25 +117,34 @@ fn main() {
     let verbosity = matches.get_count("verbose");
     println!("verbosity!: {}", verbosity);
     
-    // match matches.occurrences_of("reconfigure") {
-    //     0 => (),
-    //     _ => {
-    //         // sinkd::reparse();
-    //         println!("Reloaded configuration");
-    //         return;
-    //     }
-    // }
-
     match matches.subcommand() {
-        // Some(("add", submatches)) => {
-        //     for path in submatches.values_of("PATH").unwrap() {
-        //         if std::path::Path::new(path).exists() {
-        //             sinkd::add(path);
-        //         } else {
-        //             println!("'{}' does not exist", path);
-        //         }
-        //     }
-        // }
+        Some(("add", submatches)) => {
+            // let share_paths = submatches.get_many::<String>("share").expect("no share path?").map(|v| v.as_str()).collect();
+            let share_paths: Vec<&String> = submatches.get_many::<String>("share").expect("no share path?").filter_map(|p| {
+                if Path::new(p).exists() { Some(p) } else { None }
+            }).collect();
+            
+            let paths: Vec<&String> = submatches.get_many::<String>("path").expect("no path?").filter_map(|p| {
+                if Path::new(p).exists() { Some(p) } else { None }
+            }).collect();
+
+            for p in &share_paths {
+                println!("share.... {}", p);
+            }
+            for p in &paths {
+                println!("regular... {}", p);
+            }
+            
+            // println!("got some paths? {:?}", actual_paths);
+
+            // for path in submatches.get_many("PATH").unwrap() {
+            //     if std::path::Path::new(path).exists() {
+            //         sinkd::add(path);
+            //     } else {
+            //         println!("'{}' does not exist", path);
+            //     }
+            // }
+        }
         Some(("ls", submatches)) => {
             if !submatches.args_present() {
                 sinkd::list(None);
