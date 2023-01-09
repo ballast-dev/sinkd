@@ -12,7 +12,7 @@ pub const PID_PATH: &str = "/run/sinkd.pid";
 pub const LOG_PATH: &str = "/var/log/sinkd.log";
 const TIMESTAMP_LENGTH: u8 = 25;
 
-#[link(name="timestamp", kind="static")]
+#[link(name = "timestamp", kind = "static")]
 extern "C" {
     fn timestamp(ret_str: *mut c_char, size: c_uint, fmt_str: *const c_char);
 }

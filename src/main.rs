@@ -20,19 +20,13 @@ mod sinkd;
 mod test;
 mod utils;
 
-use std::path::Path;
 use clap::{Arg, ArgAction, Command};
+use std::path::Path;
 
 pub fn build_sinkd() -> Command {
     Command::new("sinkd")
         .about("deployable cloud")
         .version(env!("CARGO_PKG_VERSION"))
-// let cfg = Arg::new("config")
-//       .short('c')
-//       .long("config")
-//       .action(ArgAction::Set)
-//       .value_name("FILE")
-//       .help("Provides a config file to myprog");
         .subcommand(Command::new("add")
             .about("Adds PATH to watch list\nlets sinkd become 'aware' of file or folder location provided")
             .arg(Arg::new("share")
@@ -40,12 +34,11 @@ pub fn build_sinkd() -> Command {
                 .long("share")
                 .value_name("SHARE")
                 .num_args(1)
-                .action(ArgAction::Set)
+                .action(ArgAction::Append)
                 .help("add watch for multiple users")
             )
             .arg(Arg::new("path")
-                // .required(true)
-                .num_args(1..)
+                .num_args(0..)
                 .help("sinkd starts watching path")
             )
             .override_usage("sinkd add FILE [FILE..]")
@@ -115,35 +108,40 @@ fn main() {
 
     let matches = build_sinkd().get_matches();
     let verbosity = matches.get_count("verbose");
-    println!("verbosity!: {}", verbosity);
-    
+
+    if verbosity > 0 {
+        println!("verbosity!: {}", verbosity);
+    }
+
     match matches.subcommand() {
         Some(("add", submatches)) => {
-            // let share_paths = submatches.get_many::<String>("share").expect("no share path?").map(|v| v.as_str()).collect();
-            let share_paths: Vec<&String> = submatches.get_many::<String>("share").expect("no share path?").filter_map(|p| {
-                if Path::new(p).exists() { Some(p) } else { None }
-            }).collect();
-            
-            let paths: Vec<&String> = submatches.get_many::<String>("path").expect("no path?").filter_map(|p| {
-                if Path::new(p).exists() { Some(p) } else { None }
-            }).collect();
+            let mut share_paths = Vec::<&String>::new();
+            let mut user_paths = Vec::<&String>::new();
+
+            match submatches.get_many::<String>("share") {
+                Some(shares) => {
+                    share_paths = shares
+                        .filter_map(|p| if Path::new(p).exists() { Some(p) } else { None })
+                        .collect();
+                }
+                None => (),
+            }
+
+            match submatches.get_many::<String>("path") {
+                Some(paths) => {
+                    user_paths = paths
+                        .filter_map(|p| if Path::new(p).exists() { Some(p) } else { None })
+                        .collect();
+                }
+                None => (),
+            }
 
             for p in &share_paths {
                 println!("share.... {}", p);
             }
-            for p in &paths {
+            for p in &user_paths {
                 println!("regular... {}", p);
             }
-            
-            // println!("got some paths? {:?}", actual_paths);
-
-            // for path in submatches.get_many("PATH").unwrap() {
-            //     if std::path::Path::new(path).exists() {
-            //         sinkd::add(path);
-            //     } else {
-            //         println!("'{}' does not exist", path);
-            //     }
-            // }
         }
         Some(("ls", submatches)) => {
             if !submatches.args_present() {
