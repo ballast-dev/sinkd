@@ -383,7 +383,7 @@ pub fn get_username() -> String {
     }
 }
 
-pub fn rsync(payload: ipc::Payload, dest: Option<&str>) -> Result<(), std::io::Error> {
+pub fn rsync(payload: ipc::Payload) -> Result<(), std::io::Error> {
     // debug!("username: {}, hostname: {}, path: {}", username, hostname, path.display());
     //? RSYNC options to consider
     // --delete-excluded (also delete excluded files)
@@ -403,8 +403,17 @@ pub fn rsync(payload: ipc::Payload, dest: Option<&str>) -> Result<(), std::io::E
     // }
 
     // 
-    let rsync_result = match dest {
-        Some("client") => {
+    let rsync_result = match payload.dest {
+        _dest if _dest == String::from("client") => {
+            std::process::Command::new("rsync")
+                .arg("-atR") // archive, timestamps, relative
+                .arg("--delete")
+                // TODO: to add --exclude [list of folders] from config
+                .args(payload.paths)
+                .arg(payload.hostname) // TODO: hostname + username for full path
+                .spawn()?
+        },
+        _dest if _dest == String::from("") => {
             std::process::Command::new("rsync")
                 .arg("-atR") // archive, timestamps, relative
                 .arg("--delete")
@@ -413,15 +422,9 @@ pub fn rsync(payload: ipc::Payload, dest: Option<&str>) -> Result<(), std::io::E
                 .args(payload.paths)
                 .spawn()?
         },
-        None => {
-            std::process::Command::new("rsync")
-                .arg("-atR") // archive, timestamps, relative
-                .arg("--delete")
-                // TODO: to add --exclude [list of folders] from config
-                .arg(" ")
-                .arg(" ")
-                .spawn()?
-        }
+        _ => { return Err( 
+            std::io::Error::new(std::io::ErrorKind::Unsupported, "rsync destination is incorrect!")
+        )}
     };
 
 

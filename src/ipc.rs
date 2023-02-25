@@ -48,6 +48,7 @@ pub struct Payload {
     pub date: String,
     pub cycle: u32,
     pub status: Status,
+    pub dest: String,
 }
 
 impl Payload {
@@ -59,6 +60,7 @@ impl Payload {
             date: String::from("2022Jan4"),
             cycle: 0,
             status: Status::Ready,
+            dest: String::from("server")
         }
     }
     pub fn from(
@@ -68,6 +70,7 @@ impl Payload {
         date: String,
         cycle: u32,
         status: Status,
+        dest: String
     ) -> Payload {
         Payload {
             hostname,
@@ -76,6 +79,7 @@ impl Payload {
             date,
             cycle,
             status,
+            dest
         }
     }
 }

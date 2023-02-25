@@ -178,7 +178,7 @@ fn synch_entry(
             Ok(payload) => {
                 debug!("server:synch_entry >> got message from mqtt_thread!");
 
-                utils::rsync(payload);
+                utils::rsync(payload)?;
                 // let rsync_result = process::Command::new("rsync")
                 //     .arg("-atR") // archive, timestamps, relative
                 //     .arg("--delete")
