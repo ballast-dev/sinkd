@@ -48,3 +48,7 @@ rm-image:
 
 run *args: build-no-warn
     @./target/debug/sinkd {{args}}
+
+start:
+    sudo systemctl start docker
+    docker container start sinkd

@@ -383,7 +383,7 @@ pub fn get_username() -> String {
     }
 }
 
-pub fn rsync(payload: ipc::Payload) {
+pub fn rsync(payload: ipc::Payload, dest: Option<&str>) -> Result<(), std::io::Error> {
     // debug!("username: {}, hostname: {}, path: {}", username, hostname, path.display());
     //? RSYNC options to consider
     // --delete-excluded (also delete excluded files)
@@ -402,13 +402,28 @@ pub fn rsync(payload: ipc::Payload) {
     //     dest_path = format!("sinkd@{}:/srv/sinkd/", &hostname);
     // }
 
-    // let rsync_result = std::process::Command::new("rsync")
-    //     .arg("-atR") // archive, timestamps, relative
-    //     .arg("--delete")
-    //     // TODO: to add --exclude [list of folders] from config
-    //     .arg(&src_path)
-    //     .arg(&dest_path)
-    //     .spawn();
+    // 
+    let rsync_result = match dest {
+        Some("client") => {
+            std::process::Command::new("rsync")
+                .arg("-atR") // archive, timestamps, relative
+                .arg("--delete")
+                // TODO: to add --exclude [list of folders] from config
+                .arg(payload.hostname)
+                .args(payload.paths)
+                .spawn()?
+        },
+        None => {
+            std::process::Command::new("rsync")
+                .arg("-atR") // archive, timestamps, relative
+                .arg("--delete")
+                // TODO: to add --exclude [list of folders] from config
+                .arg(" ")
+                .arg(" ")
+                .spawn()?
+        }
+    };
+
 
     // match rsync_result {
     //     Err(x) => {
@@ -422,4 +437,5 @@ pub fn rsync(payload: ipc::Payload) {
     //         );
     //     }
     // }
+    return Ok(())
 }
