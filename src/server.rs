@@ -4,7 +4,7 @@
 // /___/\__/_/  |___/\__/_/
 #![allow(unused_imports)]
 extern crate serde;
-use crate::{ipc, outcome::{Outcome, err_msg, err_str}, shiplog, utils};
+use crate::{ipc, outcome::{Outcome, err_msg}, shiplog, utils};
 use paho_mqtt as mqtt;
 use std::{
     path::PathBuf,
@@ -63,7 +63,7 @@ fn dispatch(msg: &Option<mqtt::Message>) {
 pub fn start_mosquitto() -> Outcome<()> {
     debug!("server:start >> mosquitto daemon");
     if let Err(spawn_error) = process::Command::new("mosquitto").arg("-d").spawn() {
-        return err_str(format!(
+        return err_msg(format!(
             "Is mosquitto installed and in path? >> {}",
             spawn_error.to_string()
         ));
@@ -116,7 +116,7 @@ fn mqtt_entry(
                 }
                 Err(e) => {
                     utils::fatal(&exit_cond);
-                    return err_str(
+                    return err_msg(
                         format!("FATAL client could not connect to localhost:1883, is mosquitto -d running? {}", e)
                     );
                 }
@@ -141,7 +141,7 @@ fn mqtt_entry(
                         }
                         crossbeam::channel::TryRecvError::Disconnected => {
                             utils::fatal(&exit_cond);
-                            return err_str(
+                            return err_msg(
                                 "server>> mqtt_rx channel disconnected",
                             );
                         }
