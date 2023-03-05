@@ -34,18 +34,20 @@ impl From<&'static str> for Bad {
 impl From<paho_mqtt::Error> for Bad {
     fn from(error: paho_mqtt::Error) -> Self {
         match error {
-            paho_mqtt::Error::Paho(_) => todo!(),
-            paho_mqtt::Error::PahoDescr(_, _) => todo!(),
-            paho_mqtt::Error::Publish(_, _) => todo!(),
-            paho_mqtt::Error::ReasonCode(_) => todo!(),
-            paho_mqtt::Error::BadTopicFilter => todo!(),
-            paho_mqtt::Error::Io(_) => todo!(),
-            paho_mqtt::Error::Utf8(_) => todo!(),
-            paho_mqtt::Error::Nul(_) => todo!(),
-            paho_mqtt::Error::Conversion => todo!(),
-            paho_mqtt::Error::Timeout => todo!(),
-            paho_mqtt::Error::General(_) => todo!(),
-            paho_mqtt::Error::GeneralString(_) => todo!(),
+            paho_mqtt::Error::Paho(e) => Bad::Heap(format!("ERROR Paho> library, num: {}", e)),
+            paho_mqtt::Error::PahoDescr(num, msg) => {
+                Bad::Heap(format!("ERROR Paho> Description(redundant):{}, {}", num, msg))
+            }
+            paho_mqtt::Error::Publish(num, msg) => Bad::Heap(format!("ERROR Paho> publish num:{}, msg:{}", num, msg)),
+            paho_mqtt::Error::ReasonCode(code) => Bad::Heap(format!("ERROR Paho> mqttv5 reason code: {}", code)),
+            paho_mqtt::Error::BadTopicFilter => Bad::Stack("ERROR Paho> Bad Topic Filter"),
+            paho_mqtt::Error::Io(num) => Bad::Heap(format!("ERROR Paho> IO lowlevel: {}", num)),
+            paho_mqtt::Error::Utf8(e) => Bad::Heap(format!("ERROR Paho> parsing UTF8 str: {}", e)),
+            paho_mqtt::Error::Nul(_) => Bad::Stack("ERROR Paho> Nul"),
+            paho_mqtt::Error::Conversion => Bad::Stack("ERROR Paho> conversion between types"),
+            paho_mqtt::Error::Timeout => Bad::Stack("ERROR Paho> timeout from synchronous operation"),
+            paho_mqtt::Error::General(msg) => Bad::Heap(format!("ERROR Paho> {}", msg)),
+            paho_mqtt::Error::GeneralString(msg) => Bad::Heap(format!("ERROR Paho> {}", msg)),
         }
     }
 }
