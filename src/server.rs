@@ -4,7 +4,7 @@
 // /___/\__/_/  |___/\__/_/
 #![allow(unused_imports)]
 extern crate serde;
-use crate::{ipc, shiplog, utils};
+use crate::{ipc, outcome::{Outcome, err_msg, err_str}, shiplog, utils};
 use paho_mqtt as mqtt;
 use std::{
     path::PathBuf,
@@ -13,7 +13,7 @@ use std::{
     thread,
 };
 
-pub fn start(verbosity: u8, clear_logs: bool) -> Result<(), String> {
+pub fn start(verbosity: u8, clear_logs: bool) -> Outcome<()> {
     shiplog::init(clear_logs)?;
     start_mosquitto()?; // always spawns on localhost
 
@@ -60,10 +60,10 @@ fn dispatch(msg: &Option<mqtt::Message>) {
 
 //? This command will not spawn new instances
 //? if mosquitto already active.
-pub fn start_mosquitto() -> Result<(), String> {
+pub fn start_mosquitto() -> Outcome<()> {
     debug!("server:start >> mosquitto daemon");
     if let Err(spawn_error) = process::Command::new("mosquitto").arg("-d").spawn() {
-        return Err(format!(
+        return err_str(format!(
             "Is mosquitto installed and in path? >> {}",
             spawn_error.to_string()
         ));
@@ -77,17 +77,14 @@ fn mqtt_entry(
     exit_cond: Arc<Mutex<bool>>,
     cycle: Arc<Mutex<i32>>,
     verbosity: u8,
-) -> Result<(), mqtt::Error> {
+) -> Outcome<()> {
     let (mqtt_client, mqtt_rx) =
         ipc::MqttClient::new(Some("localhost"), &["sinkd/clients"], "sinkd/server")?;
 
     match mqtt::Client::new("tcp://localhost:1883") {
         Err(e) => {
             utils::fatal(&exit_cond);
-            return Err(mqtt::Error::GeneralString(format!(
-                "FATAL: unable to create mqtt server client: {}",
-                e
-            )));
+            return err_msg("FATAL: unable to create mqtt broker on server");
         }
         Ok(cli) => {
             // Initialize the consumer before connecting
@@ -119,17 +116,17 @@ fn mqtt_entry(
                 }
                 Err(e) => {
                     utils::fatal(&exit_cond);
-                    return Err(mqtt::Error::GeneralString(
+                    return err_str(
                         format!("FATAL client could not connect to localhost:1883, is mosquitto -d running? {}", e)
-                    ));
+                    );
                 }
             }
 
             loop {
                 if utils::exited(&exit_cond) {
-                    return Err(mqtt::Error::General(
+                    return err_msg(
                         "server>> synch thread exited, aborting mqtt thread",
-                    ));
+                    );
                 }
                 match mqtt_rx.try_recv() {
                     Ok(msg) => {
@@ -144,9 +141,9 @@ fn mqtt_entry(
                         }
                         crossbeam::channel::TryRecvError::Disconnected => {
                             utils::fatal(&exit_cond);
-                            return Err(mqtt::Error::General(
+                            return err_str(
                                 "server>> mqtt_rx channel disconnected",
-                            ));
+                            );
                         }
                     },
                 }
@@ -163,12 +160,10 @@ fn synch_entry(
     exit_cond: Arc<Mutex<bool>>,
     cycle: Arc<Mutex<i32>>,
     verbosity: u8,
-) -> Result<(), String> {
+) -> Outcome<()> {
     loop {
         if utils::exited(&exit_cond) {
-            return Err(String::from(
-                "server>> mqtt_thread exited, aborting synch thread",
-            ));
+            return err_msg("server>> mqtt_thread exited, aborting synch thread");
         }
         match synch_rx.recv() {
             // blocking to

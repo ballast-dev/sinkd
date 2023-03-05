@@ -11,7 +11,7 @@ extern crate rpassword;
 
 mod client;
 mod config;
-mod defs;
+mod outcome;
 mod fancy;
 mod ipc;
 mod server;
@@ -21,6 +21,7 @@ mod test;
 mod utils;
 
 use clap::{Arg, ArgAction, Command};
+use outcome::Outcome;
 use std::path::Path;
 
 pub fn build_sinkd() -> Command {
@@ -76,14 +77,14 @@ pub fn build_sinkd() -> Command {
             .arg(Arg::new("SERVER")
                 .short('s')
                 .long("server")
-                .num_args(0)
                 .conflicts_with("CLIENT")
+                .action(ArgAction::SetTrue)
                 .help("start sinkd in server mode")
             )
             .arg(Arg::new("clear-logs")
                 .long("clear-logs")
                 .hide(true)
-                .action(clap::ArgAction::SetTrue)
+                .action(ArgAction::SetTrue)
             )
         )
         .subcommand(Command::new("stop")
@@ -100,6 +101,14 @@ pub fn build_sinkd() -> Command {
             .action(ArgAction::Count)
             .help("verbose output")
         )
+}
+
+// user notification of operation
+fn handle_outcome<T>(outcome: Outcome<T>) {
+    match outcome {
+        Ok(_) => { println!("operation completed successfully") },
+        Err(e) => { println!("{:?}", e) }
+    }
 }
 
 #[allow(dead_code)]
@@ -162,15 +171,15 @@ fn main() {
             let clear_logs = *submatches.get_one::<bool>("clear-logs").unwrap_or(&false);
             if submatches.args_present() {
                 println!("Logging to: '{}'", utils::LOG_PATH);
-                // if submatches.is_present("SERVER") {
-                //     if let Err(e) = server::start(verbosity, clear_logs) {
-                //         eprintln!("{}", e);
-                //     }
-                // } else if submatches.is_present("CLIENT") {
-                //     if let Err(e) = client::start(verbosity, clear_logs) {
-                //         eprintln!("{}", e);
-                //     }
-                // }
+                if submatches.get_flag("SERVER") {
+                    if let Err(e) = server::start(verbosity, clear_logs) {
+                        eprintln!("{}", e);
+                    }
+                } else if submatches.get_flag("CLIENT") {
+                    if let Err(e) = client::start(verbosity, clear_logs) {
+                        eprintln!("{}", e);
+                    }
+                }
             } else {
                 eprintln!("Need know which to start --server or --client?")
             }

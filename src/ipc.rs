@@ -24,15 +24,15 @@ pub enum Status {
 
 impl fmt::Display for Status {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
+        match self {
             Status::NotReady(reason) => {
-                write!(f, "NotReady(");
+                write!(f, "NotReady(").unwrap();
                 match reason {
-                    Reason::Sinking => write!(f, "Sinking"),
-                    Reason::Behind => write!(f, "Behind"),
-                    Reason::Other => write!(f, "Other"),
+                    Reason::Sinking => write!(f, "Sinking").unwrap(),
+                    Reason::Behind => write!(f, "Behind").unwrap(),
+                    Reason::Other => write!(f, "Other").unwrap(),
                 };
-                write!(f, ")")
+                write!(f, ")")  // return result of write
             }
             Status::Ready => write!(f, "Ready"),
         }

@@ -1,7 +1,6 @@
-use crate::{config, defs::Outcome, ipc, shiplog, utils};
+use crate::{config, outcome::{Outcome, err_msg}, ipc, shiplog, utils};
 use crossbeam::channel::TryRecvError;
 use notify::{DebouncedEvent, Watcher};
-use paho_mqtt as mqtt;
 use std::{
     collections::HashSet,
     path::PathBuf,
@@ -9,13 +8,6 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-
-pub enum State {
-    Caching,
-    Sinking,
-    Behind,
-    UpToDate,
-}
 
 #[warn(unused_features)]
 pub fn start(verbosity: u8, clear_logs: bool) -> Result<(), String> {
@@ -141,7 +133,6 @@ fn mqtt_entry(
 ) -> Outcome<()> {
     let mut payload = ipc::Payload::new();
     // Using Hashset to prevent repeated entries
-    let mut state = State::UpToDate;
     // TODO need to read from config
 
     let (mqtt_client, mqtt_rx) =
@@ -150,7 +141,7 @@ fn mqtt_entry(
     loop {
         // Check to make sure other thread didn't exit
         if utils::exited(&exit_cond) {
-            return Err(mqtt::Error::General("exit condition reached"));
+            return err_msg("exit condition reached");
         }
 
         // process mqtt traffic from server
@@ -187,7 +178,7 @@ fn mqtt_entry(
                 }
             }
             Err(e) => match e {
-                TryRecvError::Disconnected => return Err(mqtt::Error::General("mqtt_rx hung up?")),
+                TryRecvError::Disconnected => return err_msg("mqtt_rx hung up?"),
                 TryRecvError::Empty => (),
             },
         }
@@ -262,7 +253,7 @@ fn filter_file_events(event_rx: &mpsc::Receiver<PathBuf>) -> Outcome<Vec<String>
             }
             Err(err) => match err {
                 mpsc::TryRecvError::Disconnected => {
-                    return Err(mqtt::Error::General("event_rx disconnected"))
+                    return err_msg("event_rx disconnected")
                 }
                 mpsc::TryRecvError::Empty => break, // Ready to send!
             },
