@@ -70,7 +70,7 @@ pub fn start_mosquitto() -> Outcome<()> {
     if let Err(spawn_error) = process::Command::new("mosquitto").arg("-d").spawn() {
         return err_msg(format!(
             "Is mosquitto installed and in path? >> {}",
-            spawn_error.to_string()
+            spawn_error
         ));
     }
     Ok(())
@@ -80,8 +80,8 @@ pub fn start_mosquitto() -> Outcome<()> {
 fn mqtt_entry(
     synch_tx: mpsc::Sender<ipc::Payload>,
     exit_cond: Arc<Mutex<bool>>,
-    cycle: Arc<Mutex<i32>>,
-    verbosity: u8,
+    _cycle: Arc<Mutex<i32>>,
+    _verbosity: u8,
 ) -> Outcome<()> {
     let (mqtt_client, mqtt_rx) =
         ipc::MqttClient::new(Some("localhost"), &["sinkd/clients"], "sinkd/server")?;
@@ -96,7 +96,7 @@ fn mqtt_entry(
                 // need to figure out state of server before synchronizing
                 let mut payload = ipc::decode(msg.unwrap().payload())?;
 
-                if let Err(_) = mqtt_client.publish(&mut payload) {
+                if mqtt_client.publish(&mut payload).is_err() {
                     unimplemented!()
                 }
                 synch_tx.send(payload).unwrap(); // value moves/consumed here
@@ -122,7 +122,7 @@ fn synch_entry(
     synch_rx: mpsc::Receiver<ipc::Payload>,
     exit_cond: Arc<Mutex<bool>>,
     cycle: Arc<Mutex<i32>>,
-    verbosity: u8,
+    _verbosity: u8,
 ) -> Outcome<()> {
     loop {
         if utils::exited(&exit_cond) {

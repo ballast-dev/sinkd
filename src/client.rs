@@ -14,7 +14,7 @@ use std::{
 };
 
 #[warn(unused_features)]
-pub fn start(verbosity: u8, clear_logs: bool) -> Result<(), String> {
+pub fn start(_verbosity: u8, clear_logs: bool) -> Result<(), String> {
     shiplog::init(clear_logs)?;
     let (srv_addr, mut inode_map) = config::get()?;
 
@@ -34,11 +34,11 @@ pub fn start(verbosity: u8, clear_logs: bool) -> Result<(), String> {
     let _watchers = get_watchers(&inode_map, notify_tx);
 
     let watch_thread =
-        thread::spawn(move || watch_entry(&mut inode_map, notify_rx, event_tx, &*exit_cond));
+        thread::spawn(move || watch_entry(&mut inode_map, notify_rx, event_tx, &exit_cond));
 
     let mqtt_thread = thread::spawn(move || {
-        if let Err(e) = mqtt_entry(&srv_addr, &inode_map2, event_rx, &*exit_cond2) {
-            utils::fatal(&*exit_cond2);
+        if let Err(e) = mqtt_entry(&srv_addr, &inode_map2, event_rx, &exit_cond2) {
+            utils::fatal(&exit_cond2);
             error!("client>> FATAL condition in mqtt_entry, {}", e);
         }
     });
@@ -100,7 +100,7 @@ fn watch_entry(
     exit_cond: &Mutex<bool>,
 ) {
     loop {
-        if utils::exited(&exit_cond) {
+        if utils::exited(exit_cond) {
             break;
         }
 
@@ -129,7 +129,7 @@ fn watch_entry(
                 }
                 mpsc::TryRecvError::Disconnected => {
                     error!("FATAL: notify_rx hung up in watch_entry");
-                    utils::fatal(&exit_cond);
+                    utils::fatal(exit_cond);
                 }
             },
         }
@@ -142,15 +142,15 @@ fn mqtt_entry(
     event_rx: mpsc::Receiver<PathBuf>,
     exit_cond: &Mutex<bool>,
 ) -> Outcome<()> {
-    let mut payload = ipc::Payload::new();
+    let _payload = ipc::Payload::new();
     let (mqtt_client, mqtt_rx) =
         ipc::MqttClient::new(Some(server_addr), &["sinkd/server"], "sinkd/clients")?;
 
     // The server will send status updates to it's clients every 5 seconds
     loop {
         // Check to make sure other thread didn't exit
-        if utils::exited(&exit_cond) {
-            return err_msg("exit condition reached");
+        if utils::exited(exit_cond) {
+            return err_msg("mqtt_entry>> exit condition reached");
         }
 
         // process mqtt traffic from server
@@ -161,7 +161,7 @@ fn mqtt_entry(
                     debug!("client>> got message!: {}", msg);
                     if let Ok(decoded_payload) = ipc::decode(msg.payload()) {
                         // recieved message from server, need to process
-                        process(&event_rx, &mqtt_client, &inode_map, decoded_payload);
+                        process(&event_rx, &mqtt_client, inode_map, decoded_payload);
                     } else {
                         error!("unable to decode message: {:?}", msg.payload())
                     }
@@ -170,7 +170,10 @@ fn mqtt_entry(
                 }
             }
             Err(e) => match e {
-                TryRecvError::Disconnected => return err_msg("mqtt_rx hung up?"),
+                TryRecvError::Disconnected => {
+                    utils::fatal(exit_cond);
+                    return err_msg("mqtt_rx hung up?");
+                },
                 TryRecvError::Empty => warn!("client>>mqtt_entry:TryRecvError::Empty"),
             },
         }
@@ -211,7 +214,7 @@ fn process(
         },
         ipc::Status::Ready => {
             let mut payload = ipc::Payload::new();
-            match filter_file_events(&event_rx) {
+            match filter_file_events(event_rx) {
                 Ok(filtered_paths) => payload.paths = filtered_paths,
                 Err(e) => {
                     error!("{}", e);
@@ -246,10 +249,10 @@ fn get_watchers(
             }
         }
     }
-    return watchers;
+    watchers
 }
 
-fn cache(path: &str) -> Result<(), String> {
+fn cache(_path: &str) -> Result<(), String> {
     Ok(())
 }
 

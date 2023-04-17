@@ -82,10 +82,10 @@ impl ConfigParser {
                     return Err(format!("Invalid sytax in '/etc/sinkd.conf': {}", syn));
                 }
                 ParseError::FileNotFound => {
-                    return Err(format!("File not found: '/etc/sinkd.conf'"));
+                    return Err("File not found: '/etc/sinkd.conf'".to_string());
                 }
                 _ => {
-                    return Err(format!("sysconfig unknown condition"));
+                    return Err("sysconfig unknown condition".to_string());
                 }
             }
         }
@@ -140,7 +140,7 @@ impl ConfigParser {
     }
 
     fn get_user_config(user_config: &str) -> Result<UserParser, ParseError> {
-        match fs::read_to_string(&user_config) {
+        match fs::read_to_string(user_config) {
             Err(_) => Err(ParseError::FileNotFound),
             Ok(output) => match toml::from_str(&output) {
                 Err(error) => Err(ParseError::InvalidSyntax(error.to_string())),

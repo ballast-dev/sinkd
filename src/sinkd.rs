@@ -20,7 +20,7 @@ pub fn add(file: &str) -> bool {
     //     libc::signal(libc::SIGHUP, s);
     // }
     println!("appending '{}' to watch files", file);
-    return true; // able to watch directory
+    true // able to watch directory
 }
 
 pub fn list(paths: Option<&Vec<&str>>) {
@@ -56,7 +56,7 @@ pub fn stop() -> bool {
     match utils::get_pid() {
         Err(e) => {
             eprintln!("{}", e);
-            return false;
+            false
         }
         Ok(pid) => {
             std::process::Command::new("kill")
@@ -69,10 +69,10 @@ pub fn stop() -> bool {
             match utils::set_pid(0) {
                 Err(e) => {
                     eprintln!("{}", e);
-                    return false;
+                    false
                 }
                 Ok(_) => {
-                    return true;
+                    true
                 }
             }
         }

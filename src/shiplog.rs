@@ -32,7 +32,7 @@ impl ShipLog {
         // std::mem::drop
         // how to close the file to rotate?
         // drop(self.file);
-        return true;
+        true
     }
 }
 

@@ -1,10 +1,10 @@
 use std::{
-    fmt::{self, write},
+    fmt::{self},
     path::PathBuf,
     time,
 };
 
-use bincode;
+
 use paho_mqtt as mqtt;
 use serde::{Deserialize, Serialize};
 
@@ -140,13 +140,13 @@ impl fmt::Display for Payload {
 
 /// Adds timestamp and serializes payload for transfer
 pub fn encode(payload: &mut Payload) -> Result<Vec<u8>, mqtt::Error> {
-    payload.date = utils::get_timestamp("%Y%m%d").to_owned();
+    payload.date = utils::get_timestamp("%Y%m%d");
     match bincode::serialize(payload) {
         Err(e) => Err(mqtt::Error::GeneralString(format!(
             "FATAL, bincode::serialize >> {}",
             e
         ))),
-        Ok(stream) => return Ok(stream),
+        Ok(stream) => Ok(stream),
     }
 }
 
@@ -211,14 +211,14 @@ impl MqttClient {
                         // Register subscriptions on the server
                         debug!("Subscribing to topics with requested QoS: {:?}...", qos);
 
-                        cli.subscribe_many(&subscriptions, &qos)
+                        cli.subscribe_many(subscriptions, &qos)
                             .and_then(|rsp| {
                                 rsp.subscribe_many_response()
                                     .ok_or(mqtt::Error::General("Bad response"))
                             })
-                            .and_then(|vqos| {
+                            .map(|vqos| {
                                 debug!("QoS granted: {:?}", vqos);
-                                Ok(())
+                                
                             })?;
 
                         Ok((
@@ -254,7 +254,7 @@ fn resolve_host(host: Option<&str>) -> Result<String, mqtt::Error> {
     match host {
         Some("localhost") => Ok(String::from("tcp://localhost:1883")),
         Some(_str) => {
-            if _str.starts_with("/") {
+            if _str.starts_with('/') {
                 Err(mqtt::Error::General(
                     "did you intend on localhost?, check '/etc/sinkd.conf'",
                 ))

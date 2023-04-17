@@ -33,7 +33,7 @@ pub fn get_timestamp(fmt_str: &str) -> String {
 
 pub fn have_permissions() -> bool {
     unsafe {
-        return libc::geteuid() == 0;
+        libc::geteuid() == 0
     }
 }
 
@@ -47,12 +47,12 @@ pub fn create_pid_file() -> Result<(), String> {
         match std::fs::File::create(&pid_file) {
             Err(why) => {
                 let err_str = format!("cannot create {:?}, {:?}", pid_file, why.kind());
-                return Err(err_str);
+                Err(err_str)
             }
-            Ok(_) => return Ok(()),
+            Ok(_) => Ok(()),
         }
     } else {
-        return Ok(()); // already created
+        Ok(()) // already created
     }
     // fs::File::create(PID_FILE).expect("unable to create pid file, permissions?");
     // let metadata = pid_file.metadata().unwrap();
@@ -70,12 +70,12 @@ pub fn create_log_file(clear: bool) -> Result<(), String> {
         match std::fs::File::create(&log_file) {
             Err(why) => {
                 let err_str = format!("cannot create {:?}, {:?}", log_file, why.kind());
-                return Err(err_str);
+                Err(err_str)
             }
-            Ok(_) => return Ok(()),
+            Ok(_) => Ok(()),
         }
     } else {
-        return Ok(()); // already created
+        Ok(()) // already created
     }
 }
 
@@ -90,22 +90,22 @@ pub fn get_pid() -> Result<u16, String> {
     let pid_file = PathBuf::from(PID_PATH);
 
     if !pid_file.exists() {
-        return Err(String::from("pid file not found"));
+        Err(String::from("pid file not found"))
     } else {
         match std::fs::read(PID_PATH) {
             Err(err) => {
                 let err_str = format!("Cannot read {}: {}", PID_PATH, err);
-                return Err(err_str);
+                Err(err_str)
             }
             Ok(contents) => {
                 let pid_str = String::from_utf8_lossy(&contents);
                 match pid_str.parse::<u16>() {
                     Err(e2) => {
                         let err_str = format!("Couldn't parse pid: {}", e2);
-                        return Err(err_str);
+                        Err(err_str)
                     }
                     Ok(pid) => {
-                        return Ok(pid);
+                        Ok(pid)
                     }
                 }
             }
@@ -124,15 +124,15 @@ pub fn set_pid(pid: u16) -> Result<(), String> {
             let c_str = CString::new(PID_PATH).unwrap();
             libc::unlink(c_str.into_raw());
         }
-        return Ok(());
+        Ok(())
     } else {
         match std::fs::write(pid_file, pid.to_ne_bytes()) {
             Err(err) => {
                 let err_str = format!("couldn't clear pid in ~/.sinkd/pid\n{}", err);
-                return Err(err_str);
+                Err(err_str)
             }
             Ok(()) => {
-                return Ok(());
+                Ok(())
             }
         }
     }
@@ -158,7 +158,7 @@ fn gen_keys() -> bool {
     } else {
         println!("generated key for current user");
     }
-    return true;
+    true
 }
 
 fn copy_keys_to_remote(host: &str) -> bool {
@@ -195,10 +195,10 @@ fn copy_keys_to_remote(host: &str) -> bool {
 
     if shell_stderr.contains("not found") {
         println!("command not found: ssh-eval, is ssh installed?");
-        return false;
+        false
     } else {
         println!("loaded private key with ssh-agent, passwordless login enabled!");
-        return true;
+        true
     }
 }
 
@@ -249,12 +249,12 @@ ENDCONF
     }
 }
 
-pub fn setup_server(verbosity: u8, host: &str) {
+pub fn setup_server(_verbosity: u8, host: &str) {
     let pass = rpassword::prompt_password("setting up daemon on server...\npassword: ").unwrap();
-    set_up_rsync_daemon(&host, &pass);
+    set_up_rsync_daemon(host, &pass);
 }
 
-pub fn setup_keys(verbosity: u8, host: &str) {
+pub fn setup_keys(_verbosity: u8, host: &str) {
     if !gen_keys() {
         fancy::print_fancyln(
             "Unable to generate keys",
@@ -403,7 +403,7 @@ pub fn rsync(payload: &ipc::Payload) -> Result<(), std::io::Error> {
     // }
 
     //
-    let rsync_result = match &payload.dest {
+    let _rsync_result = match &payload.dest {
         _dest if _dest == "client" => {
             std::process::Command::new("rsync")
                 .arg("-atR") // archive, timestamps, relative
@@ -413,7 +413,7 @@ pub fn rsync(payload: &ipc::Payload) -> Result<(), std::io::Error> {
                 .arg(&payload.hostname) // TODO: hostname + username for full path
                 .spawn()?
         }
-        _dest if _dest == "" => {
+        _dest if _dest.is_empty() => {
             std::process::Command::new("rsync")
                 .arg("-atR") // archive, timestamps, relative
                 .arg("--delete")
@@ -442,5 +442,5 @@ pub fn rsync(payload: &ipc::Payload) -> Result<(), std::io::Error> {
     //         );
     //     }
     // }
-    return Ok(());
+    Ok(())
 }

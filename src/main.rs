@@ -132,22 +132,16 @@ fn main() {
             let mut share_paths = Vec::<&String>::new();
             let mut user_paths = Vec::<&String>::new();
 
-            match submatches.get_many::<String>("share") {
-                Some(shares) => {
-                    share_paths = shares
-                        .filter_map(|p| if Path::new(p).exists() { Some(p) } else { None })
-                        .collect();
-                }
-                None => (),
+            if let Some(shares) = submatches.get_many::<String>("share") {
+                share_paths = shares
+                    .filter(|p| Path::new(p).exists())
+                    .collect();
             }
 
-            match submatches.get_many::<String>("path") {
-                Some(paths) => {
-                    user_paths = paths
-                        .filter_map(|p| if Path::new(p).exists() { Some(p) } else { None })
-                        .collect();
-                }
-                None => (),
+            if let Some(paths) = submatches.get_many::<String>("path") {
+                user_paths = paths
+                    .filter(|p| Path::new(p).exists())
+                    .collect();
             }
 
             for p in &share_paths {
