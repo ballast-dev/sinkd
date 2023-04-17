@@ -1,5 +1,6 @@
 use std::{
     fmt::{self, write},
+    path::PathBuf,
     time,
 };
 
@@ -32,7 +33,7 @@ impl fmt::Display for Status {
                     Reason::Behind => write!(f, "Behind").unwrap(),
                     Reason::Other => write!(f, "Other").unwrap(),
                 };
-                write!(f, ")")  // return result of write
+                write!(f, ")") // return result of write
             }
             Status::Ready => write!(f, "Ready"),
         }
@@ -40,11 +41,11 @@ impl fmt::Display for Status {
 }
 
 /// Only time a Payload is sent is to say "new edits"
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Payload {
     pub hostname: String,
     pub username: String,
-    pub paths: Vec<String>,
+    pub paths: Vec<PathBuf>,
     pub date: String,
     pub cycle: u32,
     pub status: Status,
@@ -60,17 +61,17 @@ impl Payload {
             date: String::from("2022Jan4"),
             cycle: 0,
             status: Status::Ready,
-            dest: String::from("server")
+            dest: String::from("server"),
         }
     }
     pub fn from(
         hostname: String,
         username: String,
-        paths: Vec<String>,
+        paths: Vec<PathBuf>,
         date: String,
         cycle: u32,
         status: Status,
-        dest: String
+        dest: String,
     ) -> Payload {
         Payload {
             hostname,
@@ -79,7 +80,41 @@ impl Payload {
             date,
             cycle,
             status,
-            dest
+            dest,
+        }
+    }
+    pub fn hostname<'a>(mut self, hostname: &'a str) -> Self {
+        self.hostname = hostname.to_string();
+        self
+    }
+    pub fn username<'a>(mut self, username: &'a str) -> Self {
+        self.username = username.to_string();
+        self
+    }
+    pub fn paths(mut self, paths: Vec<PathBuf>) -> Self {
+        self.paths = paths; // ownership
+        self
+    }
+    pub fn date<'a>(mut self, date: &'a str) -> Self {
+        self.date = date.into();
+        self
+    }
+    pub fn cycle(mut self, cycle: u32) -> Self {
+        self.cycle = cycle;
+        self
+    }
+    pub fn status(mut self, status: Status) -> Self {
+        self.status = status;
+        self
+    }
+    pub fn dest<'a>(mut self, dest: &'a str) -> Self {
+        self.dest = dest.into(); // ownership
+        self
+    }
+    pub fn ready(self) -> Result<(), Reason> {
+        match self.status {
+            Status::Ready => Ok(()),
+            Status::NotReady(reason) => Err(reason),
         }
     }
 }
@@ -93,7 +128,7 @@ impl fmt::Display for Payload {
         )
         .unwrap();
         for path in &self.paths {
-            write!(f, "{}, ", path).unwrap();
+            write!(f, "{}, ", path.display()).unwrap();
         }
         write!(
             f,
@@ -103,7 +138,9 @@ impl fmt::Display for Payload {
     }
 }
 
-pub fn encode(payload: &Payload) -> Result<Vec<u8>, mqtt::Error> {
+/// Adds timestamp and serializes payload for transfer
+pub fn encode(payload: &mut Payload) -> Result<Vec<u8>, mqtt::Error> {
+    payload.date = utils::get_timestamp("%Y%m%d").to_owned();
     match bincode::serialize(payload) {
         Err(e) => Err(mqtt::Error::GeneralString(format!(
             "FATAL, bincode::serialize >> {}",
@@ -204,7 +241,6 @@ impl MqttClient {
     }
 
     pub fn publish(&self, payload: &mut Payload) -> Result<(), mqtt::Error> {
-        payload.date = utils::get_timestamp("%Y%m%d").to_owned();
         self.client.publish(mqtt::Message::new(
             &self.publish_topic,
             encode(payload)?,

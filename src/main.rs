@@ -11,9 +11,9 @@ extern crate rpassword;
 
 mod client;
 mod config;
-mod outcome;
 mod fancy;
 mod ipc;
+mod outcome;
 mod server;
 mod shiplog;
 mod sinkd;
@@ -106,8 +106,12 @@ pub fn build_sinkd() -> Command {
 // user notification of operation
 fn handle_outcome<T>(outcome: Outcome<T>) {
     match outcome {
-        Ok(_) => { println!("operation completed successfully") },
-        Err(e) => { println!("{:?}", e) }
+        Ok(_) => {
+            println!("operation completed successfully")
+        }
+        Err(e) => {
+            println!("{:?}", e)
+        }
     }
 }
 
@@ -115,7 +119,8 @@ fn handle_outcome<T>(outcome: Outcome<T>) {
 fn main() {
     println!("Running sinkd at {}", utils::get_timestamp("%T"));
 
-    let matches = build_sinkd().get_matches();
+    let mut cli = build_sinkd();
+    let matches = cli.get_matches_mut();
     let verbosity = matches.get_count("verbose");
 
     if verbosity > 0 {
@@ -190,7 +195,7 @@ fn main() {
         Some(("restart", _)) => sinkd::restart(),
         Some(("log", _)) => sinkd::log(),
         _ => {
-            println!("TODO: print help");
+            cli.print_help().expect("sinkd usage: .... ");
         }
     }
 }

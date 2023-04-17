@@ -1,13 +1,16 @@
 // wrapper type to implement custom behavior
-// Rust's orphan rule prevents aliasing and adding behavior to types 
+// Rust's orphan rule prevents aliasing and adding behavior to types
 // outside of this crate's definiton
 #[derive(Debug)]
-pub struct FailureString (String); 
+pub struct FailureString(String);
 
 pub type Outcome<T> = std::result::Result<T, FailureString>;
 
 // Will handle static string slices as well
-pub fn err_msg<O, E>(message: E) -> Outcome<O> where String: From<E> {
+pub fn err_msg<O, E>(message: E) -> Outcome<O>
+where
+    String: From<E>,
+{
     Err(FailureString(message.into())) // into will call From<T> with the right type
 }
 
@@ -27,15 +30,13 @@ impl From<&'static str> for FailureString {
     }
 }
 
-
+#[rustfmt::skip]
 impl From<paho_mqtt::Error> for FailureString {
     fn from(error: paho_mqtt::Error) -> Self {
         let mut err_str = String::from("ERROR Paho>> ");
         match error {
             paho_mqtt::Error::Paho(e) => { err_str.push_str(&format!("library, num: {}", e)); }
-            paho_mqtt::Error::PahoDescr(num, msg) => {
-                err_str.push_str(&format!("description(redundant):{}, {}", num, msg));
-            }
+            paho_mqtt::Error::PahoDescr(num, msg) => { err_str.push_str(&format!("description(redundant):{}, {}", num, msg)); }
             paho_mqtt::Error::Publish(num, msg) => { err_str.push_str(&format!("publish num:{}, msg:{}", num, msg)); }
             paho_mqtt::Error::ReasonCode(code) => { err_str.push_str(&format!("mqttv5 reason code: {}", code)); }
             paho_mqtt::Error::BadTopicFilter => { err_str.push_str("Bad Topic Filter"); }

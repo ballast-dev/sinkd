@@ -383,7 +383,7 @@ pub fn get_username() -> String {
     }
 }
 
-pub fn rsync(payload: ipc::Payload) -> Result<(), std::io::Error> {
+pub fn rsync(payload: &ipc::Payload) -> Result<(), std::io::Error> {
     // debug!("username: {}, hostname: {}, path: {}", username, hostname, path.display());
     //? RSYNC options to consider
     // --delete-excluded (also delete excluded files)
@@ -402,31 +402,33 @@ pub fn rsync(payload: ipc::Payload) -> Result<(), std::io::Error> {
     //     dest_path = format!("sinkd@{}:/srv/sinkd/", &hostname);
     // }
 
-    // 
-    let rsync_result = match payload.dest {
-        _dest if _dest == String::from("client") => {
+    //
+    let rsync_result = match &payload.dest {
+        _dest if _dest == "client" => {
             std::process::Command::new("rsync")
                 .arg("-atR") // archive, timestamps, relative
                 .arg("--delete")
                 // TODO: to add --exclude [list of folders] from config
-                .args(payload.paths)
-                .arg(payload.hostname) // TODO: hostname + username for full path
+                .args(&payload.paths)
+                .arg(&payload.hostname) // TODO: hostname + username for full path
                 .spawn()?
-        },
-        _dest if _dest == String::from("") => {
+        }
+        _dest if _dest == "" => {
             std::process::Command::new("rsync")
                 .arg("-atR") // archive, timestamps, relative
                 .arg("--delete")
                 // TODO: to add --exclude [list of folders] from config
-                .arg(payload.hostname)
-                .args(payload.paths)
+                .arg(&payload.hostname)
+                .args(&payload.paths)
                 .spawn()?
-        },
-        _ => { return Err( 
-            std::io::Error::new(std::io::ErrorKind::Unsupported, "rsync destination is incorrect!")
-        )}
+        }
+        _ => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                "rsync destination is incorrect!",
+            ))
+        }
     };
-
 
     // match rsync_result {
     //     Err(x) => {
@@ -440,5 +442,5 @@ pub fn rsync(payload: ipc::Payload) -> Result<(), std::io::Error> {
     //         );
     //     }
     // }
-    return Ok(())
+    return Ok(());
 }

@@ -153,7 +153,7 @@ impl ConfigParser {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Inode {
     pub excludes: Vec<String>, // holds wildcards
     pub interval: Duration,

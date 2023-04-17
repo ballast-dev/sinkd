@@ -4,7 +4,11 @@
 // /___/\__/_/  |___/\__/_/
 #![allow(unused_imports)]
 extern crate serde;
-use crate::{ipc, outcome::{Outcome, err_msg}, shiplog, utils};
+use crate::{
+    ipc,
+    outcome::{err_msg, Outcome},
+    shiplog, utils,
+};
 use paho_mqtt as mqtt;
 use std::{
     path::PathBuf,
@@ -53,6 +57,7 @@ fn dispatch(msg: &Option<mqtt::Message>) {
     if let Some(msg) = msg {
         let payload = std::str::from_utf8(msg.payload()).unwrap();
         debug!("topic: {}\tpayload: {}", msg.topic(), payload);
+        todo!();
     } else {
         error!("malformed mqtt message");
     }
@@ -81,73 +86,31 @@ fn mqtt_entry(
     let (mqtt_client, mqtt_rx) =
         ipc::MqttClient::new(Some("localhost"), &["sinkd/clients"], "sinkd/server")?;
 
-    match mqtt::Client::new("tcp://localhost:1883") {
-        Err(e) => {
-            utils::fatal(&exit_cond);
-            return err_msg("FATAL: unable to create mqtt broker on server");
+    loop {
+        if utils::exited(&exit_cond) {
+            return err_msg("server>> synch thread exited, aborting mqtt thread");
         }
-        Ok(cli) => {
-            // Initialize the consumer before connecting
-            let mqtt_rx = cli.start_consuming();
-            let lwt =
-                mqtt::Message::new("sinkd/lost_conn", "sinkd server client lost connection", 1);
-            let conn_opts = mqtt::ConnectOptionsBuilder::new()
-                .keep_alive_interval(std::time::Duration::from_secs(300)) // 5 mins should be enough
-                .mqtt_version(mqtt::MQTT_VERSION_3_1_1)
-                .clean_session(true)
-                .will_message(lwt)
-                .finalize();
+        match mqtt_rx.try_recv() {
+            Ok(msg) => {
+                // ! process mqtt messages
+                // need to figure out state of server before synchronizing
+                let mut payload = ipc::decode(msg.unwrap().payload())?;
 
-            match cli.connect(conn_opts) {
-                Ok(rsp) => {
-                    if let Some(conn_rsp) = rsp.connect_response() {
-                        debug!(
-                            "Connected to: '{}' with MQTT version {}",
-                            conn_rsp.server_uri, conn_rsp.mqtt_version
-                        );
-                        if conn_rsp.session_present {
-                            debug!("  w/ client session already present on broker.");
-                        } else {
-                            if let Err(e) = cli.subscribe("sinkd/update", mqtt::QOS_0) {
-                                error!("unable to subscribe to sinkd/status {}", e);
-                            }
-                        }
-                    }
+                if let Err(_) = mqtt_client.publish(&mut payload) {
+                    unimplemented!()
                 }
-                Err(e) => {
+                synch_tx.send(payload).unwrap(); // value moves/consumed here
+            }
+            Err(err) => match err {
+                crossbeam::channel::TryRecvError::Empty => {
+                    std::thread::sleep(std::time::Duration::from_millis(1500));
+                    debug!("server>> mqtt loop...")
+                }
+                crossbeam::channel::TryRecvError::Disconnected => {
                     utils::fatal(&exit_cond);
-                    return err_msg(
-                        format!("FATAL client could not connect to localhost:1883, is mosquitto -d running? {}", e)
-                    );
+                    return err_msg("server>> mqtt_rx channel disconnected");
                 }
-            }
-
-            loop {
-                if utils::exited(&exit_cond) {
-                    return err_msg(
-                        "server>> synch thread exited, aborting mqtt thread",
-                    );
-                }
-                match mqtt_rx.try_recv() {
-                    Ok(msg) => {
-                        // ! process mqtt messages
-                        let payload = ipc::decode(msg.unwrap().payload())?;
-                        synch_tx.send(payload).unwrap();
-                    }
-                    Err(err) => match err {
-                        crossbeam::channel::TryRecvError::Empty => {
-                            std::thread::sleep(std::time::Duration::from_millis(1500));
-                            debug!("server>> mqtt loop...")
-                        }
-                        crossbeam::channel::TryRecvError::Disconnected => {
-                            utils::fatal(&exit_cond);
-                            return err_msg(
-                                "server>> mqtt_rx channel disconnected",
-                            );
-                        }
-                    },
-                }
-            }
+            },
         }
     }
 }
@@ -173,7 +136,7 @@ fn synch_entry(
             Ok(payload) => {
                 debug!("server:synch_entry >> got message from mqtt_thread!");
 
-                utils::rsync(payload)?;
+                utils::rsync(&payload)?;
                 // let rsync_result = process::Command::new("rsync")
                 //     .arg("-atR") // archive, timestamps, relative
                 //     .arg("--delete")
