@@ -185,9 +185,8 @@ impl MqttClient {
             .finalize();
 
         // Define the set of options for the connection
-        let conn_opts = mqtt::ConnectOptionsBuilder::new()
+        let conn_opts = mqtt::ConnectOptionsBuilder::new_v3()
             .keep_alive_interval(time::Duration::from_secs(20))
-            .mqtt_version(mqtt::MQTT_VERSION_3_1_1)
             .clean_session(true)
             .will_message(lwt)
             .finalize();

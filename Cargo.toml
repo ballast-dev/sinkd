@@ -12,15 +12,15 @@ notify = "4.0.17"
 regex = "1.4.5"
 serde = { version = "1.0.125", features = ["derive"] }
 bincode = "1.2.0"
-toml = "0.5.8"
-daemonize = "0.4.1"
+toml = "0.7.3"
+daemonize = "0.5.0"
 # "std" is to enable set_boxed_logger
 log = { version = "0.4.14", features = ["std"] }
 libc = "0.2.91"
 rpassword = "7.0.0"
 
 # the dependency openssl-sys has bindings which are needed for cross compile
-paho-mqtt = { version = "0.11", features = ["vendored-ssl"] }
+paho-mqtt = { version = "0.12", features = ["vendored-ssl"] }
 
 [dev-dependencies]
 futures-util = "0.3.13"
