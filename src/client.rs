@@ -1,7 +1,7 @@
 use crate::{
     config, ipc,
     outcome::{err_msg, Outcome},
-    shiplog, utils,
+    shiplog, utils::{self, Parameters},
 };
 use crossbeam::channel::TryRecvError;
 use notify::{DebouncedEvent, Watcher};
@@ -14,8 +14,8 @@ use std::{
 };
 
 #[warn(unused_features)]
-pub fn start(_verbosity: u8, clear_logs: bool) -> Result<(), String> {
-    shiplog::init(clear_logs)?;
+pub fn start(params: &Parameters) -> Result<(), String> {
+    shiplog::init(params)?;
     let (srv_addr, mut inode_map) = config::get()?;
 
     let (notify_tx, notify_rx): (mpsc::Sender<DebouncedEvent>, mpsc::Receiver<DebouncedEvent>) =

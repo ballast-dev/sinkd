@@ -1,6 +1,6 @@
 extern crate log;
 
-use crate::utils;
+use crate::utils::{self, Parameters};
 use log::{Level, LevelFilter, Metadata, Record};
 use std::fs::OpenOptions;
 use std::io::prelude::*; // for writeln!
@@ -13,18 +13,18 @@ pub struct ShipLog {
 }
 
 impl ShipLog {
-    pub fn new() -> Self {
+    pub fn new(params: &Parameters) -> Self {
         ShipLog {
             file: OpenOptions::new()
                 .append(true)
                 .create(true)
-                .open(utils::LOG_PATH)
+                .open(params.get_log_path())
                 .expect("couldn't create log file"),
         }
     }
 
-    pub fn init() {
-        log::set_boxed_logger(Box::new(ShipLog::new())).unwrap();
+    pub fn init(params: &Parameters) {
+        log::set_boxed_logger(Box::new(ShipLog::new(params))).unwrap();
         log::set_max_level(LevelFilter::Debug);
     }
 
@@ -67,12 +67,15 @@ impl log::Log for ShipLog {
     fn flush(&self) {}
 }
 
-pub fn init(clear_log: bool) -> Result<(), String> {
-    match utils::create_log_file(clear_log) {
+pub fn init(params: &Parameters) -> Result<(), String> {
+    if params.debug_mode {
+        std::fs::create_dir_all("~/.sinkd").unwrap();
+    }
+    match utils::create_log_file(params) {
         Err(e) => Err(e),
         Ok(_) => {
-            ShipLog::init();
-            match utils::create_pid_file() {
+            ShipLog::init(params);
+            match utils::create_pid_file(params) {
                 Err(e) => Err(e),
                 Ok(_) => Ok(()),
             }

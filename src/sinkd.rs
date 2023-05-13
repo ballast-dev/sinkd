@@ -3,6 +3,7 @@
 #![allow(unused_imports)]
 
 use crate::shiplog;
+use crate::utils::Parameters;
 use crate::{config, utils};
 use daemonize::Daemonize;
 use std::fs;
@@ -48,12 +49,12 @@ pub fn list(paths: Option<&Vec<&str>>) {
     // }
 }
 
-pub fn stop() -> bool {
+pub fn stop(params: &Parameters) -> bool {
     if !utils::have_permissions() {
         eprintln!("Need to be root");
         return false;
     }
-    match utils::get_pid() {
+    match utils::get_pid(params) {
         Err(e) => {
             eprintln!("{}", e);
             false
@@ -66,7 +67,7 @@ pub fn stop() -> bool {
                 .expect("ERROR couldn't kill daemon");
             println!("killed process {}", &pid);
 
-            match utils::set_pid(0) {
+            match utils::set_pid(params, 0) {
                 Err(e) => {
                     eprintln!("{}", e);
                     false
@@ -89,12 +90,12 @@ pub fn remove() {
     println!("remove files and folders")
 }
 
-pub fn log() {
+pub fn log(params: &Parameters) {
     // info!("hello log");
     // warn!("warning");
     // error!("oops");
     print!(
         "{}",
-        fs::read_to_string(utils::LOG_PATH).expect("couldn't read log file, check permissions")
+        fs::read_to_string(params.get_log_path()).expect("couldn't read log file, check permissions")
     );
 }

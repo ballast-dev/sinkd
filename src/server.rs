@@ -7,7 +7,7 @@ extern crate serde;
 use crate::{
     ipc,
     outcome::{err_msg, Outcome},
-    shiplog, utils,
+    shiplog, utils::{self, Parameters},
 };
 use paho_mqtt as mqtt;
 use std::{
@@ -17,8 +17,8 @@ use std::{
     thread,
 };
 
-pub fn start(verbosity: u8, clear_logs: bool) -> Outcome<()> {
-    shiplog::init(clear_logs)?;
+pub fn start(params: &Parameters) -> Outcome<()> {
+    shiplog::init(params)?;
     start_mosquitto()?; // always spawns on localhost
 
     let (msg_tx, msg_rx): (mpsc::Sender<ipc::Payload>, mpsc::Receiver<ipc::Payload>) =
@@ -32,12 +32,12 @@ pub fn start(verbosity: u8, clear_logs: bool) -> Outcome<()> {
 
     // error handling must be done within the threads
     let mqtt_thread = thread::spawn(move || {
-        if let Err(err) = mqtt_entry(msg_tx, exit_cond, bcast_cycle, verbosity) {
+        if let Err(err) = mqtt_entry(msg_tx, exit_cond, bcast_cycle) {
             error!("{}", err);
         }
     });
     let synch_thread = thread::spawn(move || {
-        if let Err(err) = synch_entry(msg_rx, exit_cond2, incr_cycle, verbosity) {
+        if let Err(err) = synch_entry(msg_rx, exit_cond2, incr_cycle) {
             error!("{}", err);
         }
     });
@@ -80,8 +80,7 @@ pub fn start_mosquitto() -> Outcome<()> {
 fn mqtt_entry(
     synch_tx: mpsc::Sender<ipc::Payload>,
     exit_cond: Arc<Mutex<bool>>,
-    _cycle: Arc<Mutex<i32>>,
-    _verbosity: u8,
+    cycle: Arc<Mutex<i32>>
 ) -> Outcome<()> {
     let (mqtt_client, mqtt_rx) =
         ipc::MqttClient::new(Some("localhost"), &["sinkd/clients"], "sinkd/server")?;
@@ -122,45 +121,19 @@ fn synch_entry(
     synch_rx: mpsc::Receiver<ipc::Payload>,
     exit_cond: Arc<Mutex<bool>>,
     cycle: Arc<Mutex<i32>>,
-    _verbosity: u8,
 ) -> Outcome<()> {
     loop {
         if utils::exited(&exit_cond) {
             return err_msg("server>> mqtt_thread exited, aborting synch thread");
         }
-        match synch_rx.recv() {
-            // blocking to
+        match synch_rx.recv() { // blocking call
             Err(e) => {
                 error!("server:synch_entry hangup on reciever?: {}", e);
             }
             Ok(payload) => {
-                debug!("server:synch_entry >> got message from mqtt_thread!");
-
-                utils::rsync(&payload)?;
-                // let rsync_result = process::Command::new("rsync")
-                //     .arg("-atR") // archive, timestamps, relative
-                //     .arg("--delete")
-                //     // TODO: to add --exclude [list of folders] from config
-                //     // .arg(&src_path)
-                //     // .arg(&dest_path)
-                //     .spawn();
-
-                // match rsync_result {
-                //     Err(x) => {
-                //         error!("{:?}", x);
-                //     }
-                //     Ok(_) => {
-                // info!(
-                //     "DID IT>> Called rsync",
-                //     // &src_path.display(),
-                //     // &dest_path
-                // );
-
-                let mut num = cycle.lock().unwrap();
-                *num += 1;
-
-                //     }
-                // }
+                // let mut num = cycle.lock().unwrap();
+                // *num += 1;
+                utils::rsync(&payload);
             }
         }
         std::thread::sleep(std::time::Duration::from_secs(1));

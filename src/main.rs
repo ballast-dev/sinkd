@@ -24,6 +24,8 @@ use clap::{Arg, ArgAction, Command};
 use outcome::Outcome;
 use std::path::Path;
 
+use crate::utils::Parameters;
+
 pub fn build_sinkd() -> Command {
     Command::new("sinkd")
         .about("deployable cloud")
@@ -81,11 +83,11 @@ pub fn build_sinkd() -> Command {
                 .action(ArgAction::SetTrue)
                 .help("start sinkd in server mode")
             )
-            .arg(Arg::new("clear-logs")
-                .long("clear-logs")
-                .hide(true)
-                .action(ArgAction::SetTrue)
-            )
+            // .arg(Arg::new("clear-logs")
+            //     .long("clear-logs")
+            //     .hide(true)
+            //     .action(ArgAction::SetTrue)
+            // )
         )
         .subcommand(Command::new("stop")
             .about("Stops daemon")
@@ -100,6 +102,12 @@ pub fn build_sinkd() -> Command {
             .short('v')
             .action(ArgAction::Count)
             .help("verbose output")
+        )
+        .arg(Arg::new("debug")
+            .short('d')
+            .long("debug")
+            .action(ArgAction::SetTrue)
+            .help("set pid and log files to ~/.sinkd (for write access)")
         )
 }
 
@@ -121,11 +129,18 @@ fn main() {
 
     let mut cli = build_sinkd();
     let matches = cli.get_matches_mut();
-    let verbosity = matches.get_count("verbose");
-
-    if verbosity > 0 {
-        println!("verbosity!: {}", verbosity);
+    // let verbosity = matches.get_count("verbose");
+    // let clear_logs = *submatches.get_one::<bool>("clear-logs").unwrap_or(&false);
+    let params: Parameters;
+    if matches.get_flag("debug") {
+        params = Parameters::debug();
+    } else {
+        params = Parameters::new();
     }
+
+    // if verbosity > 0 {
+    //     println!("verbosity!: {}", verbosity);
+    // }
 
     match matches.subcommand() {
         Some(("add", submatches)) => {
@@ -133,15 +148,11 @@ fn main() {
             let mut user_paths = Vec::<&String>::new();
 
             if let Some(shares) = submatches.get_many::<String>("share") {
-                share_paths = shares
-                    .filter(|p| Path::new(p).exists())
-                    .collect();
+                share_paths = shares.filter(|p| Path::new(p).exists()).collect();
             }
 
             if let Some(paths) = submatches.get_many::<String>("path") {
-                user_paths = paths
-                    .filter(|p| Path::new(p).exists())
-                    .collect();
+                user_paths = paths.filter(|p| Path::new(p).exists()).collect();
             }
 
             for p in &share_paths {
@@ -167,15 +178,14 @@ fn main() {
             sinkd::remove();
         }
         Some(("start", submatches)) => {
-            let clear_logs = *submatches.get_one::<bool>("clear-logs").unwrap_or(&false);
             if submatches.args_present() {
-                println!("Logging to: '{}'", utils::LOG_PATH);
+                println!("Logging to: '{}'", params.get_log_path().display());
                 if submatches.get_flag("SERVER") {
-                    if let Err(e) = server::start(verbosity, clear_logs) {
+                    if let Err(e) = server::start(&params) {
                         eprintln!("{}", e);
                     }
                 } else if submatches.get_flag("CLIENT") {
-                    if let Err(e) = client::start(verbosity, clear_logs) {
+                    if let Err(e) = client::start(&params) {
                         eprintln!("{}", e);
                     }
                 }
@@ -184,10 +194,10 @@ fn main() {
             }
         }
         Some(("stop", _)) => {
-            sinkd::stop();
+            // sinkd::stop();
         }
         Some(("restart", _)) => sinkd::restart(),
-        Some(("log", _)) => sinkd::log(),
+        Some(("log", _)) => sinkd::log(&params),
         _ => {
             cli.print_help().expect("sinkd usage: .... ");
         }

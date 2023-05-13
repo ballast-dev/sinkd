@@ -7,10 +7,47 @@ use std::sync::Mutex;
 
 use crate::{fancy, ipc};
 
-// TODO: need to wrap in os specific way
-pub const PID_PATH: &str = "/run/sinkd.pid";
-pub const LOG_PATH: &str = "/var/log/sinkd.log";
 const TIMESTAMP_LENGTH: u8 = 25;
+
+// TODO: move this into section of /etc/sinkd.conf
+pub struct Parameters {
+    pub verbosity: u8,
+    pub clear_logs: bool,
+    pub debug_mode: bool,
+    log_path: PathBuf,
+    pid_path: PathBuf,
+}
+
+impl Parameters {
+    pub fn new() -> Self {
+        Parameters {
+            verbosity: 0,
+            clear_logs: false,
+            debug_mode: false,
+            log_path: PathBuf::from("/run/sinkd.pid"),
+            pid_path: PathBuf::from("/var/log/sinkd.log"),
+        }
+    }
+
+    pub fn debug() -> Self {
+        Parameters {
+            verbosity: 3,
+            clear_logs: true,
+            debug_mode: true,
+            log_path: PathBuf::from("/tmp/sinkd.pid"),
+            pid_path: PathBuf::from("/tmp/sinkd.log"),
+        }
+    }
+
+    // return a new copy of the path to the caller 
+    pub fn get_log_path(&self) -> PathBuf {
+        return self.log_path.clone();
+    }
+
+    pub fn get_pid_path(&self) -> PathBuf {
+        return self.pid_path.clone();
+    }
+}
 
 #[link(name = "timestamp", kind = "static")]
 extern "C" {
@@ -33,15 +70,16 @@ pub fn get_timestamp(fmt_str: &str) -> String {
 
 pub fn have_permissions() -> bool {
     unsafe {
+        // get effective user id
         libc::geteuid() == 0
     }
 }
 
-pub fn create_pid_file() -> Result<(), String> {
-    if !have_permissions() {
+pub fn create_pid_file(params: &Parameters) -> Result<(), String> {
+    if !params.debug_mode && !have_permissions() {
         return Err(String::from("need to be root"));
     }
-    let pid_file = PathBuf::from(PID_PATH);
+    let pid_file = params.get_pid_path();
     if !pid_file.exists() {
         // match std::fs::create_dir_all(&pid_file) {
         match std::fs::File::create(&pid_file) {
@@ -61,25 +99,22 @@ pub fn create_pid_file() -> Result<(), String> {
     // fs::set_permissions(&pid_path, permissions).expect("cannot set permission");
 }
 
-pub fn create_log_file(clear: bool) -> Result<(), String> {
-    if !have_permissions() {
-        return Err(String::from("Need to be root"));
+pub fn create_log_file(params: &Parameters) -> Result<(), String> {
+    if !params.debug_mode && !have_permissions() {
+        return Err(String::from("Need to be root to create log file"));
     }
-    let log_file = PathBuf::from(LOG_PATH);
-    if !log_file.exists() || clear {
-        match std::fs::File::create(&log_file) {
-            Err(why) => {
-                let err_str = format!("cannot create {:?}, {:?}", log_file, why.kind());
-                Err(err_str)
-            }
-            Ok(_) => Ok(()),
+
+    let log_file = params.get_log_path();
+    if !log_file.exists() || params.clear_logs {
+        if let Err(why) = std::fs::File::create(&log_file) {
+            // truncates file if exists
+            return Err(format!("cannot create {:?}, {:?}", log_file, why.kind()));
         }
-    } else {
-        Ok(()) // already created
     }
+    Ok(()) // already created
 }
 
-pub fn get_pid() -> Result<u16, String> {
+pub fn get_pid(params: &Parameters) -> Result<u16, String> {
     // let user = env!("USER");
     // let sinkd_path = if cfg!(target_os = "macos") {
     //     path::Path::new("/Users").join(user).join(".sinkd")
@@ -87,14 +122,14 @@ pub fn get_pid() -> Result<u16, String> {
     //     path::Path::new("/home").join(user).join(".sinkd")
     // };
 
-    let pid_file = PathBuf::from(PID_PATH);
+    let pid_file = params.get_pid_path();
 
     if !pid_file.exists() {
         Err(String::from("pid file not found"))
     } else {
-        match std::fs::read(PID_PATH) {
+        match std::fs::read(&pid_file) {
             Err(err) => {
-                let err_str = format!("Cannot read {}: {}", PID_PATH, err);
+                let err_str = format!("Cannot read {}: {}", &pid_file.display(), err);
                 Err(err_str)
             }
             Ok(contents) => {
@@ -104,24 +139,23 @@ pub fn get_pid() -> Result<u16, String> {
                         let err_str = format!("Couldn't parse pid: {}", e2);
                         Err(err_str)
                     }
-                    Ok(pid) => {
-                        Ok(pid)
-                    }
+                    Ok(pid) => Ok(pid),
                 }
             }
         }
     }
 }
 
-pub fn set_pid(pid: u16) -> Result<(), String> {
-    let pid_file = PathBuf::from(PID_PATH);
+pub fn set_pid(params: &Parameters, pid: u16) -> Result<(), String> {
+    let pid_file = params.get_pid_path();
     if !pid_file.exists() {
         return Err(String::from("pid file not found"));
     }
 
     if pid == 0 {
         unsafe {
-            let c_str = CString::new(PID_PATH).unwrap();
+            // pid_file is typically set so unwrap here is safe
+            let c_str = CString::new(pid_file.to_str().unwrap()).unwrap();
             libc::unlink(c_str.into_raw());
         }
         Ok(())
@@ -131,9 +165,7 @@ pub fn set_pid(pid: u16) -> Result<(), String> {
                 let err_str = format!("couldn't clear pid in ~/.sinkd/pid\n{}", err);
                 Err(err_str)
             }
-            Ok(()) => {
-                Ok(())
-            }
+            Ok(()) => Ok(()),
         }
     }
 }
@@ -383,64 +415,38 @@ pub fn get_username() -> String {
     }
 }
 
-pub fn rsync(payload: &ipc::Payload) -> Result<(), std::io::Error> {
-    // debug!("username: {}, hostname: {}, path: {}", username, hostname, path.display());
-    //? RSYNC options to consider
-    // --delete-excluded (also delete excluded files)
-    // --max-size=SIZE (limit size of transfers)
-    // --exclude
-
+pub fn rsync(payload: &ipc::Payload) {
     // Agnostic pathing allows sinkd not to care about user folder structure
 
     debug!("{}", payload);
-    // let dest_path: String;
-    // if hostname.starts_with('/') {
-    //     // TODO: packager should set up folder '/srv/sinkd'
-    //     dest_path = String::from("/srv/sinkd/");
-    // } else {
-    //     // user permissions should persist regardless
-    //     dest_path = format!("sinkd@{}:/srv/sinkd/", &hostname);
-    // }
 
-    //
-    let _rsync_result = match &payload.dest {
-        _dest if _dest == "client" => {
-            std::process::Command::new("rsync")
-                .arg("-atR") // archive, timestamps, relative
-                .arg("--delete")
-                // TODO: to add --exclude [list of folders] from config
-                .args(&payload.paths)
-                .arg(&payload.hostname) // TODO: hostname + username for full path
-                .spawn()?
-        }
-        _dest if _dest.is_empty() => {
-            std::process::Command::new("rsync")
-                .arg("-atR") // archive, timestamps, relative
-                .arg("--delete")
-                // TODO: to add --exclude [list of folders] from config
-                .arg(&payload.hostname)
-                .args(&payload.paths)
-                .spawn()?
-        }
-        _ => {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Unsupported,
-                "rsync destination is incorrect!",
-            ))
-        }
-    };
+    // need to account for shared folders
+    // and local sync? maybe useful for testing
+    let mut cmd = std::process::Command::new("rsync"); // have to bind at .new()
+    cmd.arg("-atR") // archive, timestamps, relative
+        .arg("--delete") // delete on destination if not reflected in source
+        //? RSYNC options to consider
+        // .arg("--delete-excluded")
+        // .arg("--max-size=SIZE") // (limit size of transfers)
+        // .arg("--exclude=PATTERN") // loop through to all all paths
+        ;
 
-    // match rsync_result {
-    //     Err(x) => {
-    //         error!("{:?}", x);
-    //     }
-    //     Ok(_) => {
-    //         info!(
-    //             "DID IT>> Called rsync src:{}  ->  dest:{}",
-    //             &src_path.display(),
-    //             &dest_path
-    //         );
-    //     }
-    // }
-    Ok(())
+    if &payload.dest == "client" {
+        // TODO: hostname + username for full path
+        cmd.args(&payload.paths).arg(&payload.hostname);
+    } else {
+        cmd.arg(&payload.hostname).args(&payload.paths);
+    }
+
+    match cmd.spawn() {
+        Err(x) => {
+            error!("{:?}", x);
+        }
+        Ok(_) => {
+            info!("called rsync! dest:{} paths:", &payload.dest);
+            for path in &payload.paths {
+                info!("\t{}", path.display());
+            }
+        }
+    }
 }
