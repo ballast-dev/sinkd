@@ -12,7 +12,7 @@ fn reload_config() {
     info!("reload config?")
 }
 
-pub fn add(file: &str) -> bool {
+pub fn add(share_paths: Vec<&String>, user_paths: Vec<&String>) -> bool {
     // adds entry to ~/.sinkd/sinkd.conf
     // tells daemon to read config again
     // send a SIGHUP signal
@@ -20,7 +20,12 @@ pub fn add(file: &str) -> bool {
     //     let s: libc::sighandler_t = reload_config;
     //     libc::signal(libc::SIGHUP, s);
     // }
-    println!("appending '{}' to watch files", file);
+    for p in &share_paths {
+        println!("share.... {}", p);
+    }
+    for p in &user_paths {
+        println!("user... {}", p);
+    }
     true // able to watch directory
 }
 

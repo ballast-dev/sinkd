@@ -31,10 +31,10 @@
                 }
             },
             "args": [
+                "-d",
                 "start"
             ],
-            "cwd": "${workspaceFolder}",
-            "sudo": true
+            "cwd": "${workspaceFolder}"
         },
         {
             "sourceLanguages": [

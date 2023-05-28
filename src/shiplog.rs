@@ -26,6 +26,7 @@ impl ShipLog {
     pub fn init(params: &Parameters) {
         log::set_boxed_logger(Box::new(ShipLog::new(params))).unwrap();
         log::set_max_level(LevelFilter::Debug);
+        println!("Logging to: '{}'", params.get_log_path().display());
     }
 
     fn log_rotate(&self) -> bool {
@@ -68,13 +69,14 @@ impl log::Log for ShipLog {
 }
 
 pub fn init(params: &Parameters) -> Result<(), String> {
-    if params.debug_mode {
-        std::fs::create_dir_all("~/.sinkd").unwrap();
-    }
+    // if params.debug_mode {
+    //     std::fs::create_dir_all("~/.sinkd").unwrap();
+    // }
     match utils::create_log_file(params) {
         Err(e) => Err(e),
         Ok(_) => {
             ShipLog::init(params);
+            info!("log initialized");
             match utils::create_pid_file(params) {
                 Err(e) => Err(e),
                 Ok(_) => Ok(()),

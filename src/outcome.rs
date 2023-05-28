@@ -4,6 +4,20 @@
 #[derive(Debug)]
 pub struct FailureString(String);
 
+impl std::error::Error for FailureString {}
+
+impl std::fmt::Display for FailureString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<std::io::Error> for FailureString {
+    fn from(value: std::io::Error) -> Self {
+        FailureString(value.to_string())
+    }
+}
+
 pub type Outcome<T> = std::result::Result<T, FailureString>;
 
 // Will handle static string slices as well
@@ -13,10 +27,6 @@ where
 {
     Err(FailureString(message.into())) // into will call From<T> with the right type
 }
-
-// trait ErrorMessage<T> {
-//     fn msg(message: T) -> Bad;
-// }
 
 impl From<String> for FailureString {
     fn from(message: String) -> FailureString {
@@ -49,17 +59,5 @@ impl From<paho_mqtt::Error> for FailureString {
             paho_mqtt::Error::GeneralString(msg) => { err_str.push_str(&msg); }
         }
         FailureString(err_str)
-    }
-}
-
-impl std::fmt::Display for FailureString {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl From<std::io::Error> for FailureString {
-    fn from(value: std::io::Error) -> Self {
-        FailureString(value.to_string())
     }
 }

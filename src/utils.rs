@@ -34,8 +34,8 @@ impl Parameters {
             verbosity: 3,
             clear_logs: true,
             debug_mode: true,
-            log_path: PathBuf::from("/tmp/sinkd.pid"),
-            pid_path: PathBuf::from("/tmp/sinkd.log"),
+            log_path: PathBuf::from("/tmp/sinkd.log"),
+            pid_path: PathBuf::from("/tmp/sinkd.pid"),
         }
     }
 

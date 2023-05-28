@@ -1,7 +1,8 @@
 use crate::{
     config, ipc,
     outcome::{err_msg, Outcome},
-    shiplog, utils::{self, Parameters},
+    shiplog,
+    utils::{self, Parameters},
 };
 use crossbeam::channel::TryRecvError;
 use notify::{DebouncedEvent, Watcher};
@@ -14,7 +15,7 @@ use std::{
 };
 
 #[warn(unused_features)]
-pub fn start(params: &Parameters) -> Result<(), String> {
+pub fn start(params: &Parameters) -> Outcome<()> {
     shiplog::init(params)?;
     let (srv_addr, mut inode_map) = config::get()?;
 
@@ -36,21 +37,22 @@ pub fn start(params: &Parameters) -> Result<(), String> {
     let watch_thread =
         thread::spawn(move || watch_entry(&mut inode_map, notify_rx, event_tx, &exit_cond));
 
-    let mqtt_thread = thread::spawn(move || {
-        if let Err(e) = mqtt_entry(&srv_addr, &inode_map2, event_rx, &exit_cond2) {
-            utils::fatal(&exit_cond2);
-            error!("client>> FATAL condition in mqtt_entry, {}", e);
-        }
-    });
+    let mqtt_thread =
+        thread::spawn(
+            move || match mqtt_entry(&srv_addr, &inode_map2, event_rx, &exit_cond2) {
+                Ok(_) => Ok(()),
+                Err(e) => {
+                    error!("client>> FATAL condition in mqtt_entry, {}", e);
+                    Err(e)
+                }
+            },
+        );
 
-    if let Err(e) = watch_thread.join() {
-        return Err(format!("Client watch thread error! {:?}", e));
+    watch_thread.join().unwrap();
+    match mqtt_thread.join().unwrap() {
+        Err(e) => Err(e),
+        Ok(_) => Ok(()),
     }
-    if let Err(e) = mqtt_thread.join() {
-        return Err(format!("Client mqtt thread error! {:?}", e));
-    }
-
-    Ok(())
 
     // TODO: need packager to setup file with correct permisions
     // let daemon = Daemonize::new()
@@ -143,8 +145,18 @@ fn mqtt_entry(
     exit_cond: &Mutex<bool>,
 ) -> Outcome<()> {
     let _payload = ipc::Payload::new();
-    let (mqtt_client, mqtt_rx) =
-        ipc::MqttClient::new(Some(server_addr), &["sinkd/server"], "sinkd/clients")?;
+    let (mqtt_client, mqtt_rx): (ipc::MqttClient, ipc::Rx);
+    // if let(mqtt_client, mqtt_rx) =
+    match ipc::MqttClient::new(Some(server_addr), &["sinkd/server"], "sinkd/clients") {
+        Ok((client, rx)) => {
+            mqtt_client = client;
+            mqtt_rx = rx;
+        }
+        Err(_) => {
+            utils::fatal(exit_cond);
+            return err_msg("Unable to create mqtt client, is mosquitto broker running?");
+        }
+    }
 
     // The server will send status updates to it's clients every 5 seconds
     loop {
@@ -173,7 +185,7 @@ fn mqtt_entry(
                 TryRecvError::Disconnected => {
                     utils::fatal(exit_cond);
                     return err_msg("mqtt_rx hung up?");
-                },
+                }
                 TryRecvError::Empty => warn!("client>>mqtt_entry:TryRecvError::Empty"),
             },
         }
@@ -195,7 +207,7 @@ fn process(
     match server_payload.status {
         ipc::Status::NotReady(reason) => match reason {
             ipc::Reason::Sinking => {
-                std::thread::sleep(Duration::from_secs(5));
+                std::thread::sleep(Duration::from_secs(5)); // should be config driven
             }
             ipc::Reason::Behind => {
                 // spawn rsync on the client?
@@ -216,13 +228,12 @@ fn process(
             let mut payload = ipc::Payload::new();
             match filter_file_events(event_rx) {
                 Ok(filtered_paths) => payload.paths = filtered_paths,
-                Err(e) => {
-                    error!("{}", e);
-                    return;
-                }
+                Err(e) => error!("{}", e),
             }
             payload.cycle += 1;
-            mqtt_client.publish(&mut payload);
+            if let Err(e) = mqtt_client.publish(&mut payload) {
+                error!("unable to publish {}", e);
+            }
         }
     }
 }

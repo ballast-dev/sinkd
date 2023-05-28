@@ -1,14 +1,11 @@
-use std::{
-    fmt::{self},
-    path::PathBuf,
-    time,
-};
-
+use std::{fmt, path::PathBuf, time};
 
 use paho_mqtt as mqtt;
 use serde::{Deserialize, Serialize};
 
 use crate::utils;
+
+pub type Rx = mqtt::Receiver<Option<mqtt::Message>>;
 
 #[derive(PartialEq, Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum Reason {
@@ -217,7 +214,6 @@ impl MqttClient {
                             })
                             .map(|vqos| {
                                 debug!("QoS granted: {:?}", vqos);
-                                
                             })?;
 
                         Ok((

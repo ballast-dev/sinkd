@@ -26,12 +26,13 @@ use std::path::Path;
 
 use crate::utils::Parameters;
 
+#[rustfmt::skip]
 pub fn build_sinkd() -> Command {
     Command::new("sinkd")
         .about("deployable cloud")
         .version(env!("CARGO_PKG_VERSION"))
         .subcommand(Command::new("add")
-            .about("Adds PATH to watch list\nlets sinkd become 'aware' of file or folder location provided")
+            .about("Adds PATH to watch list")
             .arg(Arg::new("share")
                 .short('s')
                 .long("share")
@@ -60,7 +61,7 @@ pub fn build_sinkd() -> Command {
         )
         .subcommand(Command::new("rm")
             .alias("remove")
-            .about("Removes PATH from list of watched directories")
+            .about("Removes PATH from watch list")
             .arg(Arg::new("PATH")
                 .required(true)
                 .num_args(1..)
@@ -83,11 +84,6 @@ pub fn build_sinkd() -> Command {
                 .action(ArgAction::SetTrue)
                 .help("start sinkd in server mode")
             )
-            // .arg(Arg::new("clear-logs")
-            //     .long("clear-logs")
-            //     .hide(true)
-            //     .action(ArgAction::SetTrue)
-            // )
         )
         .subcommand(Command::new("stop")
             .about("Stops daemon")
@@ -155,12 +151,7 @@ fn main() {
                 user_paths = paths.filter(|p| Path::new(p).exists()).collect();
             }
 
-            for p in &share_paths {
-                println!("share.... {}", p);
-            }
-            for p in &user_paths {
-                println!("regular... {}", p);
-            }
+            sinkd::add(share_paths, user_paths);
         }
         Some(("ls", submatches)) => {
             if !submatches.args_present() {
@@ -178,16 +169,14 @@ fn main() {
             sinkd::remove();
         }
         Some(("start", submatches)) => {
-            if submatches.args_present() {
-                println!("Logging to: '{}'", params.get_log_path().display());
-                if submatches.get_flag("SERVER") {
-                    if let Err(e) = server::start(&params) {
-                        eprintln!("{}", e);
-                    }
-                } else if submatches.get_flag("CLIENT") {
-                    if let Err(e) = client::start(&params) {
-                        eprintln!("{}", e);
-                    }
+            // TODO: check to see if broker is up!!!
+            if submatches.get_flag("SERVER") {
+                if let Err(e) = server::start(&params) {
+                    eprintln!("ERROR: {}", e);
+                }
+            } else if submatches.get_flag("CLIENT") {
+                if let Err(e) = client::start(&params) {
+                    eprintln!("ERROR: {}", e);
                 }
             } else {
                 eprintln!("Need know which to start --server or --client?")
