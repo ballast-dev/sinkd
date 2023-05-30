@@ -1,6 +1,6 @@
 use crate::{
     config, ipc,
-    outcome::{err_msg, Outcome},
+    outcome::Outcome,
     shiplog,
     utils::{self, Parameters},
 };
@@ -154,7 +154,7 @@ fn mqtt_entry(
         }
         Err(_) => {
             utils::fatal(exit_cond);
-            return err_msg("Unable to create mqtt client, is mosquitto broker running?");
+            return bad!("Unable to create mqtt client, is mosquitto broker running?");
         }
     }
 
@@ -162,7 +162,7 @@ fn mqtt_entry(
     loop {
         // Check to make sure other thread didn't exit
         if utils::exited(exit_cond) {
-            return err_msg("mqtt_entry>> exit condition reached");
+            return bad!("mqtt_entry>> exit condition reached");
         }
 
         // process mqtt traffic from server
@@ -184,7 +184,7 @@ fn mqtt_entry(
             Err(e) => match e {
                 TryRecvError::Disconnected => {
                     utils::fatal(exit_cond);
-                    return err_msg("mqtt_rx hung up?");
+                    return bad!("mqtt_rx hung up?");
                 }
                 TryRecvError::Empty => warn!("client>>mqtt_entry:TryRecvError::Empty"),
             },
@@ -281,7 +281,7 @@ fn filter_file_events(event_rx: &mpsc::Receiver<PathBuf>) -> Outcome<Vec<PathBuf
                 path_set.insert(path);
             }
             Err(err) => match err {
-                mpsc::TryRecvError::Disconnected => return err_msg("event_rx disconnected"),
+                mpsc::TryRecvError::Disconnected => return bad!("event_rx disconnected"),
                 mpsc::TryRecvError::Empty => break, // Ready to send!
             },
         }

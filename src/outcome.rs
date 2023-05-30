@@ -3,6 +3,16 @@
 // outside of this crate's definiton
 #[derive(Debug)]
 pub struct FailureString(String);
+pub type Outcome<T> = std::result::Result<T, FailureString>;
+
+macro_rules! bad {
+    ($msg:expr) => {
+       Outcome::Err($msg.into()) // into will call From<T> with the right type
+    };
+    ($($arg:tt)*) => {
+        Outcome::Err(format!($($arg)*).into())
+    };
+}
 
 impl std::error::Error for FailureString {}
 
@@ -16,16 +26,6 @@ impl From<std::io::Error> for FailureString {
     fn from(value: std::io::Error) -> Self {
         FailureString(value.to_string())
     }
-}
-
-pub type Outcome<T> = std::result::Result<T, FailureString>;
-
-// Will handle static string slices as well
-pub fn err_msg<O, E>(message: E) -> Outcome<O>
-where
-    String: From<E>,
-{
-    Err(FailureString(message.into())) // into will call From<T> with the right type
 }
 
 impl From<String> for FailureString {

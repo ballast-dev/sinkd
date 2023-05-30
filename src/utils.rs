@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::process;
 use std::sync::Mutex;
 
-use crate::{fancy, ipc};
+use crate::{fancy, ipc, outcome::Outcome};
 
 const TIMESTAMP_LENGTH: u8 = 25;
 
@@ -41,11 +41,11 @@ impl Parameters {
 
     // return a new copy of the path to the caller 
     pub fn get_log_path(&self) -> PathBuf {
-        return self.log_path.clone();
+        self.log_path.clone()
     }
 
     pub fn get_pid_path(&self) -> PathBuf {
-        return self.pid_path.clone();
+        self.pid_path.clone()
     }
 }
 
@@ -65,7 +65,7 @@ pub fn get_timestamp(fmt_str: &str) -> String {
         stamp = CString::from_raw(ret_ptr);
     }
     let v = stamp.into_bytes();
-    return String::from_utf8_lossy(&v).into_owned();
+    String::from_utf8_lossy(&v).into_owned()
 }
 
 pub fn have_permissions() -> bool {
@@ -75,17 +75,16 @@ pub fn have_permissions() -> bool {
     }
 }
 
-pub fn create_pid_file(params: &Parameters) -> Result<(), String> {
+pub fn create_pid_file(params: &Parameters) -> Outcome<()> {
     if !params.debug_mode && !have_permissions() {
-        return Err(String::from("need to be root"));
+        return bad!("need to be root");
     }
     let pid_file = params.get_pid_path();
     if !pid_file.exists() {
         // match std::fs::create_dir_all(&pid_file) {
         match std::fs::File::create(&pid_file) {
             Err(why) => {
-                let err_str = format!("cannot create {:?}, {:?}", pid_file, why.kind());
-                Err(err_str)
+                bad!("cannot create {:?}, {:?}", pid_file, why.kind())
             }
             Ok(_) => Ok(()),
         }
@@ -99,22 +98,22 @@ pub fn create_pid_file(params: &Parameters) -> Result<(), String> {
     // fs::set_permissions(&pid_path, permissions).expect("cannot set permission");
 }
 
-pub fn create_log_file(params: &Parameters) -> Result<(), String> {
+pub fn create_log_file(params: &Parameters) -> Outcome<()> {
     if !params.debug_mode && !have_permissions() {
-        return Err(String::from("Need to be root to create log file"));
+        return bad!("Need to be root to create log file");
     }
 
     let log_file = params.get_log_path();
     if !log_file.exists() || params.clear_logs {
         if let Err(why) = std::fs::File::create(&log_file) {
             // truncates file if exists
-            return Err(format!("cannot create {:?}, {:?}", log_file, why.kind()));
+            return bad!("cannot create {:?}, {:?}", log_file, why.kind());
         }
     }
     Ok(()) // already created
 }
 
-pub fn get_pid(params: &Parameters) -> Result<u16, String> {
+pub fn get_pid(params: &Parameters) -> Outcome<u16> {
     // let user = env!("USER");
     // let sinkd_path = if cfg!(target_os = "macos") {
     //     path::Path::new("/Users").join(user).join(".sinkd")
@@ -125,19 +124,18 @@ pub fn get_pid(params: &Parameters) -> Result<u16, String> {
     let pid_file = params.get_pid_path();
 
     if !pid_file.exists() {
-        Err(String::from("pid file not found"))
+        bad!("pid file not found")
     } else {
         match std::fs::read(&pid_file) {
             Err(err) => {
-                let err_str = format!("Cannot read {}: {}", &pid_file.display(), err);
-                Err(err_str)
+                bad!(format!("Cannot read {}: {}", &pid_file.display(), err))
             }
             Ok(contents) => {
                 let pid_str = String::from_utf8_lossy(&contents);
                 match pid_str.parse::<u16>() {
                     Err(e2) => {
-                        let err_str = format!("Couldn't parse pid: {}", e2);
-                        Err(err_str)
+                        // err_msg!("Couldn't parse pid: {}", e2)
+                        bad!("oh yeah baby!")
                     }
                     Ok(pid) => Ok(pid),
                 }

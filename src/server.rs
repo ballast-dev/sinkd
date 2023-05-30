@@ -6,7 +6,7 @@
 extern crate serde;
 use crate::{
     ipc,
-    outcome::{err_msg, Outcome},
+    outcome::Outcome,
     shiplog, utils::{self, Parameters},
 };
 use paho_mqtt as mqtt;
@@ -68,7 +68,7 @@ fn dispatch(msg: &Option<mqtt::Message>) {
 pub fn start_mosquitto() -> Outcome<()> {
     debug!("server:start >> mosquitto daemon");
     if let Err(spawn_error) = process::Command::new("mosquitto").arg("-d").spawn() {
-        return err_msg(format!(
+        return bad!(format!(
             "Is mosquitto installed and in path? >> {}",
             spawn_error
         ));
@@ -87,7 +87,7 @@ fn mqtt_entry(
 
     loop {
         if utils::exited(&exit_cond) {
-            return err_msg("server>> synch thread exited, aborting mqtt thread");
+            return bad!("server>> synch thread exited, aborting mqtt thread");
         }
         match mqtt_rx.try_recv() {
             Ok(msg) => {
@@ -107,7 +107,7 @@ fn mqtt_entry(
                 }
                 crossbeam::channel::TryRecvError::Disconnected => {
                     utils::fatal(&exit_cond);
-                    return err_msg("server>> mqtt_rx channel disconnected");
+                    return bad!("server>> mqtt_rx channel disconnected");
                 }
             },
         }
@@ -124,7 +124,7 @@ fn synch_entry(
 ) -> Outcome<()> {
     loop {
         if utils::exited(&exit_cond) {
-            return err_msg("server>> mqtt_thread exited, aborting synch thread");
+            return bad!("server>> mqtt_thread exited, aborting synch thread");
         }
         match synch_rx.recv() { // blocking call
             Err(e) => {

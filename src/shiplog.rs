@@ -1,6 +1,9 @@
 extern crate log;
 
-use crate::utils::{self, Parameters};
+use crate::{
+    outcome::Outcome,
+    utils::{self, Parameters}
+};
 use log::{Level, LevelFilter, Metadata, Record};
 use std::fs::OpenOptions;
 use std::io::prelude::*; // for writeln!
@@ -68,7 +71,7 @@ impl log::Log for ShipLog {
     fn flush(&self) {}
 }
 
-pub fn init(params: &Parameters) -> Result<(), String> {
+pub fn init(params: &Parameters) -> Outcome<()> {
     // if params.debug_mode {
     //     std::fs::create_dir_all("~/.sinkd").unwrap();
     // }

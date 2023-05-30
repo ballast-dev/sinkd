@@ -9,11 +9,12 @@ extern crate log;
 extern crate libc;
 extern crate rpassword;
 
+#[macro_use]
+mod outcome;
 mod client;
 mod config;
 mod fancy;
 mod ipc;
-mod outcome;
 mod server;
 mod shiplog;
 mod sinkd;
