@@ -27,12 +27,15 @@ pub fn start(params: &Parameters) -> Outcome<()> {
     let exit_cond2 = Arc::clone(&exit_cond);
 
     // watch_thread needs a mutable map to assign "last event" to inode
-    // however, the mqtt_thread does not, just reads from the map
+    
     // after config loads up the inode map it is treated as Read Only
     let inode_map2 = inode_map.clone();
 
     // keep the watchers alive!
-    let _watchers = get_watchers(&inode_map, notify_tx);
+    let _watchers = match get_watchers(&inode_map, notify_tx) {
+        Ok(w) => w,
+        Err(e) => return bad!(e),
+    };
 
     let watch_thread =
         thread::spawn(move || watch_entry(&mut inode_map, notify_rx, event_tx, &exit_cond));
@@ -146,15 +149,14 @@ fn mqtt_entry(
 ) -> Outcome<()> {
     let _payload = ipc::Payload::new();
     let (mqtt_client, mqtt_rx): (ipc::MqttClient, ipc::Rx);
-    // if let(mqtt_client, mqtt_rx) =
     match ipc::MqttClient::new(Some(server_addr), &["sinkd/server"], "sinkd/clients") {
         Ok((client, rx)) => {
             mqtt_client = client;
             mqtt_rx = rx;
         }
-        Err(_) => {
+        Err(e) => {
             utils::fatal(exit_cond);
-            return bad!("Unable to create mqtt client, is mosquitto broker running?");
+            return bad!("Unable to create mqtt client, {}", e);
         }
     }
 
@@ -241,7 +243,7 @@ fn process(
 fn get_watchers(
     inode_map: &config::InodeMap,
     tx: mpsc::Sender<notify::DebouncedEvent>,
-) -> Vec<notify::RecommendedWatcher> {
+) -> Outcome<Vec<notify::RecommendedWatcher>> {
     let mut watchers: Vec<notify::RecommendedWatcher> = Vec::new();
 
     for (pathbuf, _) in inode_map.iter() {
@@ -260,7 +262,12 @@ fn get_watchers(
             }
         }
     }
-    watchers
+
+    if watchers.len() > 0 {
+        Ok(watchers)
+    } else {
+        bad!("nothing to watch!")
+    }
 }
 
 fn cache(_path: &str) -> Result<(), String> {

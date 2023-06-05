@@ -104,19 +104,14 @@ pub fn build_sinkd() -> Command {
             .short('d')
             .long("debug")
             .action(ArgAction::SetTrue)
-            .help("set pid and log files to ~/.sinkd (for write access)")
+            .help("debug mode: log files to /tmp")
         )
 }
 
-// user notification of operation
 fn handle_outcome<T>(outcome: Outcome<T>) {
     match outcome {
-        Ok(_) => {
-            println!("operation completed successfully")
-        }
-        Err(e) => {
-            println!("{:?}", e)
-        }
+        Ok(_) => println!("operation completed successfully"),
+        Err(e) => eprintln!("ERROR: {}", e)
     }
 }
 
@@ -172,13 +167,9 @@ fn main() {
         Some(("start", submatches)) => {
             // TODO: check to see if broker is up!!!
             if submatches.get_flag("SERVER") {
-                if let Err(e) = server::start(&params) {
-                    eprintln!("ERROR: {}", e);
-                }
+                handle_outcome(server::start(&params));
             } else if submatches.get_flag("CLIENT") {
-                if let Err(e) = client::start(&params) {
-                    eprintln!("ERROR: {}", e);
-                }
+                handle_outcome(client::start(&params));
             } else {
                 eprintln!("Need know which to start --server or --client?")
             }

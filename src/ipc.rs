@@ -191,7 +191,11 @@ impl MqttClient {
         let qos = [1, 1];
 
         // Make the connection to the broker
-        debug!("Connecting to the MQTT broker...");
+        debug!("Connecting to the MQTT broker host:{} subs:[{}], pub_topic:{}", 
+            host.unwrap_or("unknown"),
+            subscriptions.iter().map(|&element| element).collect::<Vec<_>>().join(" "),
+            publish_topic
+        );
         match cli.connect(conn_opts) {
             Ok(rsp) => {
                 if let Some(con_rsp) = rsp.connect_response() {
@@ -229,7 +233,8 @@ impl MqttClient {
                 }
             }
             Err(e) => Err(mqtt::Error::GeneralString(format!(
-                "Error connecting to the broker: {:?}",
+                "Could not connect to the broker '{}', is the mosquitto broker running? {:?}",
+                host.unwrap_or("unknown"),
                 e
             ))),
         }
