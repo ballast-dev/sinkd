@@ -2,8 +2,8 @@
 // Rust's orphan rule prevents aliasing and adding behavior to types
 // outside of this crate's definiton
 #[derive(Debug)]
-pub struct FailureString(String);
-pub type Outcome<T> = std::result::Result<T, FailureString>;
+pub struct Failure(String);
+pub type Outcome<T> = std::result::Result<T, Failure>;
 
 macro_rules! bad {
     ($msg:expr) => {
@@ -14,34 +14,34 @@ macro_rules! bad {
     };
 }
 
-impl std::error::Error for FailureString {}
+impl std::error::Error for Failure {}
 
-impl std::fmt::Display for FailureString {
+impl std::fmt::Display for Failure {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
 }
 
-impl From<std::io::Error> for FailureString {
+impl From<std::io::Error> for Failure {
     fn from(value: std::io::Error) -> Self {
-        FailureString(value.to_string())
+        Failure(value.to_string())
     }
 }
 
-impl From<String> for FailureString {
-    fn from(message: String) -> FailureString {
-        FailureString(message)
+impl From<String> for Failure {
+    fn from(message: String) -> Failure {
+        Failure(message)
     }
 }
 
-impl From<&'static str> for FailureString {
-    fn from(message: &'static str) -> FailureString {
-        FailureString(String::from(message))
+impl From<&'static str> for Failure {
+    fn from(message: &'static str) -> Failure {
+        Failure(String::from(message))
     }
 }
 
 #[rustfmt::skip]
-impl From<paho_mqtt::Error> for FailureString {
+impl From<paho_mqtt::Error> for Failure {
     fn from(error: paho_mqtt::Error) -> Self {
         let mut err_str = String::from("ERROR Paho>> ");
         match error {
@@ -58,6 +58,6 @@ impl From<paho_mqtt::Error> for FailureString {
             paho_mqtt::Error::General(msg) => { err_str.push_str(msg); }
             paho_mqtt::Error::GeneralString(msg) => { err_str.push_str(&msg); }
         }
-        FailureString(err_str)
+        Failure(err_str)
     }
 }

@@ -5,7 +5,7 @@ use crate::{
     utils::{self, Parameters}
 };
 use log::{Level, LevelFilter, Metadata, Record};
-use std::fs::OpenOptions;
+use std::{fs::OpenOptions, path::PathBuf};
 use std::io::prelude::*; // for writeln!
 
 const TEN_MEGABYTES: u64 = (1024 ^ 2) * 10;
@@ -21,22 +21,31 @@ impl ShipLog {
             file: OpenOptions::new()
                 .append(true)
                 .create(true)
-                .open(params.get_log_path())
+                .open(*params.log_path)
                 .expect("couldn't create log file"),
         }
     }
 
     pub fn init(params: &Parameters) {
         log::set_boxed_logger(Box::new(ShipLog::new(params))).unwrap();
-        log::set_max_level(LevelFilter::Debug);
-        println!("Logging to: '{}'", params.get_log_path().display());
+        log::set_max_level(match params.verbosity {
+            0 | 1 => LevelFilter::Error,
+            2 => LevelFilter::Warn,
+            3 => LevelFilter::Info,
+            4 => LevelFilter::Debug,
+            _ => LevelFilter::Trace
+        });
+        println!("Logging to: '{}'", params.log_path.display());
     }
 
-    fn log_rotate(&self) -> bool {
-        // std::mem::drop
-        // how to close the file to rotate?
-        // drop(self.file);
-        true
+    fn log_rotate(mut self, path: PathBuf) {
+        self.file.flush().expect("unable to flush log file");
+        drop(self.file); // drop closes the file
+        self.file = OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(path)
+            .expect("couldn't create log file")
     }
 }
 

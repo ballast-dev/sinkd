@@ -188,13 +188,14 @@ fn mqtt_entry(
                     utils::fatal(exit_cond);
                     return bad!("mqtt_rx hung up?");
                 }
-                TryRecvError::Empty => warn!("client>>mqtt_entry:TryRecvError::Empty"),
+                TryRecvError::Empty => {
+                    debug!("waiting on message...")
+                }
             },
         }
 
         // TODO: add 'system_interval' to config
         std::thread::sleep(Duration::from_secs(1));
-        debug!("synch loop...")
     }
 }
 

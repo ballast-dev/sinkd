@@ -1,31 +1,31 @@
 // Common Utilities
 use libc::{c_char, c_uint};
 use std::ffi::CString;
-use std::path::PathBuf;
+use std::path::Path;
 use std::process;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use crate::{fancy, ipc, outcome::Outcome};
 
 const TIMESTAMP_LENGTH: u8 = 25;
 
 // TODO: move this into section of /etc/sinkd.conf
-pub struct Parameters {
+pub struct Parameters <'a>{
     pub verbosity: u8,
     pub clear_logs: bool,
     pub debug_mode: bool,
-    log_path: PathBuf,
-    pid_path: PathBuf,
+    pub log_path: Arc<&'a Path>,
+    pub pid_path: Arc<&'a Path>,
 }
 
-impl Parameters {
+impl <'a> Parameters <'a>{
     pub fn new() -> Self {
         Parameters {
             verbosity: 0,
             clear_logs: false,
             debug_mode: false,
-            log_path: PathBuf::from("/run/sinkd.pid"),
-            pid_path: PathBuf::from("/var/log/sinkd.log"),
+            log_path: Arc::new(Path::new("/var/log/sinkd.log")),
+            pid_path: Arc::new(Path::new("/run/sinkd.pid")),
         }
     }
 
@@ -34,18 +34,9 @@ impl Parameters {
             verbosity: 3,
             clear_logs: true,
             debug_mode: true,
-            log_path: PathBuf::from("/tmp/sinkd.log"),
-            pid_path: PathBuf::from("/tmp/sinkd.pid"),
+            log_path: Arc::new(Path::new("/tmp/sinkd.log")),
+            pid_path: Arc::new(Path::new("/tmp/sinkd.pid")),
         }
-    }
-
-    // return a new copy of the path to the caller 
-    pub fn get_log_path(&self) -> PathBuf {
-        self.log_path.clone()
-    }
-
-    pub fn get_pid_path(&self) -> PathBuf {
-        self.pid_path.clone()
     }
 }
 
@@ -79,12 +70,11 @@ pub fn create_pid_file(params: &Parameters) -> Outcome<()> {
     if !params.debug_mode && !have_permissions() {
         return bad!("need to be root");
     }
-    let pid_file = params.get_pid_path();
-    if !pid_file.exists() {
+    if !params.pid_path.exists() {
         // match std::fs::create_dir_all(&pid_file) {
-        match std::fs::File::create(&pid_file) {
+        match std::fs::File::create(*params.pid_path) {
             Err(why) => {
-                bad!("cannot create {:?}, {:?}", pid_file, why.kind())
+                bad!("cannot create {:?}, {:?}", params.pid_path, why.kind())
             }
             Ok(_) => Ok(()),
         }
@@ -103,11 +93,10 @@ pub fn create_log_file(params: &Parameters) -> Outcome<()> {
         return bad!("Need to be root to create log file");
     }
 
-    let log_file = params.get_log_path();
-    if !log_file.exists() || params.clear_logs {
-        if let Err(why) = std::fs::File::create(&log_file) {
+    if !params.log_path.exists() || params.clear_logs {
+        if let Err(why) = std::fs::File::create(*params.log_path) {
             // truncates file if exists
-            return bad!("cannot create {:?}, {:?}", log_file, why.kind());
+            return bad!("cannot create {:?}, {:?}", params.log_path, why.kind());
         }
     }
     Ok(()) // already created
@@ -121,14 +110,12 @@ pub fn get_pid(params: &Parameters) -> Outcome<u16> {
     //     path::Path::new("/home").join(user).join(".sinkd")
     // };
 
-    let pid_file = params.get_pid_path();
-
-    if !pid_file.exists() {
+    if !params.pid_path.exists() {
         bad!("pid file not found")
     } else {
-        match std::fs::read(&pid_file) {
+        match std::fs::read(*params.pid_path) {
             Err(err) => {
-                bad!(format!("Cannot read {}: {}", &pid_file.display(), err))
+                bad!(format!("Cannot read {}: {}", params.pid_path.display(), err))
             }
             Ok(contents) => {
                 let pid_str = String::from_utf8_lossy(&contents);
@@ -145,20 +132,19 @@ pub fn get_pid(params: &Parameters) -> Outcome<u16> {
 }
 
 pub fn set_pid(params: &Parameters, pid: u16) -> Result<(), String> {
-    let pid_file = params.get_pid_path();
-    if !pid_file.exists() {
+    if !params.pid_path.exists() {
         return Err(String::from("pid file not found"));
     }
 
     if pid == 0 {
         unsafe {
             // pid_file is typically set so unwrap here is safe
-            let c_str = CString::new(pid_file.to_str().unwrap()).unwrap();
+            let c_str = CString::new(params.pid_path.to_str().unwrap()).unwrap();
             libc::unlink(c_str.into_raw());
         }
         Ok(())
     } else {
-        match std::fs::write(pid_file, pid.to_ne_bytes()) {
+        match std::fs::write(*params.pid_path, pid.to_ne_bytes()) {
             Err(err) => {
                 let err_str = format!("couldn't clear pid in ~/.sinkd/pid\n{}", err);
                 Err(err_str)
