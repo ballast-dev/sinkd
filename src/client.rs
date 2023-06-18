@@ -9,10 +9,12 @@ use notify::{DebouncedEvent, Watcher};
 use std::{
     collections::HashSet,
     path::PathBuf,
-    sync::{mpsc, Arc, Mutex},
+    sync::{mpsc, atomic::{AtomicBool, Ordering}},
     thread,
     time::{Duration, Instant},
 };
+
+static FATAL_FLAG: AtomicBool = AtomicBool::new(false);
 
 #[warn(unused_features)]
 pub fn start(params: &Parameters) -> Outcome<()> {
@@ -22,9 +24,6 @@ pub fn start(params: &Parameters) -> Outcome<()> {
     let (notify_tx, notify_rx): (mpsc::Sender<DebouncedEvent>, mpsc::Receiver<DebouncedEvent>) =
         mpsc::channel();
     let (event_tx, event_rx): (mpsc::Sender<PathBuf>, mpsc::Receiver<PathBuf>) = mpsc::channel();
-
-    let exit_cond = Arc::new(Mutex::new(false));
-    let exit_cond2 = Arc::clone(&exit_cond);
 
     // watch_thread needs a mutable map to assign "last event" to inode
     
@@ -38,11 +37,11 @@ pub fn start(params: &Parameters) -> Outcome<()> {
     };
 
     let watch_thread =
-        thread::spawn(move || watch_entry(&mut inode_map, notify_rx, event_tx, &exit_cond));
+        thread::spawn(move || watch_entry(&mut inode_map, notify_rx, event_tx, &FATAL_FLAG));
 
     let mqtt_thread =
         thread::spawn(
-            move || match mqtt_entry(&srv_addr, &inode_map2, event_rx, &exit_cond2) {
+            move || match mqtt_entry(&srv_addr, &inode_map2, event_rx, &FATAL_FLAG) {
                 Ok(_) => Ok(()),
                 Err(e) => {
                     error!("client>> FATAL condition in mqtt_entry, {}", e);
@@ -77,12 +76,13 @@ pub fn start(params: &Parameters) -> Outcome<()> {
 // Only top level paths are sent to the synch thread if the watched directory has exceeded
 // interval. In other words events are filtered against intervals (per inode) and added
 // to the synch queue.
-fn interval_add(
+fn check_interval(
     event_path: PathBuf,
     inode_map: &mut config::InodeMap,
     event_tx: &mpsc::Sender<PathBuf>,
 ) {
     // need to dynamically lookup keys and compare path names
+    debug!("checking interval, event:{}", event_path.display());
     for (inode_path, inode) in inode_map {
         if event_path.starts_with(inode_path) {
             let now = Instant::now();
@@ -102,21 +102,22 @@ fn watch_entry(
     inode_map: &mut config::InodeMap,
     notify_rx: mpsc::Receiver<DebouncedEvent>,
     event_tx: mpsc::Sender<PathBuf>,
-    exit_cond: &Mutex<bool>,
+    fatal_flag: &AtomicBool,
 ) {
     loop {
-        if utils::exited(exit_cond) {
+
+        if fatal_flag.load(Ordering::SeqCst) {
             break;
         }
 
         match notify_rx.try_recv() {
             // blocking call
             Ok(event) => match event {
-                DebouncedEvent::Create(path) => interval_add(path, inode_map, &event_tx),
-                DebouncedEvent::Write(path) => interval_add(path, inode_map, &event_tx),
-                DebouncedEvent::Chmod(path) => interval_add(path, inode_map, &event_tx),
-                DebouncedEvent::Remove(path) => interval_add(path, inode_map, &event_tx),
-                DebouncedEvent::Rename(path, _) => interval_add(path, inode_map, &event_tx),
+                DebouncedEvent::Create(path) => check_interval(path, inode_map, &event_tx),
+                DebouncedEvent::Write(path) => check_interval(path, inode_map, &event_tx),
+                DebouncedEvent::Chmod(path) => check_interval(path, inode_map, &event_tx),
+                DebouncedEvent::Remove(path) => check_interval(path, inode_map, &event_tx),
+                DebouncedEvent::Rename(path, _) => check_interval(path, inode_map, &event_tx),
                 DebouncedEvent::Rescan => {}
                 DebouncedEvent::NoticeWrite(_) => {}
                 DebouncedEvent::NoticeRemove(_) => {}
@@ -134,7 +135,7 @@ fn watch_entry(
                 }
                 mpsc::TryRecvError::Disconnected => {
                     error!("FATAL: notify_rx hung up in watch_entry");
-                    utils::fatal(exit_cond);
+                    fatal_flag.store(true, Ordering::SeqCst);
                 }
             },
         }
@@ -145,7 +146,7 @@ fn mqtt_entry(
     server_addr: &str,
     inode_map: &config::InodeMap,
     event_rx: mpsc::Receiver<PathBuf>,
-    exit_cond: &Mutex<bool>,
+    fatal_flag: &AtomicBool,
 ) -> Outcome<()> {
     let _payload = ipc::Payload::new();
     let (mqtt_client, mqtt_rx): (ipc::MqttClient, ipc::Rx);
@@ -155,16 +156,15 @@ fn mqtt_entry(
             mqtt_rx = rx;
         }
         Err(e) => {
-            utils::fatal(exit_cond);
+            fatal_flag.store(true, Ordering::SeqCst);
             return bad!("Unable to create mqtt client, {}", e);
         }
     }
 
     // The server will send status updates to it's clients every 5 seconds
     loop {
-        // Check to make sure other thread didn't exit
-        if utils::exited(exit_cond) {
-            return bad!("mqtt_entry>> exit condition reached");
+        if fatal_flag.load(Ordering::SeqCst) {
+            return bad!("mqtt_entry>> exit condition reached in watch thread");
         }
 
         // process mqtt traffic from server
@@ -185,7 +185,7 @@ fn mqtt_entry(
             }
             Err(e) => match e {
                 TryRecvError::Disconnected => {
-                    utils::fatal(exit_cond);
+                    fatal_flag.store(true, Ordering::SeqCst);
                     return bad!("mqtt_rx hung up?");
                 }
                 TryRecvError::Empty => {

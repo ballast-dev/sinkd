@@ -2,8 +2,6 @@
 //   / __/__ _____  _____ ____
 //  _\ \/ -_) __/ |/ / -_) __/
 // /___/\__/_/  |___/\__/_/
-#![allow(unused_imports)]
-extern crate serde;
 use crate::{
     ipc,
     outcome::Outcome,
@@ -11,11 +9,17 @@ use crate::{
 };
 use paho_mqtt as mqtt;
 use std::{
-    path::PathBuf,
     process,
-    sync::{mpsc, Arc, Mutex},
+    sync::{
+        mpsc, 
+        Arc, 
+        Mutex,
+        atomic::{AtomicBool, Ordering}
+    },
     thread,
 };
+
+static FATAL_FLAG: AtomicBool = AtomicBool::new(false);
 
 pub fn start(params: &Parameters) -> Outcome<()> {
     shiplog::init(params)?;
@@ -24,20 +28,17 @@ pub fn start(params: &Parameters) -> Outcome<()> {
     let (msg_tx, msg_rx): (mpsc::Sender<ipc::Payload>, mpsc::Receiver<ipc::Payload>) =
         mpsc::channel();
 
-    let exit_cond = Arc::new(Mutex::new(false));
-    let exit_cond2 = Arc::clone(&exit_cond);
-
     let bcast_cycle = Arc::new(Mutex::new(0));
     let incr_cycle = Arc::clone(&bcast_cycle);
 
     // error handling must be done within the threads
     let mqtt_thread = thread::spawn(move || {
-        if let Err(err) = mqtt_entry(msg_tx, exit_cond, bcast_cycle) {
+        if let Err(err) = mqtt_entry(msg_tx, &FATAL_FLAG, bcast_cycle) {
             error!("{}", err);
         }
     });
     let synch_thread = thread::spawn(move || {
-        if let Err(err) = synch_entry(msg_rx, exit_cond2, incr_cycle) {
+        if let Err(err) = synch_entry(msg_rx, &FATAL_FLAG, incr_cycle) {
             error!("{}", err);
         }
     });
@@ -79,14 +80,14 @@ pub fn start_mosquitto() -> Outcome<()> {
 //? This thread is to ensure no lost messages from mqtt
 fn mqtt_entry(
     synch_tx: mpsc::Sender<ipc::Payload>,
-    exit_cond: Arc<Mutex<bool>>,
+    fatal_flag: &AtomicBool,
     cycle: Arc<Mutex<i32>>
 ) -> Outcome<()> {
     let (mqtt_client, mqtt_rx) =
         ipc::MqttClient::new(Some("localhost"), &["sinkd/clients"], "sinkd/server")?;
 
     loop {
-        if utils::exited(&exit_cond) {
+        if fatal_flag.load(Ordering::SeqCst) {
             return bad!("server>> synch thread exited, aborting mqtt thread");
         }
         match mqtt_rx.try_recv() {
@@ -106,7 +107,7 @@ fn mqtt_entry(
                     debug!("server>> mqtt loop...")
                 }
                 crossbeam::channel::TryRecvError::Disconnected => {
-                    utils::fatal(&exit_cond);
+                    fatal_flag.store(true, Ordering::SeqCst);
                     return bad!("server>> mqtt_rx channel disconnected");
                 }
             },
@@ -119,11 +120,11 @@ fn mqtt_entry(
 /// to this server
 fn synch_entry(
     synch_rx: mpsc::Receiver<ipc::Payload>,
-    exit_cond: Arc<Mutex<bool>>,
+    fatal_flag: &AtomicBool,
     cycle: Arc<Mutex<i32>>,
 ) -> Outcome<()> {
     loop {
-        if utils::exited(&exit_cond) {
+        if fatal_flag.load(Ordering::SeqCst) {
             return bad!("server>> mqtt_thread exited, aborting synch thread");
         }
         match synch_rx.recv() { // blocking call

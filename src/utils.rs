@@ -31,7 +31,7 @@ impl <'a> Parameters <'a>{
 
     pub fn debug() -> Self {
         Parameters {
-            verbosity: 3,
+            verbosity: 4,
             clear_logs: true,
             debug_mode: true,
             log_path: Arc::new(Path::new("/tmp/sinkd.log")),
@@ -319,47 +319,6 @@ pub fn setup_keys(_verbosity: u8, host: &str) {
     // }
 }
 
-/// Notify the sibling thread that a fatal condition has occured
-/// Log error upon lock failure and exit immediately
-/// TODO: make an optional parameter that will report on the error
-pub fn fatal(mutex: &Mutex<bool>) {
-    match mutex.lock() {
-        Ok(mut cond) => *cond = true,
-        Err(e) => {
-            error!("FATAL couldn't unlock mutex aborting: {}", e);
-            std::process::exit(1);
-        }
-    }
-}
-
-/// Based on Rust manual it is better practice to exit from main.
-/// Firing up an Error all the way back to main is preferred to
-/// clean up all heap and stack allocated memory.
-pub fn abort(report: &str) -> Result<(), ()> {
-    error!("{}", report);
-    Err(())
-}
-
-/// Return status of shared mutex amoung threads
-/// if unable to lock then return true which signifies program has exited
-pub fn exited(mutex: &Mutex<bool>) -> bool {
-    match mutex.lock() {
-        Ok(cond) => *cond,
-        Err(e) => {
-            error!("FATAL couldn't unlock mutex aborting: {}", e);
-            true
-        }
-    }
-}
-
-// use home_dir which should work on the *nixes
-// if let Some(home) = env::home_dir() {
-//     use crate::utils::{Attrs::*, Colors::*};
-//     print_fancyln(format!("HOME{} ==>> print off environment", home.display()).as_str(), BOLD, GREEN);
-//     for (key, value) in env::vars_os() {
-//         println!("{:?}: {:?}", key, value);
-//     }
-// }
 
 /// Both macOS and Linux have the uname command
 pub fn get_hostname() -> String {
