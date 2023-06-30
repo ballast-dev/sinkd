@@ -32,6 +32,20 @@ pub fn build_sinkd() -> Command {
     Command::new("sinkd")
         .about("deployable cloud")
         .version(env!("CARGO_PKG_VERSION"))
+        .arg(Arg::new("sys-cfg-file")
+            .short('s')
+            .long("system-config")
+            .num_args(1)
+            .default_value("/etc/sinkd.conf")
+            .help("system configuration file to use")
+        )
+        .arg(Arg::new("usr-cfg-file")
+            .short('u')
+            .long("user-config")
+            .num_args(1)
+            .default_value("~/.config/sinkd.conf")
+            .help("user configuration file to use")
+        )
         .subcommand(Command::new("add")
             .about("Adds PATH to watch list")
             .arg(Arg::new("share")
@@ -129,6 +143,19 @@ fn main() {
     } else {
         params = Parameters::new();
     }
+
+    let sys_cfg = match utils::resolve(matches.get_one::<String>("sys-cfg-file").unwrap()) {
+        Ok(normalized) => normalized,
+        Err(e) => return eprintln!("system config path error: {}", e)
+    };
+
+    let usr_cfg = match utils::resolve(matches.get_one::<String>("usr-cfg-file").unwrap()) {
+        Ok(normalized) => normalized,
+        Err(e) => return eprintln!("user config path error: {}", e)
+    };
+
+    println!("{}", sys_cfg.display());
+    println!("{}", usr_cfg.display());
 
     // if verbosity > 0 {
     //     println!("verbosity!: {}", verbosity);

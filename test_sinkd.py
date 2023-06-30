@@ -4,7 +4,7 @@ import subprocess
 import time
 from pathlib import Path
 
-ROOT_PATH = Path("sinkd_dmz")
+ROOT_PATH = Path("test", "sinkd_dmz")
 CLIENT_PATH = Path(ROOT_PATH, "client")
 SERVER_PATH = Path(ROOT_PATH, "server")
 
@@ -12,6 +12,7 @@ def setup_env():
     ROOT_PATH.mkdir(exist_ok=True)
     CLIENT_PATH.mkdir(exist_ok=True)
     SERVER_PATH.mkdir(exist_ok=True)
+
 
 def remove_subfiles(directory: Path):
     for f in directory.glob("*"):
@@ -28,6 +29,8 @@ def create_files(folder: Path, num_of_files: int, delay: float=0.01):
         print(f"touching file{i} with delay:{delay}")
         time.sleep(delay)
         filepath = folder.joinpath(f"file{i}")
+        # touching changes access time, which should be an event
+        # yet I sinkd, doesn't catch these events
         subprocess.run(["touch", filepath])
 
 
