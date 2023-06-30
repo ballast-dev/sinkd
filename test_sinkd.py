@@ -4,9 +4,14 @@ import subprocess
 import time
 from pathlib import Path
 
-CLIENT_PATH = Path("dmz", "client")
-SERVER_PATH = Path("dmz", "server")
+ROOT_PATH = Path("sinkd_dmz")
+CLIENT_PATH = Path(ROOT_PATH, "client")
+SERVER_PATH = Path(ROOT_PATH, "server")
 
+def setup_env():
+    ROOT_PATH.mkdir(exist_ok=True)
+    CLIENT_PATH.mkdir(exist_ok=True)
+    SERVER_PATH.mkdir(exist_ok=True)
 
 def remove_subfiles(directory: Path):
     for f in directory.glob("*"):
@@ -26,18 +31,17 @@ def create_files(folder: Path, num_of_files: int, delay: float=0.01):
         subprocess.run(["touch", filepath])
 
 
-def run_client_situation(root_path: Path):
-    tld = root_path.joinpath(CLIENT_PATH)
-    remove_subfiles(tld)
-    boom_folder = Path(tld, "boom")
+def run_client_situation():
+    remove_subfiles(CLIENT_PATH)
+    boom_folder = Path(CLIENT_PATH, "boom")
     create_files(boom_folder, 3, 0.5)
     # print(f"delay:{6}secs")
     # time.sleep(6)
-    other_folder = Path(tld, "other")
+    other_folder = Path(CLIENT_PATH, "other")
     create_files(other_folder, 10, 1)
     print("==>> Finished client situation <<==")
 
 
 if __name__ == "__main__":
-    userland = Path("~").expanduser()
-    run_client_situation(userland)
+    setup_env()
+    run_client_situation()
