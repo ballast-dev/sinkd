@@ -7,6 +7,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+use crate::{utils::Parameters, outcome::Outcome};
+
 // these are serially parsable
 #[derive(Debug, Serialize, Deserialize)]
 struct Anchor {
@@ -70,6 +72,47 @@ impl ConfigParser {
             users: HashMap::new(),
         }
     }
+
+    //? server will have known paths to load files into
+    //? configs are client driven
+    // pub fn load(&mut self, params: &Parameters) -> Outcome<()> {
+    //     match fs::read_to_string(*params.system_cfg) {
+    //         Ok(output) => match toml::from_str(&output) {
+    //             Err(error) => return bad!("toml parse error: {}", error.to_string()),
+    //             Ok(toml_parsed) => {
+    //                 //? toml_parsed is converted into Rust via serde lib
+    //                 self.sys = toml_parsed;
+    //             }
+    //         },
+    //         Err(e) => return bad!("unable to read file: {}", e)
+    //     };
+
+    //     let mut _user_loaded = false;
+    //     for user in &self.sys.users {
+    //         let user_config = format!("/home/{}/.config/sinkd.conf", user);
+    //         match ConfigParser::get_user_config(&user_config) {
+    //             Ok(_usr_cfg) => {
+    //                 let _ = &self.users.insert(user.clone(), _usr_cfg);
+    //                 _user_loaded = true;
+    //                 continue;
+    //             }
+    //             Err(error) => match error {
+    //                 ParseError::FileNotFound => {
+    //                     error!("File not found: {}", user_config);
+    //                 }
+    //                 ParseError::InvalidSyntax(syntax) => {
+    //                     error!("Invalid syntax in: {}: {}", user_config, syntax);
+    //                 }
+    //                 _ => (),
+    //             },
+    //         }
+    //     }
+    //     if !_user_loaded {
+    //         return Err(ParseError::NoUserFound);
+    //     }
+    //     Ok(())
+
+    // }
 
     /// If just system configs are used that is enough.
     /// The storage of files will be on a group name basis.
@@ -163,7 +206,7 @@ pub struct Inode {
 
 pub type InodeMap = HashMap<PathBuf, Inode>;
 
-pub fn get() -> Result<(String, InodeMap), String> {
+pub fn get(params: &Parameters) -> Result<(String, InodeMap), String> {
     let mut parser = ConfigParser::new();
     parser.load_configs()?;
 

@@ -5,6 +5,7 @@ use crate::{
     utils::{self, Parameters},
 };
 use crossbeam::channel::TryRecvError;
+use daemonize::Daemonize;
 use notify::{DebouncedEvent, Watcher};
 use std::{
     collections::HashSet,
@@ -18,15 +19,30 @@ static FATAL_FLAG: AtomicBool = AtomicBool::new(false);
 
 #[warn(unused_features)]
 pub fn start(params: &Parameters) -> Outcome<()> {
+    // TODO: need packager to setup file with correct permisions
     shiplog::init(params)?;
-    let (srv_addr, mut inode_map) = config::get()?;
+    let client_daemon = Daemonize::new()
+        .pid_file(*params.pid_path);
+    // .chown_pid_file(true)  // is optional, see `Daemonize` documentation
+    // .user("nobody")
+
+    match client_daemon.start() {
+        Ok(_) => {
+            info!("about to start daemon...");
+            init(params)
+        }
+        Err(e) => bad!("coudn't daemonize client, {}", e),
+    }
+}
+
+fn init(params: &Parameters) -> Outcome<()> {
+    let (srv_addr, mut inode_map) = config::get(params)?;
 
     let (notify_tx, notify_rx): (mpsc::Sender<DebouncedEvent>, mpsc::Receiver<DebouncedEvent>) =
         mpsc::channel();
     let (event_tx, event_rx): (mpsc::Sender<PathBuf>, mpsc::Receiver<PathBuf>) = mpsc::channel();
-
-    // watch_thread needs a mutable map to assign "last event" to inode
     
+    // watch_thread needs a mutable map to assign "last event" to inode
     // after config loads up the inode map it is treated as Read Only
     let inode_map2 = inode_map.clone();
 
@@ -55,21 +71,6 @@ pub fn start(params: &Parameters) -> Outcome<()> {
         Err(e) => Err(e),
         Ok(_) => Ok(()),
     }
-
-    // TODO: need packager to setup file with correct permisions
-    // let daemon = Daemonize::new()
-    //     .pid_file(utils::PID_PATH)
-    //     .group("sinkd");
-    // .chown_pid_file(true)  // is optional, see `Daemonize` documentation
-    // .user("nobody")
-
-    // match daemon.start() {
-    //     Ok(_) => {
-    //         info!("about to start daemon...");
-    //         run();
-    //     }
-    //     Err(e) => error!("sinkd did not start (already running?), {}", e),
-    // }
 }
 
 // This will check the event path against the known paths passed at config time
@@ -267,7 +268,7 @@ fn get_watchers(
     if watchers.len() > 0 {
         Ok(watchers)
     } else {
-        bad!("nothing to watch!")
+        bad!("nothing to watch! aborting")
     }
 }
 

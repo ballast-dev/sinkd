@@ -3,6 +3,7 @@ import shutil
 import subprocess
 import time
 from pathlib import Path
+import multiprocess
 
 ROOT_PATH = Path("test", "sinkd_dmz")
 CLIENT_PATH = Path(ROOT_PATH, "client")
@@ -34,6 +35,10 @@ def create_files(folder: Path, num_of_files: int, delay: float=0.01):
         subprocess.run(["touch", filepath])
 
 
+def spawn_sinkd():
+    pass
+
+
 def run_client_situation():
     remove_subfiles(CLIENT_PATH)
     boom_folder = Path(CLIENT_PATH, "boom")
@@ -47,4 +52,5 @@ def run_client_situation():
 
 if __name__ == "__main__":
     setup_env()
+    spawn_sinkd()
     run_client_situation()

@@ -23,7 +23,7 @@ mod utils;
 
 use clap::{Arg, ArgAction, Command};
 use outcome::Outcome;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::utils::Parameters;
 
@@ -32,19 +32,20 @@ pub fn build_sinkd() -> Command {
     Command::new("sinkd")
         .about("deployable cloud")
         .version(env!("CARGO_PKG_VERSION"))
-        .arg(Arg::new("sys-cfg-file")
+        .arg(Arg::new("system-config")
             .short('s')
             .long("system-config")
             .num_args(1)
             .default_value("/etc/sinkd.conf")
             .help("system configuration file to use")
         )
-        .arg(Arg::new("usr-cfg-file")
+        .arg(Arg::new("user-configs")
             .short('u')
             .long("user-config")
-            .num_args(1)
-            .default_value("~/.config/sinkd.conf")
-            .help("user configuration file to use")
+            .num_args(1..)
+            //? long help is '--help' versus '-h'
+            .long_help("defaults to ~/.config/sinkd.conf for every user defined in system config")
+            .help("user configuration files to use, will check supplied users in system config by default")
         )
         .subcommand(Command::new("add")
             .about("Adds PATH to watch list")
@@ -125,7 +126,10 @@ pub fn build_sinkd() -> Command {
 fn handle_outcome<T>(outcome: Outcome<T>) {
     match outcome {
         Ok(_) => println!("operation completed successfully"),
-        Err(e) => eprintln!("ERROR: {}", e)
+        Err(e) => {
+            error!("{}", e);
+            eprintln!("ERROR: {}", e)
+        }
     }
 }
 
@@ -135,37 +139,57 @@ fn main() {
 
     let mut cli = build_sinkd();
     let matches = cli.get_matches_mut();
-    // let verbosity = matches.get_count("verbose");
-    // let clear_logs = *submatches.get_one::<bool>("clear-logs").unwrap_or(&false);
-    let params: Parameters;
-    if matches.get_flag("debug") {
-        params = Parameters::debug();
-    } else {
-        params = Parameters::new();
-    }
 
-    let sys_cfg = match utils::resolve(matches.get_one::<String>("sys-cfg-file").unwrap()) {
-        Ok(normalized) => normalized,
+    let system_cfg = match utils::resolve(matches.get_one::<String>("system-config").unwrap()) {
+        Ok(normalized) => {
+            if normalized.is_dir() {
+                return eprintln!("{} is a directory not a file, aborting", normalized.display());
+            } else {
+                normalized
+        }
+        },
         Err(e) => return eprintln!("system config path error: {}", e)
     };
 
-    let usr_cfg = match utils::resolve(matches.get_one::<String>("usr-cfg-file").unwrap()) {
-        Ok(normalized) => normalized,
-        Err(e) => return eprintln!("user config path error: {}", e)
+    let user_configs = match matches.get_many::<String>("user-configs") {
+        Some(passed_configs) => {
+            let mut user_configs: Vec<PathBuf> = vec![];
+            for passed_config in passed_configs {
+                let _path = match utils::resolve(passed_config) {
+                    Ok(normalized) => {
+                        if normalized.is_dir() {
+                            return eprintln!("{} is a directory not a file, aborting", normalized.display());
+                        } else {
+                            println!("{}", normalized.display());
+                            normalized
+                        }
+                    },
+                    Err(e) => return eprintln!("config path error: {}", e)
+                };
+                user_configs.push(_path);
+            }
+            Some(user_configs)
+        },
+        None => None
     };
 
-    println!("{}", sys_cfg.display());
-    println!("{}", usr_cfg.display());
+    println!("{}", system_cfg.display());
+    // println!("{}", user_cfg.display());
 
-    // if verbosity > 0 {
-    //     println!("verbosity!: {}", verbosity);
-    // }
+    let params = Parameters::new(
+        matches.get_count("verbose"), 
+        matches.get_flag("debug"), 
+        system_cfg, 
+        user_configs
+    );
+
 
     match matches.subcommand() {
         Some(("add", submatches)) => {
             let mut share_paths = Vec::<&String>::new();
             let mut user_paths = Vec::<&String>::new();
 
+            // TODO: combine this logic into function
             if let Some(shares) = submatches.get_many::<String>("share") {
                 share_paths = shares.filter(|p| Path::new(p).exists()).collect();
             }

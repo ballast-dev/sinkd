@@ -15,26 +15,37 @@ pub struct Parameters <'a>{
     pub debug_mode: bool,
     pub log_path: Arc<&'a Path>,
     pub pid_path: Arc<&'a Path>,
+    pub system_config: Arc<PathBuf>,
+    pub user_configs: Arc<Vec<PathBuf>>,
 }
 
 impl <'a> Parameters <'a>{
-    pub fn new() -> Self {
+    pub fn new(
+        verbosity: u8, 
+        debug: bool, 
+        system_config: PathBuf, 
+        user_configs: Option<Vec<PathBuf>>
+    ) -> Self {
         Parameters {
-            verbosity: 0,
-            clear_logs: false,
-            debug_mode: false,
-            log_path: Arc::new(Path::new("/var/log/sinkd.log")),
-            pid_path: Arc::new(Path::new("/run/sinkd.pid")),
-        }
-    }
-
-    pub fn debug() -> Self {
-        Parameters {
-            verbosity: 4,
-            clear_logs: true,
-            debug_mode: true,
-            log_path: Arc::new(Path::new("/tmp/sinkd.log")),
-            pid_path: Arc::new(Path::new("/tmp/sinkd.pid")),
+            verbosity: if debug { 4 } else { verbosity },
+            clear_logs: if debug { true } else { false },
+            debug_mode: debug,
+            log_path: if debug {
+                Arc::new(Path::new("/tmp/sinkd.log"))
+            } else {
+                Arc::new(Path::new("/var/log/sinkd.log")) 
+            },
+            pid_path: if debug {
+                Arc::new(Path::new("/tmp/sinkd.pid"))
+            } else {
+                Arc::new(Path::new("/run/sinkd.pid"))
+            },
+            system_config: Arc::new(system_config),
+            user_configs: if let Some(_cfgs) = user_configs {
+                Arc::new(_cfgs)
+            } else {
+                Arc::new(vec![PathBuf::from("~/.config/sinkd.conf")]) 
+            }
         }
     }
 }
