@@ -5,16 +5,15 @@
 use crate::{
     ipc,
     outcome::Outcome,
-    shiplog, utils::{self, Parameters},
+    shiplog,
+    utils::{self, Parameters},
 };
 use paho_mqtt as mqtt;
 use std::{
     process,
     sync::{
-        mpsc, 
-        Arc, 
-        Mutex,
-        atomic::{AtomicBool, Ordering}
+        atomic::{AtomicBool, Ordering},
+        mpsc, Arc, Mutex,
     },
     thread,
 };
@@ -31,14 +30,16 @@ pub fn start(params: &Parameters) -> Outcome<()> {
     let bcast_cycle = Arc::new(Mutex::new(0));
     let incr_cycle = Arc::clone(&bcast_cycle);
 
-    // error handling must be done within the threads
+    let state = Arc::new(Mutex::new(ipc::Status::Ready));
+    let state2 = Arc::clone(&state);
+
     let mqtt_thread = thread::spawn(move || {
-        if let Err(err) = mqtt_entry(msg_tx, &FATAL_FLAG, bcast_cycle) {
+        if let Err(err) = mqtt_entry(msg_tx, &FATAL_FLAG, bcast_cycle, state) {
             error!("{}", err);
         }
     });
     let synch_thread = thread::spawn(move || {
-        if let Err(err) = synch_entry(msg_rx, &FATAL_FLAG, incr_cycle) {
+        if let Err(err) = synch_entry(msg_rx, &FATAL_FLAG, incr_cycle, state2) {
             error!("{}", err);
         }
     });
@@ -81,7 +82,8 @@ pub fn start_mosquitto() -> Outcome<()> {
 fn mqtt_entry(
     synch_tx: mpsc::Sender<ipc::Payload>,
     fatal_flag: &AtomicBool,
-    cycle: Arc<Mutex<i32>>
+    cycle: Arc<Mutex<i32>>,
+    state: Arc<Mutex<ipc::Status>>,
 ) -> Outcome<()> {
     let (mqtt_client, mqtt_rx) =
         ipc::MqttClient::new(Some("localhost"), &["sinkd/clients"], "sinkd/server")?;
@@ -94,6 +96,20 @@ fn mqtt_entry(
             Ok(msg) => {
                 // ! process mqtt messages
                 // need to figure out state of server before synchronizing
+                match state.lock() {
+                    Ok(state) => match *state {
+                        ipc::Status::NotReady(reason) => match reason {
+                            ipc::Reason::Sinking => todo!(),
+                            ipc::Reason::Behind => todo!(),
+                            ipc::Reason::Other => todo!(),
+                        },
+                        ipc::Status::Ready => todo!(),
+                    },
+                    Err(e) => {
+                        fatal_flag.load(Ordering::SeqCst);
+                        error!("state lock busted")
+                    }
+                }
                 let mut payload = ipc::decode(msg.unwrap().payload())?;
 
                 if mqtt_client.publish(&mut payload).is_err() {
@@ -122,12 +138,14 @@ fn synch_entry(
     synch_rx: mpsc::Receiver<ipc::Payload>,
     fatal_flag: &AtomicBool,
     cycle: Arc<Mutex<i32>>,
+    state: Arc<Mutex<ipc::Status>>,
 ) -> Outcome<()> {
     loop {
         if fatal_flag.load(Ordering::SeqCst) {
             return bad!("server>> mqtt_thread exited, aborting synch thread");
         }
-        match synch_rx.recv() { // blocking call
+        match synch_rx.recv() {
+            // blocking call
             Err(e) => {
                 error!("server:synch_entry hangup on reciever?: {}", e);
             }

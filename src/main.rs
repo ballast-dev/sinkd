@@ -143,12 +143,15 @@ fn main() {
     let system_cfg = match utils::resolve(matches.get_one::<String>("system-config").unwrap()) {
         Ok(normalized) => {
             if normalized.is_dir() {
-                return eprintln!("{} is a directory not a file, aborting", normalized.display());
+                return eprintln!(
+                    "{} is a directory not a file, aborting",
+                    normalized.display()
+                );
             } else {
                 normalized
+            }
         }
-        },
-        Err(e) => return eprintln!("system config path error: {}", e)
+        Err(e) => return eprintln!("system config path error: {}", e),
     };
 
     let user_configs = match matches.get_many::<String>("user-configs") {
@@ -158,31 +161,33 @@ fn main() {
                 let _path = match utils::resolve(passed_config) {
                     Ok(normalized) => {
                         if normalized.is_dir() {
-                            return eprintln!("{} is a directory not a file, aborting", normalized.display());
+                            return eprintln!(
+                                "{} is a directory not a file, aborting",
+                                normalized.display()
+                            );
                         } else {
                             println!("{}", normalized.display());
                             normalized
                         }
-                    },
-                    Err(e) => return eprintln!("config path error: {}", e)
+                    }
+                    Err(e) => return eprintln!("config path error: {}", e),
                 };
                 user_configs.push(_path);
             }
             Some(user_configs)
-        },
-        None => None
+        }
+        None => None,
     };
 
     println!("{}", system_cfg.display());
     // println!("{}", user_cfg.display());
 
     let params = Parameters::new(
-        matches.get_count("verbose"), 
-        matches.get_flag("debug"), 
-        system_cfg, 
-        user_configs
+        matches.get_count("verbose"),
+        matches.get_flag("debug"),
+        system_cfg,
+        user_configs,
     );
-
 
     match matches.subcommand() {
         Some(("add", submatches)) => {

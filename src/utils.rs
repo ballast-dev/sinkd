@@ -9,7 +9,7 @@ use crate::{fancy, ipc, outcome::Outcome};
 const TIMESTAMP_LENGTH: u8 = 25;
 
 // TODO: move this into section of /etc/sinkd.conf
-pub struct Parameters <'a>{
+pub struct Parameters<'a> {
     pub verbosity: u8,
     pub clear_logs: bool,
     pub debug_mode: bool,
@@ -19,12 +19,12 @@ pub struct Parameters <'a>{
     pub user_configs: Arc<Vec<PathBuf>>,
 }
 
-impl <'a> Parameters <'a>{
+impl<'a> Parameters<'a> {
     pub fn new(
-        verbosity: u8, 
-        debug: bool, 
-        system_config: PathBuf, 
-        user_configs: Option<Vec<PathBuf>>
+        verbosity: u8,
+        debug: bool,
+        system_config: PathBuf,
+        user_configs: Option<Vec<PathBuf>>,
     ) -> Self {
         Parameters {
             verbosity: if debug { 4 } else { verbosity },
@@ -33,7 +33,7 @@ impl <'a> Parameters <'a>{
             log_path: if debug {
                 Arc::new(Path::new("/tmp/sinkd.log"))
             } else {
-                Arc::new(Path::new("/var/log/sinkd.log")) 
+                Arc::new(Path::new("/var/log/sinkd.log"))
             },
             pid_path: if debug {
                 Arc::new(Path::new("/tmp/sinkd.pid"))
@@ -44,8 +44,8 @@ impl <'a> Parameters <'a>{
             user_configs: if let Some(_cfgs) = user_configs {
                 Arc::new(_cfgs)
             } else {
-                Arc::new(vec![PathBuf::from("~/.config/sinkd.conf")]) 
-            }
+                Arc::new(vec![PathBuf::from("~/.config/sinkd.conf")])
+            },
         }
     }
 }
@@ -125,7 +125,11 @@ pub fn get_pid(params: &Parameters) -> Outcome<u16> {
     } else {
         match std::fs::read(*params.pid_path) {
             Err(err) => {
-                bad!(format!("Cannot read {}: {}", params.pid_path.display(), err))
+                bad!(format!(
+                    "Cannot read {}: {}",
+                    params.pid_path.display(),
+                    err
+                ))
             }
             Ok(contents) => {
                 let pid_str = String::from_utf8_lossy(&contents);
@@ -202,7 +206,7 @@ pub fn get_username() -> String {
     }
 }
 
-// this will resolve all known paths, converts relative to absolute 
+// this will resolve all known paths, converts relative to absolute
 pub fn resolve(path: &str) -> Outcome<PathBuf> {
     let mut resolved_path = PathBuf::from(path);
     if path.starts_with("~") {
@@ -216,12 +220,12 @@ pub fn resolve(path: &str) -> Outcome<PathBuf> {
         resolved_path = Path::new(&home).join(resolved_path);
         match resolved_path.canonicalize() {
             Ok(normalized) => Ok(normalized),
-            Err(e) => bad!("cannot canonicalize: '{}' {}", resolved_path.display(), e)
+            Err(e) => bad!("cannot canonicalize: '{}' {}", resolved_path.display(), e),
         }
     } else {
         match resolved_path.canonicalize() {
             Ok(normalized) => Ok(normalized),
-            Err(e) => bad!("cannot canonicalize: '{}' {}", resolved_path.display(), e)
+            Err(e) => bad!("cannot canonicalize: '{}' {}", resolved_path.display(), e),
         }
     }
 }

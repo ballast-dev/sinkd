@@ -2,11 +2,11 @@ extern crate log;
 
 use crate::{
     outcome::Outcome,
-    utils::{self, Parameters}
+    utils::{self, Parameters},
 };
 use log::{Level, LevelFilter, Metadata, Record};
-use std::{fs::OpenOptions, path::PathBuf};
-use std::io::prelude::*; // for writeln!
+use std::io::prelude::*;
+use std::{fs::OpenOptions, path::PathBuf}; // for writeln!
 
 const TEN_MEGABYTES: u64 = (1024 ^ 2) * 10;
 
@@ -33,7 +33,7 @@ impl ShipLog {
             2 => LevelFilter::Warn,
             3 => LevelFilter::Info,
             4 => LevelFilter::Debug,
-            _ => LevelFilter::Trace
+            _ => LevelFilter::Trace,
         });
         println!("Logging to: '{}'", params.log_path.display());
     }

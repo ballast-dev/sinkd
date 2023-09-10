@@ -77,9 +77,7 @@ pub fn stop(params: &Parameters) -> bool {
                     eprintln!("{}", e);
                     false
                 }
-                Ok(_) => {
-                    true
-                }
+                Ok(_) => true,
             }
         }
     }

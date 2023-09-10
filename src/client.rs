@@ -10,7 +10,10 @@ use notify::{DebouncedEvent, Watcher};
 use std::{
     collections::HashSet,
     path::PathBuf,
-    sync::{mpsc, atomic::{AtomicBool, Ordering}},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc,
+    },
     thread,
     time::{Duration, Instant},
 };
@@ -21,8 +24,7 @@ static FATAL_FLAG: AtomicBool = AtomicBool::new(false);
 pub fn start(params: &Parameters) -> Outcome<()> {
     // TODO: need packager to setup file with correct permisions
     shiplog::init(params)?;
-    let client_daemon = Daemonize::new()
-        .pid_file(*params.pid_path);
+    let client_daemon = Daemonize::new().pid_file(*params.pid_path);
     // .chown_pid_file(true)  // is optional, see `Daemonize` documentation
     // .user("nobody")
 
@@ -41,7 +43,7 @@ fn init(params: &Parameters) -> Outcome<()> {
     let (notify_tx, notify_rx): (mpsc::Sender<DebouncedEvent>, mpsc::Receiver<DebouncedEvent>) =
         mpsc::channel();
     let (event_tx, event_rx): (mpsc::Sender<PathBuf>, mpsc::Receiver<PathBuf>) = mpsc::channel();
-    
+
     // watch_thread needs a mutable map to assign "last event" to inode
     // after config loads up the inode map it is treated as Read Only
     let inode_map2 = inode_map.clone();
@@ -106,7 +108,6 @@ fn watch_entry(
     fatal_flag: &AtomicBool,
 ) {
     loop {
-
         if fatal_flag.load(Ordering::SeqCst) {
             break;
         }

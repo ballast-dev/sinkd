@@ -191,9 +191,14 @@ impl MqttClient {
         let qos = [1, 1];
 
         // Make the connection to the broker
-        debug!("Connecting to the MQTT broker host:{} subs:[{}], pub_topic:{}", 
+        debug!(
+            "Connecting to the MQTT broker host:{} subs:[{}], pub_topic:{}",
             host.unwrap_or("unknown"),
-            subscriptions.iter().map(|&element| element).collect::<Vec<_>>().join(" "),
+            subscriptions
+                .iter()
+                .map(|&element| element)
+                .collect::<Vec<_>>()
+                .join(" "),
             publish_topic
         );
         match cli.connect(conn_opts) {

@@ -7,7 +7,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{utils::Parameters, outcome::Outcome};
+use crate::{outcome::Outcome, utils::Parameters};
 
 // these are serially parsable
 #[derive(Debug, Serialize, Deserialize)]

@@ -1,5 +1,3 @@
-
-
 fn gen_keys() -> bool {
     let shell = process::Command::new("sh")
         .stdout(process::Stdio::null())
@@ -164,4 +162,3 @@ pub fn setup_keys(_verbosity: u8, host: &str) {
     //     }
     // }
 }
-
