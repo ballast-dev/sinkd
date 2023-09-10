@@ -1,13 +1,22 @@
 #!/usr/bin/env python
 import shutil
+import shlex
 import subprocess
 import time
 from pathlib import Path
-import multiprocess
+import multiprocessing as mp
 
 ROOT_PATH = Path("test", "sinkd_dmz")
 CLIENT_PATH = Path(ROOT_PATH, "client")
 SERVER_PATH = Path(ROOT_PATH, "server")
+
+
+def run(cmd, **kwargs) -> subprocess.CompletedProcess:
+    if type(cmd) is str:
+        cmd = shlex.split(cmd)
+
+    return subprocess.run(cmd, **kwargs, encoding="utf8", env={})
+
 
 def setup_env():
     ROOT_PATH.mkdir(exist_ok=True)
@@ -24,7 +33,7 @@ def remove_subfiles(directory: Path):
             print(f"File not found: {e}")
 
 
-def create_files(folder: Path, num_of_files: int, delay: float=0.01):
+def create_files(folder: Path, num_of_files: int, delay: float = 0.01):
     folder.mkdir(exist_ok=True)
     for i in range(num_of_files):
         print(f"touching file{i} with delay:{delay}")
@@ -51,6 +60,10 @@ def run_client_situation():
 
 
 if __name__ == "__main__":
-    setup_env()
-    spawn_sinkd()
-    run_client_situation()
+    # ls = run("ls -la", capture_output=True)
+    # for line in ls.stdout.splitlines():
+    #     print(f"gotcha {line}")
+    run("printenv")
+    # setup_env()
+    # spawn_sinkd()
+    # run_client_situation()
