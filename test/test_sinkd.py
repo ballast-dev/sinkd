@@ -6,22 +6,26 @@ import time
 from pathlib import Path
 import multiprocessing as mp
 
-ROOT_PATH = Path("test", "sinkd_dmz")
-CLIENT_PATH = Path(ROOT_PATH, "client")
-SERVER_PATH = Path(ROOT_PATH, "server")
+
+TLD = None
+CLIENT_PATH = None
+SERVER_PATH = None
 
 
 def run(cmd, **kwargs) -> subprocess.CompletedProcess:
     if type(cmd) is str:
         cmd = shlex.split(cmd)
 
-    return subprocess.run(cmd, **kwargs, encoding="utf8", env={})
+    return subprocess.run(cmd, **kwargs, encoding="utf8")
 
 
 def setup_env():
-    ROOT_PATH.mkdir(exist_ok=True)
-    CLIENT_PATH.mkdir(exist_ok=True)
-    SERVER_PATH.mkdir(exist_ok=True)
+    global TLD, CLIENT_PATH, SERVER_PATH
+    TLD = run("git rev-parse --show-toplevel", capture_output=True).strip("\n")
+    print(TLD)
+    ROOT_PATH = Path(TLD, "test", "sinkd_dmz").mkdir(exist_ok=True)
+    CLIENT_PATH = Path(ROOT_PATH, "client").mkdir(exist_ok=True)
+    SERVER_PATH = Path(ROOT_PATH, "server").mkdir(exist_ok=True)
 
 
 def remove_subfiles(directory: Path):
@@ -63,7 +67,7 @@ if __name__ == "__main__":
     # ls = run("ls -la", capture_output=True)
     # for line in ls.stdout.splitlines():
     #     print(f"gotcha {line}")
-    run("printenv")
-    # setup_env()
-    # spawn_sinkd()
-    # run_client_situation()
+    # run("printenv")
+    setup_env()
+    spawn_sinkd()
+    run_client_situation()
