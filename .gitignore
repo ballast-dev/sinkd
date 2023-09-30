@@ -1,5 +1,6 @@
-target
+target/
 **/*.rs.bk
 **/*.DS_Store
 
 test/sinkd_dmz/
+.venv/
