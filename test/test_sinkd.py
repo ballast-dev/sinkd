@@ -10,6 +10,8 @@ import multiprocessing as mp
 TLD = None
 CLIENT_PATH = None
 SERVER_PATH = None
+SYSTEM_CFG = None
+CLIENT_CFG = None
 
 
 def run(cmd, **kwargs) -> subprocess.CompletedProcess:
@@ -20,12 +22,25 @@ def run(cmd, **kwargs) -> subprocess.CompletedProcess:
 
 
 def setup_env():
-    global TLD, CLIENT_PATH, SERVER_PATH
-    TLD = run("git rev-parse --show-toplevel", capture_output=True).strip("\n")
-    print(TLD)
-    ROOT_PATH = Path(TLD, "test", "sinkd_dmz").mkdir(exist_ok=True)
-    CLIENT_PATH = Path(ROOT_PATH, "client").mkdir(exist_ok=True)
-    SERVER_PATH = Path(ROOT_PATH, "server").mkdir(exist_ok=True)
+    global TLD, CLIENT_PATH, SERVER_PATH, SYSTEM_CFG, USER_CFG
+
+    curr_path = Path(__file__)
+    test_dir = curr_path.parent
+    TLD = curr_path.parents[1]
+
+    SYSTEM_CFG = test_dir.joinpath("etc_sinkd.conf")
+    USER_CFG = test_dir.joinpath("sinkd.conf")
+
+    print("system cfg path: ", SYSTEM_CFG)
+    print("user cfg path: ", USER_CFG)
+
+    ROOT_PATH = Path(TLD, "test", "sinkd_dmz")
+    CLIENT_PATH = Path(ROOT_PATH, "client")
+    SERVER_PATH = Path(ROOT_PATH, "server")
+
+    ROOT_PATH.mkdir(exist_ok=True, parents=True)
+    CLIENT_PATH.mkdir(exist_ok=True)
+    SERVER_PATH.mkdir(exist_ok=True)
 
 
 def remove_subfiles(directory: Path):
@@ -44,12 +59,23 @@ def create_files(folder: Path, num_of_files: int, delay: float = 0.01):
         time.sleep(delay)
         filepath = folder.joinpath(f"file{i}")
         # touching changes access time, which should be an event
-        # yet I sinkd, doesn't catch these events
+        # yet I think sinkd doesn't catch these events
         subprocess.run(["touch", filepath])
 
 
 def spawn_sinkd():
-    pass
+    client = run(f"./target/debug/sinkd --debug -s {SYSTEM_CFG} -u {USER_CFG} start --client")
+    if client.returncode != 0:
+        print("uh oh", client.stderr, client.stdout)
+    print("sucessfully spawned sinkd")
+
+
+def stop_sinkd():
+    kilt_sinkd = run("sudo pkill sinkd")
+    if kilt_sinkd.returncode != 0:
+        print("trouble pkilling sinkd")
+    else:
+        print("succeeded in stoping sinkd daemon")
 
 
 def run_client_situation():
@@ -71,3 +97,4 @@ if __name__ == "__main__":
     setup_env()
     spawn_sinkd()
     run_client_situation()
+    stop_sinkd()
