@@ -67,6 +67,7 @@ def spawn_sinkd():
     client = run(f"./target/debug/sinkd --debug -s {SYSTEM_CFG} -u {USER_CFG} start --client")
     if client.returncode != 0:
         print("uh oh", client.stderr, client.stdout)
+        exit(-1)
     print("sucessfully spawned sinkd")
 
 
