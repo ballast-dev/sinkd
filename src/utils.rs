@@ -23,8 +23,8 @@ impl<'a> Parameters<'a> {
     pub fn new(
         verbosity: u8,
         debug: bool,
-        system_config: PathBuf,
-        user_configs: Option<Vec<PathBuf>>,
+        system_config: &PathBuf,
+        user_configs: &Option<Vec<PathBuf>>,
     ) -> Self {
         Parameters {
             verbosity: if debug { 4 } else { verbosity },
@@ -40,9 +40,9 @@ impl<'a> Parameters<'a> {
             } else {
                 Arc::new(Path::new("/run/sinkd.pid"))
             },
-            system_config: Arc::new(system_config),
+            system_config: Arc::new(system_config.clone()),
             user_configs: if let Some(_cfgs) = user_configs {
-                Arc::new(_cfgs)
+                Arc::new(_cfgs.clone())
             } else {
                 Arc::new(vec![PathBuf::from("~/.config/sinkd.conf")])
             },

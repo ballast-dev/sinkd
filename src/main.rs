@@ -7,6 +7,7 @@ extern crate toml;
 #[macro_use]
 extern crate log;
 extern crate libc;
+extern crate nix;
 extern crate rpassword;
 
 #[macro_use]
@@ -23,7 +24,10 @@ mod utils;
 
 use clap::{Arg, ArgAction, Command};
 use outcome::Outcome;
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    process::ExitCode,
+};
 
 use crate::utils::Parameters;
 
@@ -125,18 +129,22 @@ pub fn build_sinkd() -> Command {
         )
 }
 
-fn handle_outcome<T>(outcome: Outcome<T>) {
+fn egress<T>(outcome: Outcome<T>) -> ExitCode {
     match outcome {
-        Ok(_) => println!("operation completed successfully"),
+        Ok(_) => {
+            println!("operation completed successfully");
+            std::process::ExitCode::SUCCESS
+        }
         Err(e) => {
             error!("{}", e);
-            eprintln!("ERROR: {}", e)
+            eprintln!("ERROR: {}", e);
+            std::process::ExitCode::FAILURE
         }
     }
 }
 
 #[allow(dead_code)]
-fn main() {
+fn main() -> ExitCode {
     println!("Running sinkd at {}", utils::get_timestamp("%T"));
 
     let mut cli = build_sinkd();
@@ -145,34 +153,35 @@ fn main() {
     let system_cfg = match utils::resolve(matches.get_one::<String>("system-config").unwrap()) {
         Ok(normalized) => {
             if normalized.is_dir() {
-                return eprintln!(
+                // TODO: have error codes
+                return egress::<String>(bad!(
                     "{} is a directory not a file, aborting",
                     normalized.display()
-                );
+                ));
             } else {
                 normalized
             }
         }
-        Err(e) => return eprintln!("system config path error: {}", e),
+        Err(e) => return egress::<String>(bad!("system config path error: {}", e)),
     };
 
-    let user_configs = match matches.get_many::<String>("user-configs") {
+    let user_cfgs = match matches.get_many::<String>("user-configs") {
         Some(passed_configs) => {
             let mut user_configs: Vec<PathBuf> = vec![];
             for passed_config in passed_configs {
                 let _path = match utils::resolve(passed_config) {
                     Ok(normalized) => {
                         if normalized.is_dir() {
-                            return eprintln!(
+                            return egress::<String>(bad!(
                                 "{} is a directory not a file, aborting",
                                 normalized.display()
-                            );
+                            ));
                         } else {
                             println!("{}", normalized.display());
                             normalized
                         }
                     }
-                    Err(e) => return eprintln!("config path error: {}", e),
+                    Err(e) => return egress::<String>(bad!("config path error: {}", e)),
                 };
                 user_configs.push(_path);
             }
@@ -181,15 +190,19 @@ fn main() {
         None => None,
     };
 
-    println!("{}", system_cfg.display());
-    // println!("{}", user_cfg.display());
-
     let params = Parameters::new(
         matches.get_count("verbose"),
         matches.get_flag("debug"),
-        system_cfg,
-        user_configs,
+        &system_cfg,
+        &user_cfgs,
     );
+
+    if params.verbosity > 1 {
+        println!("system config:\t{}", &system_cfg.display());
+        for user_cfg in &user_cfgs.unwrap() {
+            println!("user config:\t{}", user_cfg.display());
+        }
+    }
 
     match matches.subcommand() {
         Some(("add", submatches)) => {
@@ -205,40 +218,43 @@ fn main() {
                 user_paths = paths.filter(|p| Path::new(p).exists()).collect();
             }
 
-            sinkd::add(share_paths, user_paths);
+            egress(sinkd::add(share_paths, user_paths))
         }
         Some(("ls", submatches)) => {
             if !submatches.args_present() {
-                sinkd::list(None);
+                egress(sinkd::list(None))
             } else {
                 let vals: Vec<&str> = submatches
                     .get_many::<String>("PATHS")
                     .unwrap()
                     .map(|s| s.as_str())
                     .collect();
-                sinkd::list(Some(&vals))
+                egress(sinkd::list(Some(&vals)))
             }
         }
-        Some(("rm", _)) => {
-            sinkd::remove();
-        }
+        Some(("rm", _)) => egress(sinkd::remove()),
         Some(("start", submatches)) => {
             // TODO: check to see if broker is up!!!
             if submatches.get_flag("SERVER") {
-                handle_outcome(server::start(&params));
+                egress(server::start(&params))
             } else if submatches.get_flag("CLIENT") {
-                handle_outcome(client::start(&params));
+                egress(client::start(&params))
             } else {
-                eprintln!("Need know which to start --server or --client?")
+                egress::<String>(bad!("Need know which to start --server or --client?"))
             }
         }
         Some(("stop", _)) => {
+            egress::<String>(bad!("under maintenance"))
             // sinkd::stop();
         }
-        Some(("restart", _)) => sinkd::restart(),
-        Some(("log", _)) => sinkd::log(&params),
+        Some(("restart", _)) => {
+            egress::<String>(bad!("under maintenance"))
+            // sinkd::restart(),
+        }
+        Some(("log", _)) => egress(sinkd::log(&params)),
         _ => {
             cli.print_help().expect("sinkd usage: .... ");
+            ExitCode::from(ExitCode::SUCCESS)
         }
     }
 }

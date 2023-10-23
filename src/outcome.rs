@@ -5,12 +5,31 @@
 pub struct Failure(String);
 pub type Outcome<T> = std::result::Result<T, Failure>;
 
+// pub enum Outcome<T> {
+//     Ok(T),
+//     Err(Failure)
+// }
+
+// pub enum Outcome<T>(Result(T, Failure));
+// pub enum Outcome<T> {
+//     Variant(Result<T, Failure>),
+// }
+
+// macro_rules! good {
+//     () => {
+//         Outcome::Good(())
+//     };
+//     ($expr:expr) => {
+//         Outcome::Good($expr)
+//     };
+// }
+
 macro_rules! bad {
     ($msg:expr) => {
-       Outcome::Err($msg.into()) // into will call From<T> with the right type
+        Err($msg.into()) // into will call From<T> with the right type
     };
     ($($arg:tt)*) => {
-        Outcome::Err(format!($($arg)*).into())
+        Err(format!($($arg)*).into())
     };
 }
 
@@ -27,6 +46,48 @@ impl From<std::io::Error> for Failure {
         Failure(value.to_string())
     }
 }
+
+// impl<T> std::process::Termination for Outcome<T> {
+//     fn report(self) -> std::process::ExitCode {
+//         match self {
+//             Outcome::Ok(_) => {
+//                 println!("operation completed successfully");
+//                 std::process::ExitCode::SUCCESS
+//             },
+//             Outcome::Err(e) => {
+//                 error!("{}", e);
+//                 eprintln!("ERROR: {}", e);
+//                 std::process::ExitCode::FAILURE
+//             }
+//         }
+//     }
+// }
+
+// impl<T> From<Result<T, Failure>> for Outcome<T> {
+//     fn from(result: Result<T, Failure>) -> Self {
+//         match result {
+//             Ok(val) => Outcome::Ok(val),
+//             Err(failure) => Outcome::Err(failure),
+//         }
+//     }
+// }
+
+// impl<T> Outcome<T> {
+//     pub fn handle(self) -> std::process::ExitCode {
+//         match self {
+//             Outcome::Ok(_) => {
+//                 println!("operation completed successfully");
+//                 std::process::ExitCode::SUCCESS
+//             },
+//             Outcome::Err(e) => {
+//                 error!("{}", e);
+//                 eprintln!("ERROR: {}", e);
+//                 std::process::ExitCode::FAILURE
+//             }
+//         }
+
+//     }
+// }
 
 impl From<String> for Failure {
     fn from(message: String) -> Failure {

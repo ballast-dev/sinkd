@@ -2,17 +2,17 @@
 #![allow(unused_variables)]
 #![allow(unused_imports)]
 
+use crate::outcome::Outcome;
 use crate::shiplog;
 use crate::utils::Parameters;
 use crate::{config, utils};
-use daemonize::Daemonize;
 use std::fs;
 
 fn reload_config() {
     info!("reload config?")
 }
 
-pub fn add(share_paths: Vec<&String>, user_paths: Vec<&String>) -> bool {
+pub fn add(share_paths: Vec<&String>, user_paths: Vec<&String>) -> Outcome<()> {
     // adds entry to ~/.sinkd/sinkd.conf
     // tells daemon to read config again
     // send a SIGHUP signal
@@ -26,10 +26,10 @@ pub fn add(share_paths: Vec<&String>, user_paths: Vec<&String>) -> bool {
     for p in &user_paths {
         println!("user... {}", p);
     }
-    true // able to watch directory
+    Ok(())
 }
 
-pub fn list(paths: Option<&Vec<&str>>) {
+pub fn list(paths: Option<&Vec<&str>>) -> Outcome<bool> {
     //TODO need to list system shares
     match paths {
         Some(paths) => {
@@ -37,10 +37,10 @@ pub fn list(paths: Option<&Vec<&str>>) {
                 println!("path: {}", path);
             }
             let user = env!("USER");
+            println!("under maintenance...");
+            Ok(true)
         }
-        None => {
-            println!("no paths were given!")
-        }
+        None => bad!("no paths were given!"),
     }
     // match config::ConfigParser::get_user_config(user) {
     //     Ok(usr_cfg) => {
@@ -83,17 +83,19 @@ pub fn stop(params: &Parameters) -> bool {
     }
 }
 
-pub fn restart() {
+pub fn restart() -> Outcome<bool> {
     // if stop() {
     //     start();
     // }
+    Ok(true)
 }
 
-pub fn remove() {
-    println!("remove files and folders")
+pub fn remove() -> Outcome<bool> {
+    println!("remove files and folders");
+    Ok(true)
 }
 
-pub fn log(params: &Parameters) {
+pub fn log(params: &Parameters) -> Outcome<bool> {
     // info!("hello log");
     // warn!("warning");
     // error!("oops");
@@ -101,4 +103,5 @@ pub fn log(params: &Parameters) {
         "{}",
         fs::read_to_string(*params.log_path).expect("couldn't read log file, check permissions")
     );
+    Ok(true)
 }

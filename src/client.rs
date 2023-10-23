@@ -1,11 +1,6 @@
-use crate::{
-    config, ipc,
-    outcome::Outcome,
-    shiplog,
-    utils::{self, Parameters},
-};
+use crate::{config, ipc, outcome::Outcome, shiplog, utils::Parameters};
 use crossbeam::channel::TryRecvError;
-use daemonize::Daemonize;
+// use daemonize::Daemonize;
 use notify::{DebouncedEvent, Watcher};
 use std::{
     collections::HashSet,
@@ -24,16 +19,35 @@ static FATAL_FLAG: AtomicBool = AtomicBool::new(false);
 pub fn start(params: &Parameters) -> Outcome<()> {
     // TODO: need packager to setup file with correct permisions
     shiplog::init(params)?;
-    let client_daemon = Daemonize::new().pid_file(*params.pid_path);
-    // .chown_pid_file(true)  // is optional, see `Daemonize` documentation
-    // .user("nobody")
 
-    match client_daemon.start() {
-        Ok(_) => {
+    use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
+    use nix::unistd::{fork, ForkResult};
+
+    match unsafe { fork() } {
+        Ok(ForkResult::Parent { child, .. }) => {
+            let start_time = Instant::now();
+            let timeout = Duration::from_secs(2);
+
+            while start_time.elapsed() < timeout {
+                match waitpid(child, Some(WaitPidFlag::WNOHANG)) {
+                    Ok(status) => match status {
+                        WaitStatus::Exited(_, _) => return bad!("client encountered error"),
+                        _ => (),
+                    },
+                    Err(e) => eprintln!("Failed to wait on child?: {}", e),
+                }
+                std::thread::sleep(Duration::from_secs(1));
+            }
+            println!("client spawned, logging to '{}'", params.log_path.display());
+            Ok(())
+        }
+        Ok(ForkResult::Child) => {
             info!("about to start daemon...");
             init(params)
         }
-        Err(e) => bad!("coudn't daemonize client, {}", e),
+        Err(_) => {
+            bad!("Failed to fork process")
+        }
     }
 }
 
@@ -51,7 +65,7 @@ fn init(params: &Parameters) -> Outcome<()> {
     // keep the watchers alive!
     let _watchers = match get_watchers(&inode_map, notify_tx) {
         Ok(w) => w,
-        Err(e) => return bad!(e),
+        Err(e) => return bad!("{}", e),
     };
 
     let watch_thread =
