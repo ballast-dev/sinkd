@@ -4,6 +4,7 @@ use std::{
     collections::HashMap,
     fs,
     path::PathBuf,
+    str::FromStr,
     time::{Duration, Instant},
 };
 
@@ -18,15 +19,15 @@ struct Anchor {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct SysParser {
+struct SysConfig {
     server_addr: String,
     users: Vec<String>,
     shares: Vec<Anchor>,
 }
 
-impl SysParser {
-    fn new() -> SysParser {
-        SysParser {
+impl SysConfig {
+    fn new() -> SysConfig {
+        SysConfig {
             server_addr: String::new(),
             users: Vec::new(),
             shares: Vec::new(),
@@ -35,7 +36,7 @@ impl SysParser {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct UserParser {
+struct UserConfig {
     anchors: Vec<Anchor>,
 }
 
@@ -59,8 +60,8 @@ enum ParseError {
 // }
 
 struct ConfigParser {
-    sys: SysParser,
-    users: HashMap<String, UserParser>,
+    sys: SysConfig,
+    users: HashMap<PathBuf, UserConfig>,
 }
 
 #[doc = "don't need a class to operate"]
@@ -68,81 +69,47 @@ impl ConfigParser {
     // system level config that will house user based configs
     fn new() -> ConfigParser {
         ConfigParser {
-            sys: SysParser::new(),
+            sys: SysConfig::new(),
             users: HashMap::new(),
         }
     }
 
-    //? server will have known paths to load files into
-    //? configs are client driven
-    // pub fn load(&mut self, params: &Parameters) -> Outcome<()> {
-    //     match fs::read_to_string(*params.system_cfg) {
-    //         Ok(output) => match toml::from_str(&output) {
-    //             Err(error) => return bad!("toml parse error: {}", error.to_string()),
-    //             Ok(toml_parsed) => {
-    //                 //? toml_parsed is converted into Rust via serde lib
-    //                 self.sys = toml_parsed;
-    //             }
-    //         },
-    //         Err(e) => return bad!("unable to read file: {}", e)
-    //     };
-
-    //     let mut _user_loaded = false;
-    //     for user in &self.sys.users {
-    //         let user_config = format!("/home/{}/.config/sinkd.conf", user);
-    //         match ConfigParser::get_user_config(&user_config) {
-    //             Ok(_usr_cfg) => {
-    //                 let _ = &self.users.insert(user.clone(), _usr_cfg);
-    //                 _user_loaded = true;
-    //                 continue;
-    //             }
-    //             Err(error) => match error {
-    //                 ParseError::FileNotFound => {
-    //                     error!("File not found: {}", user_config);
-    //                 }
-    //                 ParseError::InvalidSyntax(syntax) => {
-    //                     error!("Invalid syntax in: {}: {}", user_config, syntax);
-    //                 }
-    //                 _ => (),
-    //             },
-    //         }
-    //     }
-    //     if !_user_loaded {
-    //         return Err(ParseError::NoUserFound);
-    //     }
-    //     Ok(())
-
-    // }
-
-    /// If just system configs are used that is enough.
-    /// The storage of files will be on a group name basis.
-    /// The name shall be config driven? Maybe a temp file to
-    /// store the hash of this sinkd group...
-    fn load_configs(&mut self) -> Result<(), String> {
-        if let Err(e) = self.load_sys_config() {
+    // If just system configs are used that is enough.
+    // The storage of files will be on a group name basis.
+    // The name shall be config driven? Maybe a temp file to
+    // store the hash of this sinkd group...
+    fn load_configs(&mut self, params: &Parameters) -> Result<(), String> {
+        if let Err(e) = self.load_sys_config(&params.system_config) {
             match e {
                 ParseError::InvalidSyntax(syn) => {
-                    return Err(format!("Invalid sytax in '/etc/sinkd.conf': {}", syn));
+                    return Err(format!(
+                        "Invalid sytax in '{}': {}",
+                        &params.system_config.display(),
+                        syn
+                    ));
                 }
                 ParseError::FileNotFound => {
-                    return Err("File not found: '/etc/sinkd.conf'".to_string());
+                    return Err(format!(
+                        "File not found: '{}'",
+                        &params.system_config.display()
+                    ));
                 }
                 _ => {
-                    return Err("sysconfig unknown condition".to_string());
+                    return Err("load_configs unknown condition".to_string());
                 }
             }
         }
 
         // TODO: create a "sinkd group" in /etc/sinkd.conf
         // TODO: to store the server files in, i.e. /srv/sinkd/<group_name>/<abs_path>
-        if let Err(ParseError::NoUserFound) = self.load_user_configs() {
+        if let Err(ParseError::NoUserFound) = self.load_user_configs(&params.user_configs) {
             warn!("No user was loaded into sinkd, using only system configs");
         }
         Ok(())
     }
 
-    fn load_sys_config(&mut self) -> Result<(), ParseError> {
-        match fs::read_to_string("/etc/sinkd.conf") {
+    fn load_sys_config(&mut self, sys_config: &PathBuf) -> Result<(), ParseError> {
+        match fs::read_to_string(sys_config) {
             Err(_) => Err(ParseError::FileNotFound),
             Ok(output) => match toml::from_str(&output) {
                 Err(error) => Err(ParseError::InvalidSyntax(error.to_string())),
@@ -155,40 +122,64 @@ impl ConfigParser {
         }
     }
 
-    fn load_user_configs(&mut self) -> Result<(), ParseError> {
+    fn load_user_configs(&mut self, user_configs: &Vec<PathBuf>) -> Result<(), ParseError> {
         let mut _user_loaded = false;
-        for user in &self.sys.users {
-            let user_config = format!("/home/{}/.config/sinkd.conf", user);
-            match ConfigParser::get_user_config(&user_config) {
-                Ok(_usr_cfg) => {
-                    let _ = &self.users.insert(user.clone(), _usr_cfg);
-                    _user_loaded = true;
-                    continue;
+        if user_configs.is_empty() {
+            // default behavior is to check system for users
+            for user in &self.sys.users {
+                let user_config =
+                    PathBuf::from_str(&format!("/home/{}/.config/sinkd.conf", user)).unwrap();
+                match ConfigParser::get_user_config(&user_config) {
+                    Ok(_usr_cfg) => {
+                        let _ = &self.users.insert(user_config, _usr_cfg);
+                        _user_loaded = true;
+                        continue;
+                    }
+                    Err(error) => match error {
+                        ParseError::FileNotFound => {
+                            error!("File not found: {}", user_config.display());
+                        }
+                        ParseError::InvalidSyntax(syntax) => {
+                            error!("Invalid syntax in: {}: {}", user_config.display(), syntax);
+                        }
+                        _ => (),
+                    },
                 }
-                Err(error) => match error {
-                    ParseError::FileNotFound => {
-                        error!("File not found: {}", user_config);
+            }
+        } else {
+            for user_config in user_configs {
+                match ConfigParser::get_user_config(user_config) {
+                    Ok(_usr_cfg) => {
+                        let _ = &self.users.insert(user_config.clone(), _usr_cfg);
+                        _user_loaded = true;
+                        continue;
                     }
-                    ParseError::InvalidSyntax(syntax) => {
-                        error!("Invalid syntax in: {}: {}", user_config, syntax);
-                    }
-                    _ => (),
-                },
+                    Err(error) => match error {
+                        ParseError::FileNotFound => {
+                            error!("File not found: {}", user_config.display());
+                        }
+                        ParseError::InvalidSyntax(syntax) => {
+                            error!("Invalid syntax in: {}: {}", user_config.display(), syntax);
+                        }
+                        _ => (),
+                    },
+                }
             }
         }
+
         if !_user_loaded {
             return Err(ParseError::NoUserFound);
         }
         Ok(())
     }
 
-    fn get_user_config(user_config: &str) -> Result<UserParser, ParseError> {
+    fn get_user_config(user_config: &PathBuf) -> Result<UserConfig, ParseError> {
         match fs::read_to_string(user_config) {
             Err(_) => Err(ParseError::FileNotFound),
             Ok(output) => match toml::from_str(&output) {
                 Err(error) => Err(ParseError::InvalidSyntax(error.to_string())),
                 Ok(toml_parsed) => {
-                    let user_config: UserParser = toml_parsed;
+                    let user_config: UserConfig = toml_parsed;
                     Ok(user_config)
                 }
             },
@@ -208,7 +199,7 @@ pub type InodeMap = HashMap<PathBuf, Inode>;
 
 pub fn get(params: &Parameters) -> Result<(String, InodeMap), String> {
     let mut parser = ConfigParser::new();
-    parser.load_configs()?;
+    parser.load_configs(params)?;
 
     let mut inode_map: InodeMap = HashMap::new();
 

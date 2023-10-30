@@ -44,7 +44,7 @@ impl<'a> Parameters<'a> {
             user_configs: if let Some(_cfgs) = user_configs {
                 Arc::new(_cfgs.clone())
             } else {
-                Arc::new(vec![PathBuf::from("~/.config/sinkd.conf")])
+                Arc::new(vec![])
             },
         }
     }

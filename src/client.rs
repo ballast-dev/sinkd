@@ -1,6 +1,5 @@
 use crate::{config, ipc, outcome::Outcome, shiplog, utils::Parameters};
 use crossbeam::channel::TryRecvError;
-// use daemonize::Daemonize;
 use notify::{DebouncedEvent, Watcher};
 use std::{
     collections::HashSet,
@@ -38,7 +37,7 @@ pub fn start(params: &Parameters) -> Outcome<()> {
                 }
                 std::thread::sleep(Duration::from_secs(1));
             }
-            println!("client spawned, logging to '{}'", params.log_path.display());
+            println!("spawned, logging to '{}'", params.log_path.display());
             Ok(())
         }
         Ok(ForkResult::Child) => {
