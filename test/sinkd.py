@@ -24,12 +24,25 @@ def setup_env():
     SERVER_PATH.mkdir(exist_ok=True, parents=True)
 
 
+def start_mosquitto():
+    try:
+        result = run("pgrep -f mosquitto", stdout=subprocess.PIPE)
+        if result.returncode != 0:
+            print("mosquitto is not running. starting mosquitto...")
+            run("mosquitto -d")
+        else:
+            print("mosquitto is already running.")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+
 def remove_subfiles(directory: Path):
     if directory:
         for f in directory.glob("*"):
             try:
-                shutil.rmtree(f)
-                print("removed ", f)
+                if Path(f).is_dir():
+                    shutil.rmtree(f)
+                    print("removed ", f)
             except FileNotFoundError as e:
                 print(f"File not found: {e}")
 
@@ -54,6 +67,7 @@ def spawn_client():
         exit(-1)
     print("sucessfully spawned sinkd")
 
+
 def spawn_server():
     sys_cfg = SERVER_PATH.joinpath("etc_sinkd.conf")
     client = run(f"./target/debug/sinkd start --debug --sys-cfg {sys_cfg} --server")
@@ -71,25 +85,19 @@ def stop_sinkd():
         print("succeeded in stoping sinkd daemon")
 
 
-def run_client_situation():
+def run_situation():
     remove_subfiles(CLIENT_PATH)
-    boom_folder = Path(CLIENT_PATH, "boom")
-    create_files(boom_folder, 3, 0.5)
-    # print(f"delay:{6}secs")
-    # time.sleep(6)
-    other_folder = Path(CLIENT_PATH, "other")
-    create_files(other_folder, 10, 1)
+    folder1 = Path(CLIENT_PATH, "folder1")
+    create_files(folder1, 3, 0.5)
+    folder2 = Path(CLIENT_PATH, "folder2")
+    create_files(folder2, 10, 1)
     print("==>> Finished client situation <<==")
 
 
 if __name__ == "__main__":
-    # ls = run("ls -la", capture_output=True)
-    # for line in ls.stdout.splitlines():
-    #     print(f"gotcha {line}")
-    # run("printenv")
     setup_env()
-    spawn_client()
-    # TODO: client needs communication with the server to process events
-    # TODO: setup server first and ensure things are hooked up
-    run_client_situation()
+    start_mosquitto()
+    spawn_server()
+    # spawn_client()
+    run_situation()
     stop_sinkd()
