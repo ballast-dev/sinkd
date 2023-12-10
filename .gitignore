@@ -2,5 +2,8 @@ target/
 **/*.rs.bk
 **/*.DS_Store
 
-test/sinkd_dmz/
+test/client/
+!test/client/*.conf
+test/server/
+!test/server/*.conf
 .venv/

@@ -8,12 +8,8 @@ import multiprocessing as mp
 
 
 TLD = Path(__file__).parents[1]
-SYSTEM_CFG = TLD.joinpath("test", "etc_sinkd.conf")
-USER_CFG = TLD.joinpath("test", "sinkd.conf")
-
-ROOT_PATH = Path(TLD, "test", "sinkd_dmz")
-CLIENT_PATH = Path(ROOT_PATH, "client")
-SERVER_PATH = Path(ROOT_PATH, "server")
+CLIENT_PATH = Path(TLD, "test", "client")
+SERVER_PATH = Path(TLD, "test", "server")
 
 
 def run(cmd, **kwargs) -> subprocess.CompletedProcess:
@@ -24,9 +20,8 @@ def run(cmd, **kwargs) -> subprocess.CompletedProcess:
 
 
 def setup_env():
-    ROOT_PATH.mkdir(exist_ok=True, parents=True)
-    CLIENT_PATH.mkdir(exist_ok=True)
-    SERVER_PATH.mkdir(exist_ok=True)
+    CLIENT_PATH.mkdir(exist_ok=True, parents=True)
+    SERVER_PATH.mkdir(exist_ok=True, parents=True)
 
 
 def remove_subfiles(directory: Path):
@@ -50,8 +45,18 @@ def create_files(folder: Path, num_of_files: int, delay: float = 0.01):
         subprocess.run(["touch", filepath])
 
 
-def spawn_sinkd():
-    client = run(f"./target/debug/sinkd --debug -s {SYSTEM_CFG} -u {USER_CFG} start --client")
+def spawn_client():
+    sys_cfg = CLIENT_PATH.joinpath("etc_sinkd.conf")
+    usr_cfg = CLIENT_PATH.joinpath("sinkd.conf")
+    client = run(f"./target/debug/sinkd start --debug --sys-cfg {sys_cfg} --usr-cfg {usr_cfg} --client")
+    if client.returncode != 0:
+        print("test_sinkd>> ", client.stderr, client.stdout)
+        exit(-1)
+    print("sucessfully spawned sinkd")
+
+def spawn_server():
+    sys_cfg = SERVER_PATH.joinpath("etc_sinkd.conf")
+    client = run(f"./target/debug/sinkd start --debug --sys-cfg {sys_cfg} --server")
     if client.returncode != 0:
         print("test_sinkd>> ", client.stderr, client.stdout)
         exit(-1)
@@ -83,6 +88,8 @@ if __name__ == "__main__":
     #     print(f"gotcha {line}")
     # run("printenv")
     setup_env()
-    spawn_sinkd()
+    spawn_client()
+    # TODO: client needs communication with the server to process events
+    # TODO: setup server first and ensure things are hooked up
     run_client_situation()
     stop_sinkd()
