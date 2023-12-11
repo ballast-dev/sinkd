@@ -18,7 +18,14 @@ static FATAL_FLAG: AtomicBool = AtomicBool::new(false);
 pub fn start(params: &Parameters) -> Outcome<()> {
     // TODO: need packager to setup file with correct permisions
     shiplog::init(params)?;
+    daemon(init, "client", params)
+}
 
+fn daemon(
+    func: fn(&Parameters) -> Outcome<()>,
+    app_type: &str,
+    params: &Parameters,
+) -> Outcome<()> {
     use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
     use nix::unistd::{fork, ForkResult};
 
@@ -30,7 +37,9 @@ pub fn start(params: &Parameters) -> Outcome<()> {
             while start_time.elapsed() < timeout {
                 match waitpid(child, Some(WaitPidFlag::WNOHANG)) {
                     Ok(status) => match status {
-                        WaitStatus::Exited(_, _) => return bad!("client encountered error"),
+                        WaitStatus::Exited(_, _) => {
+                            return bad!(format!("{} encountered error", app_type))
+                        }
                         _ => (),
                     },
                     Err(e) => eprintln!("Failed to wait on child?: {}", e),
@@ -42,14 +51,13 @@ pub fn start(params: &Parameters) -> Outcome<()> {
         }
         Ok(ForkResult::Child) => {
             info!("about to start daemon...");
-            init(params)
+            func(params)
         }
         Err(_) => {
             bad!("Failed to fork process")
         }
     }
 }
-
 fn init(params: &Parameters) -> Outcome<()> {
     let (srv_addr, mut inode_map) = config::get(params)?;
 

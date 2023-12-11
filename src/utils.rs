@@ -12,7 +12,7 @@ const TIMESTAMP_LENGTH: u8 = 25;
 pub struct Parameters<'a> {
     pub verbosity: u8,
     pub clear_logs: bool,
-    pub debug_mode: bool,
+    pub debug: bool,
     pub log_path: Arc<&'a Path>,
     pub pid_path: Arc<&'a Path>,
     pub system_config: Arc<PathBuf>,
@@ -29,7 +29,7 @@ impl<'a> Parameters<'a> {
         Parameters {
             verbosity: if debug { 4 } else { verbosity },
             clear_logs: if debug { true } else { false },
-            debug_mode: debug,
+            debug,
             log_path: if debug {
                 Arc::new(Path::new("/tmp/sinkd.log"))
             } else {
@@ -77,7 +77,7 @@ pub fn have_permissions() -> bool {
 }
 
 pub fn create_pid_file(params: &Parameters) -> Outcome<()> {
-    if !params.debug_mode && !have_permissions() {
+    if !params.debug && !have_permissions() {
         return bad!("need to be root");
     }
     if !params.pid_path.exists() {
@@ -99,7 +99,7 @@ pub fn create_pid_file(params: &Parameters) -> Outcome<()> {
 }
 
 pub fn create_log_file(params: &Parameters) -> Outcome<()> {
-    if !params.debug_mode && !have_permissions() {
+    if !params.debug && !have_permissions() {
         return bad!("Need to be root to create log file");
     }
 
