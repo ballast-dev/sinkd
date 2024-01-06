@@ -73,14 +73,14 @@ impl fmt::Display for Attrs {
     }
 }
 
-pub fn print_fancy(arg: &str, attr: Attrs, color: Colors) {
+pub fn print(arg: &str, attr: Attrs, color: Colors) {
     print!("\u{1b}[{};{}m{}\u{1b}[0m", attr, color, arg);
 }
 
-pub fn print_fancyln(arg: &str, attr: Attrs, color: Colors) {
+pub fn println(arg: &str, attr: Attrs, color: Colors) {
     println!("\u{1b}[{};{}m{}\u{1b}[0m", attr, color, arg);
 }
 
-pub fn format_fancy(arg: &str, attr: Attrs, color: Colors) -> String {
+pub fn format(arg: &str, attr: Attrs, color: Colors) -> String {
     format!("\u{1b}[{};{}m{}\u{1b}[0m", attr, color, arg)
 }

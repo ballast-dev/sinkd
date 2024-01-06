@@ -47,10 +47,10 @@ pub fn build_sinkd() -> Command {
                 .help("add watch for multiple users")
             )
             .arg(Arg::new("path")
+                .value_name("PATH")
                 .num_args(0..)
                 .help("sinkd starts watching path")
             )
-            .override_usage("sinkd add FILE [FILE..]")
         )
         .subcommand(Command::new("ls")
             .alias("list")
@@ -216,7 +216,21 @@ fn main() -> ExitCode {
             }
 
             if let Some(paths) = submatches.get_many::<String>("path") {
-                user_paths = paths.filter(|p| Path::new(p).exists()).collect();
+                user_paths = paths
+                    .filter(|p| {
+                        let p = Path::new(p);
+                        if p.exists() {
+                            true
+                        } else {
+                            fancy::println(
+                                &format!("path doesn't exist: {}", &p.display()),
+                                fancy::Attrs::BOLD,
+                                fancy::Colors::RED,
+                            );
+                            false
+                        }
+                    })
+                    .collect();
             }
 
             egress(sinkd::add(share_paths, user_paths))

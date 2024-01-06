@@ -21,10 +21,10 @@ pub fn add(share_paths: Vec<&String>, user_paths: Vec<&String>) -> Outcome<()> {
     //     libc::signal(libc::SIGHUP, s);
     // }
     for p in &share_paths {
-        println!("share.... {}", p);
+        println!("share_path: {}", p);
     }
     for p in &user_paths {
-        println!("user... {}", p);
+        println!("user_path: {}", p);
     }
     Ok(())
 }
