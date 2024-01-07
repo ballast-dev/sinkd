@@ -2,6 +2,7 @@
 #![allow(unused_variables)]
 #![allow(unused_imports)]
 
+use crate::{fancy, fancy_debug};
 use crate::outcome::Outcome;
 use crate::shiplog;
 use crate::utils::Parameters;
@@ -29,15 +30,15 @@ pub fn add(share_paths: Vec<&String>, user_paths: Vec<&String>) -> Outcome<()> {
     Ok(())
 }
 
-pub fn list(paths: Option<&Vec<&str>>) -> Outcome<bool> {
-    //TODO need to list system shares
+pub fn list(paths: Option<Vec<&String>>) -> Outcome<bool> {
+    //! list out  system shares
     match paths {
         Some(paths) => {
             for path in paths {
                 println!("path: {}", path);
             }
             let user = env!("USER");
-            println!("under maintenance...");
+            fancy_debug!("user: {}", user);
             Ok(true)
         }
         None => bad!("no paths were given!"),

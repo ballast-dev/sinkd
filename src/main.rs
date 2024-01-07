@@ -4,7 +4,7 @@ extern crate notify;
 extern crate regex;
 extern crate serde;
 extern crate toml;
-#[macro_use]
+#[macro_use(debug, info, warn, error)]
 extern crate log;
 extern crate libc;
 extern crate nix;
@@ -55,37 +55,40 @@ pub fn build_sinkd() -> Command {
         .subcommand(Command::new("ls")
             .alias("list")
             .about("List currently watched files from given PATH")
-            .arg(Arg::new("PATHS")
+            .arg(Arg::new("path")
+                .value_name("PATH")
                 // need to revisit, should user have explicit control
                 // possible -r flag for recursive 
                 .required(false)
                 .num_args(0..)
                 .help("list watched files and directories")
             )
-            .override_usage("sinkd ls [PATH..]")
         )
         .subcommand(Command::new("rm")
             .alias("remove")
             .about("Removes PATH from watch list")
-            .arg(Arg::new("PATH")
+            .arg(Arg::new("path")
+                .value_name("PATH")
                 .required(true)
                 .num_args(1..)
             )
-            .override_usage("sinkd rm PATH")
         )
         .subcommand(Command::new("start")
             .about("Starts the daemon")
-            .override_usage("sinkd start [--client | --server]")
-            .arg(Arg::new("CLIENT")
+            // .override_usage("sinkd start [--client | --server]")
+            .arg(Arg::new("client")
+                .value_name("CLIENT")
                 .short('c')
                 .long("client")
                 .action(ArgAction::SetTrue)
+                .conflicts_with("server")
                 .help("start sinkd in client mode")
             )
-            .arg(Arg::new("SERVER")
+            .arg(Arg::new("server")
+                .value_name("SERVER")
                 .short('s')
                 .long("server")
-                .conflicts_with("CLIENT")
+                .conflicts_with("client")
                 .action(ArgAction::SetTrue)
                 .help("start sinkd in server mode")
             )
@@ -133,12 +136,16 @@ pub fn build_sinkd() -> Command {
 fn egress<T>(outcome: Outcome<T>) -> ExitCode {
     match outcome {
         Ok(_) => {
-            println!("operation completed successfully");
+            fancy::println(
+                "operation completed successfully",
+                fancy::Attrs::NORMAL,
+                fancy::Colors::GREEN,
+            );
             std::process::ExitCode::SUCCESS
         }
         Err(e) => {
             error!("{}", e);
-            eprintln!("ERROR: {}", e);
+            fancy_error!("ERROR: {}", e);
             std::process::ExitCode::FAILURE
         }
     }
@@ -178,7 +185,6 @@ fn main() -> ExitCode {
                                 normalized.display()
                             ));
                         } else {
-                            println!("{}", normalized.display());
                             normalized
                         }
                     }
@@ -198,10 +204,10 @@ fn main() -> ExitCode {
         &user_cfgs,
     );
 
-    if params.verbosity > 1 {
-        println!("system config:\t{}", &system_cfg.display());
+    if params.verbosity >= 3 {
+        fancy_debug!("system config: {}", &system_cfg.display());
         for user_cfg in &user_cfgs.unwrap() {
-            println!("user config:\t{}", user_cfg.display());
+            fancy_debug!("user config: {}", user_cfg.display());
         }
     }
 
@@ -215,6 +221,7 @@ fn main() -> ExitCode {
                 share_paths = shares.filter(|p| Path::new(p).exists()).collect();
             }
 
+            // TODO: move into add call
             if let Some(paths) = submatches.get_many::<String>("path") {
                 user_paths = paths
                     .filter(|p| {
@@ -236,23 +243,35 @@ fn main() -> ExitCode {
             egress(sinkd::add(share_paths, user_paths))
         }
         Some(("ls", submatches)) => {
-            if !submatches.args_present() {
-                egress(sinkd::list(None))
-            } else {
-                let vals: Vec<&str> = submatches
-                    .get_many::<String>("PATHS")
-                    .unwrap()
-                    .map(|s| s.as_str())
+            // only list out tracking folders and files
+            if let Some(paths) = submatches.get_many::<String>("path") {
+                let tracked_paths: Vec<&String> = paths
+                    .filter(|p| {
+                        let p = Path::new(p);
+                        if p.exists() {
+                            // TODO: check against loaded config
+                            true
+                        } else {
+                            fancy::println(
+                                &format!("path doesn't exist: {}", &p.display()),
+                                fancy::Attrs::BOLD,
+                                fancy::Colors::RED,
+                            );
+                            false
+                        }
+                    })
                     .collect();
-                egress(sinkd::list(Some(&vals)))
+                egress(sinkd::list(Some(tracked_paths)))
+            } else {
+                egress(sinkd::list(None))
             }
         }
         Some(("rm", _)) => egress(sinkd::remove()),
         Some(("start", submatches)) => {
             // TODO: check to see if broker is up!!!
-            if submatches.get_flag("SERVER") {
+            if submatches.get_flag("server") {
                 egress(server::start(&params))
-            } else if submatches.get_flag("CLIENT") {
+            } else if submatches.get_flag("client") {
                 egress(client::start(&params))
             } else {
                 egress::<String>(bad!("Need know which to start --server or --client?"))

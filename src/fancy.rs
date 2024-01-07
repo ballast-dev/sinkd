@@ -84,3 +84,27 @@ pub fn println(arg: &str, attr: Attrs, color: Colors) {
 pub fn format(arg: &str, attr: Attrs, color: Colors) -> String {
     format!("\u{1b}[{};{}m{}\u{1b}[0m", attr, color, arg)
 }
+
+#[macro_export]
+macro_rules! fancy_debug {
+    ($($arg:tt)*) => {{
+        println!(
+            "\u{1b}[{};{}m>>{}\u{1b}[0m", 
+            $crate::fancy::Attrs::INVERSE, 
+            $crate::fancy::Colors::WHITE, 
+            format_args!($($arg)*)
+        );
+    }}
+}
+
+#[macro_export]
+macro_rules! fancy_error {
+    ($($arg:tt)*) => {{
+        println!(
+            "\u{1b}[{};{}m>>{}\u{1b}[0m", 
+            $crate::fancy::Attrs::BOLD, 
+            $crate::fancy::Colors::RED, 
+            format_args!($($arg)*)
+        );
+    }}
+}

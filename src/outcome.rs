@@ -24,6 +24,7 @@ pub type Outcome<T> = std::result::Result<T, Failure>;
 //     };
 // }
 
+#[macro_export]
 macro_rules! bad {
     ($msg:expr) => {
         Err($msg.into()) // into will call From<T> with the right type
