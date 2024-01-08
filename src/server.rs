@@ -22,9 +22,13 @@ static FATAL_FLAG: AtomicBool = AtomicBool::new(false);
 
 pub fn start(params: &Parameters) -> Outcome<()> {
     shiplog::init(params)?;
-    start_mosquitto()?; // always spawns on localhost
+    utils::start_mosquitto()?;
+    utils::daemon(init, "server", params)
+}
 
-    let (msg_tx, msg_rx): (mpsc::Sender<ipc::Payload>, mpsc::Receiver<ipc::Payload>) =
+
+fn init(params: &Parameters) -> Outcome<()> {
+    let (mqtt_tx, mqtt_rx): (mpsc::Sender<ipc::Payload>, mpsc::Receiver<ipc::Payload>) =
         mpsc::channel();
 
     let bcast_cycle = Arc::new(Mutex::new(0));
@@ -33,19 +37,19 @@ pub fn start(params: &Parameters) -> Outcome<()> {
     let state = Arc::new(Mutex::new(ipc::Status::Ready));
     let state2 = Arc::clone(&state);
 
-    let mqtt_thread = thread::spawn(move || {
-        if let Err(err) = mqtt_entry(msg_tx, &FATAL_FLAG, bcast_cycle, state) {
+    let status_thread = thread::spawn(move || {
+        if let Err(err) = status_entry(mqtt_tx, &FATAL_FLAG, bcast_cycle, state) {
             error!("{}", err);
         }
     });
     let synch_thread = thread::spawn(move || {
-        if let Err(err) = synch_entry(msg_rx, &FATAL_FLAG, incr_cycle, state2) {
+        if let Err(err) = synch_entry(mqtt_rx, &FATAL_FLAG, incr_cycle, state2) {
             error!("{}", err);
         }
     });
 
-    if let Err(mqtt_thread_err) = mqtt_thread.join() {
-        error!("server:mqtt_thread join error! >> {:?}", mqtt_thread_err);
+    if let Err(status_thread_err) = status_thread.join() {
+        error!("server:mqtt_thread join error! >> {:?}", status_thread_err);
         process::exit(1);
     }
     if let Err(synch_thread_err) = synch_thread.join() {
@@ -65,21 +69,9 @@ fn dispatch(msg: &Option<mqtt::Message>) {
     }
 }
 
-//? This command will not spawn new instances
-//? if mosquitto already active.
-pub fn start_mosquitto() -> Outcome<()> {
-    debug!("server:start >> mosquitto daemon");
-    if let Err(spawn_error) = process::Command::new("mosquitto").arg("-d").spawn() {
-        return bad!(format!(
-            "Is mosquitto installed and in path? >> {}",
-            spawn_error
-        ));
-    }
-    Ok(())
-}
 
 //? This thread is to ensure no lost messages from mqtt
-fn mqtt_entry(
+fn status_entry(
     synch_tx: mpsc::Sender<ipc::Payload>,
     fatal_flag: &AtomicBool,
     cycle: Arc<Mutex<i32>>,

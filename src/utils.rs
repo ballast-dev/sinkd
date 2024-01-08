@@ -1,8 +1,11 @@
 // Common Utilities
 use libc::{c_char, c_uint};
-use std::ffi::CString;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::{
+    ffi::CString,
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use crate::{fancy, ipc, outcome::Outcome};
 
@@ -226,6 +229,57 @@ pub fn resolve(path: &str) -> Outcome<PathBuf> {
         match resolved_path.canonicalize() {
             Ok(normalized) => Ok(normalized),
             Err(e) => bad!("cannot canonicalize: '{}' {}", resolved_path.display(), e),
+        }
+    }
+}
+
+//? This command will not spawn new instances
+//? if mosquitto already active.
+pub fn start_mosquitto() -> Outcome<()> {
+    debug!(">> spawn mosquitto daemon");
+    if let Err(spawn_error) = std::process::Command::new("mosquitto").arg("-d").spawn() {
+        return bad!(format!(
+            "Is mosquitto installed and in path? >> {}",
+            spawn_error
+        ));
+    }
+    Ok(())
+}
+
+pub fn daemon(
+    func: fn(&Parameters) -> Outcome<()>,
+    app_type: &str,
+    params: &Parameters,
+) -> Outcome<()> {
+    use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
+    use nix::unistd::{fork, ForkResult};
+
+    match unsafe { fork() } {
+        Ok(ForkResult::Parent { child, .. }) => {
+            let start_time = Instant::now();
+            let timeout = Duration::from_secs(2);
+
+            while start_time.elapsed() < timeout {
+                match waitpid(child, Some(WaitPidFlag::WNOHANG)) {
+                    Ok(status) => match status {
+                        WaitStatus::Exited(_, _) => {
+                            return bad!(format!("{} encountered error", app_type))
+                        }
+                        _ => (),
+                    },
+                    Err(e) => eprintln!("Failed to wait on child?: {}", e),
+                }
+                std::thread::sleep(Duration::from_secs(1));
+            }
+            println!("spawned, logging to '{}'", params.log_path.display());
+            Ok(())
+        }
+        Ok(ForkResult::Child) => {
+            info!("about to start daemon...");
+            func(params)
+        }
+        Err(_) => {
+            bad!("Failed to fork process")
         }
     }
 }

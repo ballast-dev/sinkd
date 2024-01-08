@@ -1,4 +1,10 @@
-use crate::{config, ipc, outcome::Outcome, shiplog, utils::Parameters};
+use crate::{
+    config, 
+    ipc, 
+    outcome::Outcome, 
+    shiplog, 
+    utils::{self, Parameters}
+};
 use crossbeam::channel::TryRecvError;
 use notify::{DebouncedEvent, Watcher};
 use std::{
@@ -18,46 +24,10 @@ static FATAL_FLAG: AtomicBool = AtomicBool::new(false);
 pub fn start(params: &Parameters) -> Outcome<()> {
     // TODO: need packager to setup file with correct permisions
     shiplog::init(params)?;
-    daemon(init, "client", params)
+    utils::start_mosquitto()?;
+    utils::daemon(init, "client", params)
 }
 
-fn daemon(
-    func: fn(&Parameters) -> Outcome<()>,
-    app_type: &str,
-    params: &Parameters,
-) -> Outcome<()> {
-    use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
-    use nix::unistd::{fork, ForkResult};
-
-    match unsafe { fork() } {
-        Ok(ForkResult::Parent { child, .. }) => {
-            let start_time = Instant::now();
-            let timeout = Duration::from_secs(2);
-
-            while start_time.elapsed() < timeout {
-                match waitpid(child, Some(WaitPidFlag::WNOHANG)) {
-                    Ok(status) => match status {
-                        WaitStatus::Exited(_, _) => {
-                            return bad!(format!("{} encountered error", app_type))
-                        }
-                        _ => (),
-                    },
-                    Err(e) => eprintln!("Failed to wait on child?: {}", e),
-                }
-                std::thread::sleep(Duration::from_secs(1));
-            }
-            println!("spawned, logging to '{}'", params.log_path.display());
-            Ok(())
-        }
-        Ok(ForkResult::Child) => {
-            info!("about to start daemon...");
-            func(params)
-        }
-        Err(_) => {
-            bad!("Failed to fork process")
-        }
-    }
-}
 fn init(params: &Parameters) -> Outcome<()> {
     let (srv_addr, mut inode_map) = config::get(params)?;
 
