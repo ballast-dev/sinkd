@@ -1,11 +1,9 @@
-#!/usr/bin/env python
-import shutil
+#!/usr/bin/env python3
 import shlex
+import shutil
 import subprocess
 import time
 from pathlib import Path
-import multiprocessing as mp
-
 
 TLD = Path(__file__).parents[1]
 CLIENT_PATH = Path(TLD, "test", "client")
@@ -13,7 +11,7 @@ SERVER_PATH = Path(TLD, "test", "server")
 
 
 def run(cmd, **kwargs) -> subprocess.CompletedProcess:
-    if type(cmd) is str:
+    if isinstance(cmd, str):
         cmd = shlex.split(cmd)
 
     return subprocess.run(cmd, **kwargs, encoding="utf8")
@@ -61,7 +59,9 @@ def create_files(folder: Path, num_of_files: int, delay: float = 0.01):
 def spawn_client():
     sys_cfg = CLIENT_PATH.joinpath("etc_sinkd.conf")
     usr_cfg = CLIENT_PATH.joinpath("sinkd.conf")
-    client = run(f"./target/debug/sinkd start --debug --sys-cfg {sys_cfg} --usr-cfg {usr_cfg} --client")
+    client = run(
+        f"./target/debug/sinkd start --debug --sys-cfg {sys_cfg} --usr-cfg {usr_cfg} --client"
+    )
     if client.returncode != 0:
         print("test_sinkd>> ", client.stderr, client.stdout)
         exit(-1)

@@ -136,11 +136,8 @@ pub fn build_sinkd() -> Command {
 fn egress<T>(outcome: Outcome<T>) -> ExitCode {
     match outcome {
         Ok(_) => {
-            fancy::println(
-                "operation completed successfully",
-                fancy::Attrs::NORMAL,
-                fancy::Colors::GREEN,
-            );
+            fancy::println("operation completed successfully", 
+            fancy::Attrs::NORMAL, fancy::Colors::GREEN);
             std::process::ExitCode::SUCCESS
         }
         Err(e) => {
@@ -248,8 +245,7 @@ fn main() -> ExitCode {
                 let tracked_paths: Vec<&String> = paths
                     .filter(|p| {
                         let p = Path::new(p);
-                        if p.exists() {
-                            // TODO: check against loaded config
+                        if p.exists() { // TODO: check against loaded config
                             true
                         } else {
                             fancy::println(
@@ -259,8 +255,7 @@ fn main() -> ExitCode {
                             );
                             false
                         }
-                    })
-                    .collect();
+                    }).collect();
                 egress(sinkd::list(Some(tracked_paths)))
             } else {
                 egress(sinkd::list(None))
