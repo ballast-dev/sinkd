@@ -29,11 +29,11 @@ impl ShipLog {
     pub fn init(params: &Parameters) {
         log::set_boxed_logger(Box::new(ShipLog::new(params))).unwrap();
         log::set_max_level(match params.verbosity {
-            0 | 1 => LevelFilter::Error,
+            1 => LevelFilter::Error,
             2 => LevelFilter::Warn,
             3 => LevelFilter::Info,
-            4 => LevelFilter::Debug,
-            _ => LevelFilter::Trace,
+            _ => LevelFilter::Debug,
+            // _ => LevelFilter::Trace,
         });
         println!("Logging to: '{}'", params.log_path.display());
     }

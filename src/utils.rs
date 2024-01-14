@@ -1,3 +1,4 @@
+use clap::parser::ValuesRef;
 // Common Utilities
 use libc::{c_char, c_uint};
 use std::{
@@ -26,11 +27,15 @@ impl<'a> Parameters<'a> {
     pub fn new(
         verbosity: u8,
         debug: bool,
-        system_config: &PathBuf,
-        user_configs: &Option<Vec<PathBuf>>,
-    ) -> Self {
-        Parameters {
-            verbosity: if debug { 4 } else { verbosity },
+        system_config: &String,
+        user_configs: ValuesRef<String>,
+    ) -> Outcome<Self> {
+        Ok(Parameters {
+            verbosity: match (debug, verbosity) {
+                (true, _) => 4,
+                (false, 0) => 2, // default to warn log level
+                (_, v) => v,
+            },
             clear_logs: if debug { true } else { false },
             debug,
             log_path: if debug {
@@ -43,13 +48,47 @@ impl<'a> Parameters<'a> {
             } else {
                 Arc::new(Path::new("/run/sinkd.pid"))
             },
-            system_config: Arc::new(system_config.clone()),
-            user_configs: if let Some(_cfgs) = user_configs {
-                Arc::new(_cfgs.clone())
-            } else {
-                Arc::new(vec![])
-            },
+            system_config: Arc::new(Self::get_system_config(system_config)?),
+            user_configs: Arc::new(Self::get_user_configs(user_configs)?),
+        })
+    }
+
+    fn get_system_config(system_config: &String) -> Outcome<PathBuf> {
+        match resolve(system_config) {
+            Ok(normalized) => {
+                if normalized.is_dir() {
+                    // TODO: have error codes
+                    bad!(
+                        "{} is a directory not a file, aborting",
+                        normalized.display()
+                    )
+                } else {
+                    Ok(normalized)
+                }
+            }
+            Err(e) => bad!("system config path error: {}", e),
         }
+    }
+
+    fn get_user_configs(user_configs: ValuesRef<String>) -> Outcome<Vec<PathBuf>> {
+        let mut _cfgs: Vec<PathBuf> = vec![];
+        for passed_config in user_configs {
+            let _path = match resolve(passed_config) {
+                Ok(normalized) => {
+                    if normalized.is_dir() {
+                        return bad!(
+                            "{} is a directory not a file, aborting",
+                            normalized.display()
+                        );
+                    } else {
+                        normalized
+                    }
+                }
+                Err(e) => return bad!("user config path error: {}", e),
+            };
+            _cfgs.push(_path);
+        }
+        Ok(_cfgs)
     }
 }
 
@@ -210,25 +249,24 @@ pub fn get_username() -> String {
 }
 
 // this will resolve all known paths, converts relative to absolute
-pub fn resolve(path: &str) -> Outcome<PathBuf> {
-    let mut resolved_path = PathBuf::from(path);
-    if path.starts_with("~") {
-        let home = match std::env::var("HOME") {
-            Ok(home_dir) => home_dir,
+pub fn resolve(path: &String) -> Outcome<PathBuf> {
+    // NOTE: `~` is a shell expansion not handled by system calls 
+    if path.starts_with("~/") {
+        let mut p = match std::env::var("HOME") {
+            Ok(home_dir) => PathBuf::from(home_dir),
             Err(e) => {
-                return bad!("cannot resolve user path: {}", e);
+                return bad!("HOME env var not defined: {}", e);
             }
         };
-        resolved_path = Path::new(&resolved_path.strip_prefix("~").unwrap()).to_path_buf();
-        resolved_path = Path::new(&home).join(resolved_path);
-        match resolved_path.canonicalize() {
-            Ok(normalized) => Ok(normalized),
-            Err(e) => bad!("cannot canonicalize: '{}' {}", resolved_path.display(), e),
+        p.push(&path.strip_prefix("~/").unwrap());
+        match p.canonicalize() {
+            Ok(resolved) => Ok(resolved),
+            Err(e) => bad!("cannot canonicalize: '{}' {}", p.display(), e),
         }
     } else {
-        match resolved_path.canonicalize() {
-            Ok(normalized) => Ok(normalized),
-            Err(e) => bad!("cannot canonicalize: '{}' {}", resolved_path.display(), e),
+        match PathBuf::from(path).canonicalize() {
+            Ok(resolved) => Ok(resolved),
+            Err(e) => bad!("cannot canonicalize: '{}' {}", path, e),
         }
     }
 }

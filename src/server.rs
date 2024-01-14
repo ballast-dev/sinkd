@@ -6,7 +6,7 @@ use crate::{
     ipc,
     outcome::Outcome,
     shiplog,
-    utils::{self, Parameters},
+    utils::{self, Parameters}, fancy_debug,
 };
 use paho_mqtt as mqtt;
 use std::{

@@ -105,13 +105,14 @@ pub fn build_sinkd() -> Command {
         .arg(Arg::new("verbose")
             .short('v')
             .action(ArgAction::Count)
-            .help("verbose output")
+            .help("verbosity, corresponds to log level, default='vv'=warn\nv=error,vv=warn,vvv=info,vvvv=debug")
+            .global(true)
         )
         .arg(Arg::new("debug")
             .short('d')
             .long("debug")
             .action(ArgAction::SetTrue)
-            .help("debug mode: log files to /tmp")
+            .help("log files to /tmp, log-level set to debug")
             .global(true)
         )
         .arg(Arg::new("system-config")
@@ -125,6 +126,7 @@ pub fn build_sinkd() -> Command {
             .long("usr-cfg")
             .num_args(1)
             .action(ArgAction::Append)
+            // TODO: server doesn't need user configs!
             .default_value("~/.config/sinkd.conf")
             //? long help is '--help' versus '-h'
             .long_help("providing this flag will override supplied users in system config")
@@ -154,56 +156,20 @@ fn main() -> ExitCode {
 
     let mut cli = build_sinkd();
     let matches = cli.get_matches_mut();
-
-    let system_cfg = match utils::resolve(matches.get_one::<String>("system-config").unwrap()) {
-        Ok(normalized) => {
-            if normalized.is_dir() {
-                // TODO: have error codes
-                return egress::<String>(bad!(
-                    "{} is a directory not a file, aborting",
-                    normalized.display()
-                ));
-            } else {
-                normalized
-            }
-        }
-        Err(e) => return egress::<String>(bad!("system config path error: {}", e)),
-    };
-
-    let user_cfgs = match matches.get_many::<String>("user-configs") {
-        Some(passed_configs) => {
-            let mut user_configs: Vec<PathBuf> = vec![];
-            for passed_config in passed_configs {
-                let _path = match utils::resolve(passed_config) {
-                    Ok(normalized) => {
-                        if normalized.is_dir() {
-                            return egress::<String>(bad!(
-                                "{} is a directory not a file, aborting",
-                                normalized.display()
-                            ));
-                        } else {
-                            normalized
-                        }
-                    }
-                    Err(e) => return egress::<String>(bad!("config path error: {}", e)),
-                };
-                user_configs.push(_path);
-            }
-            Some(user_configs)
-        }
-        None => None,
-    };
-
-    let params = Parameters::new(
+    
+    let params = match Parameters::new(
         matches.get_count("verbose"),
         matches.get_flag("debug"),
-        &system_cfg,
-        &user_cfgs,
-    );
+        matches.get_one::<String>("system-config").unwrap(),
+        matches.get_many::<String>("user-configs").unwrap(),
+    ) {
+        Ok(params) => params,
+        Err(e) => return egress::<String>(bad!(e))
+    };
 
     if params.verbosity >= 3 {
-        fancy_debug!("system config: {}", &system_cfg.display());
-        for user_cfg in &user_cfgs.unwrap() {
+        fancy_debug!("system config: {}", params.system_config.display());
+        for user_cfg in params.user_configs.iter() {
             fancy_debug!("user config: {}", user_cfg.display());
         }
     }
@@ -263,7 +229,6 @@ fn main() -> ExitCode {
         }
         Some(("rm", _)) => egress(sinkd::remove()),
         Some(("start", submatches)) => {
-            // TODO: check to see if broker is up!!!
             if submatches.get_flag("server") {
                 egress(server::start(&params))
             } else if submatches.get_flag("client") {

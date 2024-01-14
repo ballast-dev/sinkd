@@ -13,7 +13,7 @@ SERVER_PATH = Path(TLD, "test", "server")
 def run(cmd, **kwargs) -> subprocess.CompletedProcess:
     if isinstance(cmd, str):
         cmd = shlex.split(cmd)
-
+    print(" ".join(cmd))
     return subprocess.run(cmd, **kwargs, encoding="utf8")
 
 
@@ -22,16 +22,16 @@ def setup_env():
     SERVER_PATH.mkdir(exist_ok=True, parents=True)
 
 
-def start_mosquitto():
-    try:
-        result = run("pgrep -f mosquitto", stdout=subprocess.PIPE)
-        if result.returncode != 0:
-            print("mosquitto is not running. starting mosquitto...")
-            run("mosquitto -d")
-        else:
-            print("mosquitto is already running.")
-    except Exception as e:
-        print(f"An error occurred: {e}")
+# def start_mosquitto():
+#     try:
+#         result = run("pgrep -f mosquitto", stdout=subprocess.PIPE)
+#         if result.returncode != 0:
+#             print("mosquitto is not running. starting mosquitto...")
+#             run("mosquitto -d")
+#         else:
+#             print("mosquitto is already running.")
+#     except Exception as e:
+#         print(f"An error occurred: {e}")
 
 
 def remove_subfiles(directory: Path):
@@ -96,7 +96,6 @@ def run_situation():
 
 if __name__ == "__main__":
     setup_env()
-    start_mosquitto()
     spawn_server()
     # spawn_client()
     run_situation()
