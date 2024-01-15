@@ -124,13 +124,11 @@ pub fn build_sinkd() -> Command {
         )
         .arg(Arg::new("user-configs")
             .long("usr-cfg")
-            .num_args(1)
+            .num_args(1..)
             .action(ArgAction::Append)
-            // TODO: server doesn't need user configs!
-            .default_value("~/.config/sinkd.conf")
             //? long help is '--help' versus '-h'
             .long_help("providing this flag will override supplied users in system config")
-            .help("user configuration files to use")
+            .help("user configuration files to use\ndefault: ~/.config/sinkd.conf")
             .global(true)
         )
 }

@@ -48,12 +48,12 @@ impl<'a> Parameters<'a> {
             } else {
                 Arc::new(Path::new("/run/sinkd.pid"))
             },
-            system_config: Arc::new(Self::get_system_config(system_config)?),
-            user_configs: Arc::new(Self::get_user_configs(user_configs)?),
+            system_config: Arc::new(Self::resolve_system_config(system_config)?),
+            user_configs: Arc::new(Self::load_user_configs(user_configs)?),
         })
     }
 
-    fn get_system_config(system_config: &String) -> Outcome<PathBuf> {
+    fn resolve_system_config(system_config: &String) -> Outcome<PathBuf> {
         match resolve(system_config) {
             Ok(normalized) => {
                 if normalized.is_dir() {
@@ -70,27 +70,57 @@ impl<'a> Parameters<'a> {
         }
     }
 
-    fn get_user_configs(user_configs: ValuesRef<String>) -> Outcome<Vec<PathBuf>> {
-        let mut _cfgs: Vec<PathBuf> = vec![];
-        for passed_config in user_configs {
-            let _path = match resolve(passed_config) {
-                Ok(normalized) => {
-                    if normalized.is_dir() {
-                        return bad!(
-                            "{} is a directory not a file, aborting",
-                            normalized.display()
-                        );
-                    } else {
-                        normalized
-                    }
-                }
-                Err(e) => return bad!("user config path error: {}", e),
-            };
-            _cfgs.push(_path);
+    // this needs to resolve on "start --client"
+    fn load_user_configs(user_configs: ValuesRef<String>) -> Outcome<Vec<PathBuf>> {
+        return Ok(user_configs.map(|p| PathBuf::from(p)).collect())
+    }
+
+    
+    // pub fn resolve_user_configs(&mut self) -> Outcome<bool> {
+    //     for mut cfg in &*self.user_configs {
+    //         let convert = match cfg.clone().into_os_string().into_string() {
+    //             Ok(o) => o,
+    //             Err(e) => return bad!("user config path conversion: {:?}", e)
+    //         };
+    //         match resolve(&convert) {
+    //             Ok(normalized) => {
+    //                 if normalized.is_dir() {
+    //                     return bad!(
+    //                         "{} is a directory not a file, aborting",
+    //                         normalized.display()
+    //                     );
+    //                 } else {
+    //                     cfg = &normalized
+    //                 }
+    //             }
+    //             Err(e) => return bad!("user config path error: {}", e),
+    //         };
+    //     }
+    //     Ok(true)
+    // }
+
+    pub fn resolve_user_configs(&mut self) -> Outcome<bool> {
+        let mut resolved_configs = Vec::new();
+
+        for cfg in &*self.user_configs {
+            let path = cfg.as_path().to_str().unwrap();
+            let normalized = resolve(path)?;
+            if normalized.is_dir() {
+                return bad!(
+                    "{} is a directory, not a file; aborting",
+                    normalized.display()
+                );
+            }
+            resolved_configs.push(normalized);
         }
-        Ok(_cfgs)
+
+        // Replace the old Arc with a new one containing the updated configs
+        self.user_configs = Arc::new(resolved_configs);
+
+        Ok(true)
     }
 }
+
 
 #[link(name = "timestamp", kind = "static")]
 extern "C" {
@@ -249,7 +279,7 @@ pub fn get_username() -> String {
 }
 
 // this will resolve all known paths, converts relative to absolute
-pub fn resolve(path: &String) -> Outcome<PathBuf> {
+pub fn resolve(path: &str) -> Outcome<PathBuf> {
     // NOTE: `~` is a shell expansion not handled by system calls 
     if path.starts_with("~/") {
         let mut p = match std::env::var("HOME") {
