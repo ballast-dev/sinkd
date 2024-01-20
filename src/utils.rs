@@ -28,7 +28,7 @@ impl<'a> Parameters<'a> {
         verbosity: u8,
         debug: bool,
         system_config: &String,
-        user_configs: ValuesRef<String>,
+        user_configs: Option<ValuesRef<String>>,
     ) -> Outcome<Self> {
         Ok(Parameters {
             verbosity: match (debug, verbosity) {
@@ -70,35 +70,14 @@ impl<'a> Parameters<'a> {
         }
     }
 
-    // this needs to resolve on "start --client"
-    fn load_user_configs(user_configs: ValuesRef<String>) -> Outcome<Vec<PathBuf>> {
-        return Ok(user_configs.map(|p| PathBuf::from(p)).collect())
+    fn load_user_configs(user_configs: Option<ValuesRef<String>>) -> Outcome<Vec<PathBuf>> {
+        match user_configs {
+            Some(cfgs) => Ok(cfgs.map(|p| PathBuf::from(p)).collect()),
+            None => Ok(vec![]) // server doesn't need user configs
+        }
     }
 
-    
-    // pub fn resolve_user_configs(&mut self) -> Outcome<bool> {
-    //     for mut cfg in &*self.user_configs {
-    //         let convert = match cfg.clone().into_os_string().into_string() {
-    //             Ok(o) => o,
-    //             Err(e) => return bad!("user config path conversion: {:?}", e)
-    //         };
-    //         match resolve(&convert) {
-    //             Ok(normalized) => {
-    //                 if normalized.is_dir() {
-    //                     return bad!(
-    //                         "{} is a directory not a file, aborting",
-    //                         normalized.display()
-    //                     );
-    //                 } else {
-    //                     cfg = &normalized
-    //                 }
-    //             }
-    //             Err(e) => return bad!("user config path error: {}", e),
-    //         };
-    //     }
-    //     Ok(true)
-    // }
-
+    // this needs to resolve on "start --client"
     pub fn resolve_user_configs(&mut self) -> Outcome<bool> {
         let mut resolved_configs = Vec::new();
 

@@ -10,8 +10,8 @@ extern crate libc;
 extern crate nix;
 extern crate rpassword;
 
-#[macro_use]
-mod outcome;
+#[macro_use] mod outcome;
+mod cli;
 mod client;
 mod config;
 mod fancy;
@@ -22,7 +22,6 @@ mod sinkd;
 mod test;
 mod utils;
 
-use clap::{Arg, ArgAction, Command};
 use outcome::Outcome;
 use std::{
     path::{Path, PathBuf},
@@ -31,107 +30,6 @@ use std::{
 
 use crate::utils::Parameters;
 
-#[rustfmt::skip]
-pub fn build_sinkd() -> Command {
-    Command::new("sinkd")
-        .about("deployable cloud")
-        .version(env!("CARGO_PKG_VERSION"))
-        .subcommand(Command::new("add")
-            .about("Adds PATH to watch list")
-            .arg(Arg::new("share")
-                .short('s')
-                .long("share")
-                .value_name("SHARE")
-                .num_args(1)
-                .action(ArgAction::Append)
-                .help("add watch for multiple users")
-            )
-            .arg(Arg::new("path")
-                .value_name("PATH")
-                .num_args(0..)
-                .help("sinkd starts watching path")
-            )
-        )
-        .subcommand(Command::new("ls")
-            .alias("list")
-            .about("List currently watched files from given PATH")
-            .arg(Arg::new("path")
-                .value_name("PATH")
-                // need to revisit, should user have explicit control
-                // possible -r flag for recursive 
-                .required(false)
-                .num_args(0..)
-                .help("list watched files and directories")
-            )
-        )
-        .subcommand(Command::new("rm")
-            .alias("remove")
-            .about("Removes PATH from watch list")
-            .arg(Arg::new("path")
-                .value_name("PATH")
-                .required(true)
-                .num_args(1..)
-            )
-        )
-        .subcommand(Command::new("start")
-            .about("Starts the daemon")
-            // .override_usage("sinkd start [--client | --server]")
-            .arg(Arg::new("client")
-                .value_name("CLIENT")
-                .short('c')
-                .long("client")
-                .action(ArgAction::SetTrue)
-                .conflicts_with("server")
-                .help("start sinkd in client mode")
-            )
-            .arg(Arg::new("server")
-                .value_name("SERVER")
-                .short('s')
-                .long("server")
-                .conflicts_with("client")
-                .action(ArgAction::SetTrue)
-                .help("start sinkd in server mode")
-            )
-        )
-        .subcommand(Command::new("stop")
-            .about("Stops daemon")
-        )
-        .subcommand(Command::new("restart")
-            .about("Restarts sinkd, reloading configuration")
-        )
-        .subcommand(Command::new("log")
-            .about("test out logging")
-        )
-        .arg(Arg::new("verbose")
-            .short('v')
-            .action(ArgAction::Count)
-            .help("verbosity, corresponds to log level, default='vv'=warn\nv=error,vv=warn,vvv=info,vvvv=debug")
-            .global(true)
-        )
-        .arg(Arg::new("debug")
-            .short('d')
-            .long("debug")
-            .action(ArgAction::SetTrue)
-            .help("log files to /tmp, log-level set to debug")
-            .global(true)
-        )
-        .arg(Arg::new("system-config")
-            .long("sys-cfg")
-            .num_args(1)
-            .default_value("/etc/sinkd.conf")
-            .help("system configuration file to use")
-            .global(true)
-        )
-        .arg(Arg::new("user-configs")
-            .long("usr-cfg")
-            .num_args(1..)
-            .action(ArgAction::Append)
-            //? long help is '--help' versus '-h'
-            .long_help("providing this flag will override supplied users in system config")
-            .help("user configuration files to use\ndefault: ~/.config/sinkd.conf")
-            .global(true)
-        )
-}
 
 fn egress<T>(outcome: Outcome<T>) -> ExitCode {
     match outcome {
@@ -152,14 +50,15 @@ fn egress<T>(outcome: Outcome<T>) -> ExitCode {
 fn main() -> ExitCode {
     println!("Running sinkd at {}", utils::get_timestamp("%T"));
 
-    let mut cli = build_sinkd();
+    let mut cli = crate::cli::build_sinkd();
     let matches = cli.get_matches_mut();
     
     let params = match Parameters::new(
         matches.get_count("verbose"),
         matches.get_flag("debug"),
+        // system-config has a default value
         matches.get_one::<String>("system-config").unwrap(),
-        matches.get_many::<String>("user-configs").unwrap(),
+        matches.get_many::<String>("user-configs"),
     ) {
         Ok(params) => params,
         Err(e) => return egress::<String>(bad!(e))

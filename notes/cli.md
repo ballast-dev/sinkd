@@ -15,3 +15,21 @@
 __Hidden API__ for systemd not for user 
   - `sinkd --daemon server` 
   - `sinkd --daemon client` 
+
+
+```
+# systemctl should use same interface for transparency 
+sinkd server start
+             stop
+             restart
+             config
+      client start
+             stop
+             restart
+             config
+      add [FILES] (only for client)
+      rm [FILES] (only for client)
+      adduser  (only for server)
+      rmuser (only for server)
+      ls (show what client is tracking)
+```

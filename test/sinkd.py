@@ -97,6 +97,6 @@ def run_situation():
 if __name__ == "__main__":
     setup_env()
     spawn_server()
-    # spawn_client()
+    spawn_client()
     run_situation()
     stop_sinkd()
