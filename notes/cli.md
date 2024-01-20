@@ -19,17 +19,23 @@ __Hidden API__ for systemd not for user
 
 ```
 # systemctl should use same interface for transparency 
-sinkd server start
+# '*' is for after MVP
+sinkd (s)erver start
              stop
              restart
-             config
-      client start
+             adduser [USER..]
+             -f --config-file
+      (c)lient start
              stop
              restart
-             config
-      add [FILES] (only for client)
-      rm [FILES] (only for client)
-      adduser  (only for server)
-      rmuser (only for server)
-      ls (show what client is tracking)
+             add [FILE..]
+             -f --config-file
+      add (alias for 'client add')
+      rm (alias for 'client rm')
+      adduser (alias for server adduser)
+      rmuser (alias for 'server rmuser')
+      ls [--server] (show what files are being tracked)
+      **init (should be done by packager)
+      --verbose
+      --debug
 ```

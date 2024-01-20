@@ -30,6 +30,19 @@ use std::{
 
 use crate::utils::Parameters;
 
+fn check_path(p: &str) -> bool {
+    let p = Path::new(p);
+    if p.exists() {
+        true
+    } else {
+        fancy::println(
+            &format!("path doesn't exist: {}", &p.display()),
+            fancy::Attrs::BOLD,
+            fancy::Colors::RED,
+        );
+        false
+    }
+}
 
 fn egress<T>(outcome: Outcome<T>) -> ExitCode {
     match outcome {
@@ -52,13 +65,15 @@ fn main() -> ExitCode {
 
     let mut cli = crate::cli::build_sinkd();
     let matches = cli.get_matches_mut();
+
+    println!("{:?}", matches);
     
     let params = match Parameters::new(
         matches.get_count("verbose"),
         matches.get_flag("debug"),
         // system-config has a default value
-        matches.get_one::<String>("system-config").unwrap(),
-        matches.get_many::<String>("user-configs"),
+        // matches.get_one::<String>("server-config").unwrap(),
+        // matches.get_many::<String>("user-configs"),
     ) {
         Ok(params) => params,
         Err(e) => return egress::<String>(bad!(e))
@@ -76,28 +91,11 @@ fn main() -> ExitCode {
             let mut share_paths = Vec::<&String>::new();
             let mut user_paths = Vec::<&String>::new();
 
-            // TODO: combine this logic into function
             if let Some(shares) = submatches.get_many::<String>("share") {
-                share_paths = shares.filter(|p| Path::new(p).exists()).collect();
+                share_paths = shares.filter(|p| check_path(p)).collect();
             }
-
-            // TODO: move into add call
             if let Some(paths) = submatches.get_many::<String>("path") {
-                user_paths = paths
-                    .filter(|p| {
-                        let p = Path::new(p);
-                        if p.exists() {
-                            true
-                        } else {
-                            fancy::println(
-                                &format!("path doesn't exist: {}", &p.display()),
-                                fancy::Attrs::BOLD,
-                                fancy::Colors::RED,
-                            );
-                            false
-                        }
-                    })
-                    .collect();
+                user_paths = paths.filter(|p| check_path(p)).collect();
             }
 
             egress(sinkd::add(share_paths, user_paths))
@@ -105,21 +103,8 @@ fn main() -> ExitCode {
         Some(("ls", submatches)) => {
             // only list out tracking folders and files
             if let Some(paths) = submatches.get_many::<String>("path") {
-                let tracked_paths: Vec<&String> = paths
-                    .filter(|p| {
-                        let p = Path::new(p);
-                        if p.exists() { // TODO: check against loaded config
-                            true
-                        } else {
-                            fancy::println(
-                                &format!("path doesn't exist: {}", &p.display()),
-                                fancy::Attrs::BOLD,
-                                fancy::Colors::RED,
-                            );
-                            false
-                        }
-                    }).collect();
-                egress(sinkd::list(Some(tracked_paths)))
+                let _paths = paths.filter(|p| check_path(p)).collect();
+                egress(sinkd::list(Some(_paths)))
             } else {
                 egress(sinkd::list(None))
             }

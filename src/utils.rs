@@ -27,8 +27,8 @@ impl<'a> Parameters<'a> {
     pub fn new(
         verbosity: u8,
         debug: bool,
-        system_config: &String,
-        user_configs: Option<ValuesRef<String>>,
+        // system_config: &String,
+        // user_configs: Option<ValuesRef<String>>,
     ) -> Outcome<Self> {
         Ok(Parameters {
             verbosity: match (debug, verbosity) {
@@ -48,8 +48,10 @@ impl<'a> Parameters<'a> {
             } else {
                 Arc::new(Path::new("/run/sinkd.pid"))
             },
-            system_config: Arc::new(Self::resolve_system_config(system_config)?),
-            user_configs: Arc::new(Self::load_user_configs(user_configs)?),
+            system_config: Arc::new(PathBuf::from("/etc/sinkd.conf")),
+            user_configs: Arc::new(vec![PathBuf::from("~/.config/sinkdrc")])
+            // system_config: Arc::new(Self::resolve_system_config(system_config)?),
+            // user_configs: Arc::new(Self::load_user_configs(user_configs)?),
         })
     }
 
