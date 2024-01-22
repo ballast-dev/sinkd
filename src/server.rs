@@ -3,10 +3,10 @@
 //  _\ \/ -_) __/ |/ / -_) __/
 // /___/\__/_/  |___/\__/_/
 use crate::{
-    ipc,
+    fancy_debug, ipc,
     outcome::Outcome,
     shiplog,
-    utils::{self, Parameters}, fancy_debug,
+    utils::{self, Parameters},
 };
 use paho_mqtt as mqtt;
 use std::{
@@ -26,8 +26,22 @@ pub fn start(params: &Parameters) -> Outcome<()> {
     utils::daemon(init, "server", params)
 }
 
+pub fn stop(params: &Parameters) -> Outcome<()> {
+    utils::end_process(params)?;
+    Ok(())
+}
 
-fn init(params: &Parameters) -> Outcome<()> {
+pub fn restart(params: &Parameters) -> Outcome<()> {
+    match stop(params) {
+        Ok(_) => {
+            start(params)?;
+            Ok(())
+        }
+        Err(e) => return bad!(e),
+    }
+}
+
+fn init(_: &Parameters) -> Outcome<()> {
     let (mqtt_tx, mqtt_rx): (mpsc::Sender<ipc::Payload>, mpsc::Receiver<ipc::Payload>) =
         mpsc::channel();
 
@@ -68,7 +82,6 @@ fn dispatch(msg: &Option<mqtt::Message>) {
         error!("malformed mqtt message");
     }
 }
-
 
 //? This thread is to ensure no lost messages from mqtt
 fn status_entry(

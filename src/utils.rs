@@ -1,8 +1,11 @@
 use clap::parser::ValuesRef;
 // Common Utilities
 use libc::{c_char, c_uint};
+use nix::sys::signal::{kill, Signal};
+use nix::unistd::Pid;
 use std::{
     ffi::CString,
+    fs::File,
     path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, Instant},
@@ -49,9 +52,8 @@ impl<'a> Parameters<'a> {
                 Arc::new(Path::new("/run/sinkd.pid"))
             },
             system_config: Arc::new(PathBuf::from("/etc/sinkd.conf")),
-            user_configs: Arc::new(vec![PathBuf::from("~/.config/sinkdrc")])
-            // system_config: Arc::new(Self::resolve_system_config(system_config)?),
-            // user_configs: Arc::new(Self::load_user_configs(user_configs)?),
+            user_configs: Arc::new(vec![PathBuf::from("~/.config/sinkdrc")]), // system_config: Arc::new(Self::resolve_system_config(system_config)?),
+                                                                              // user_configs: Arc::new(Self::load_user_configs(user_configs)?),
         })
     }
 
@@ -75,7 +77,7 @@ impl<'a> Parameters<'a> {
     fn load_user_configs(user_configs: Option<ValuesRef<String>>) -> Outcome<Vec<PathBuf>> {
         match user_configs {
             Some(cfgs) => Ok(cfgs.map(|p| PathBuf::from(p)).collect()),
-            None => Ok(vec![]) // server doesn't need user configs
+            None => Ok(vec![]), // server doesn't need user configs
         }
     }
 
@@ -95,13 +97,11 @@ impl<'a> Parameters<'a> {
             resolved_configs.push(normalized);
         }
 
-        // Replace the old Arc with a new one containing the updated configs
         self.user_configs = Arc::new(resolved_configs);
 
         Ok(true)
     }
 }
-
 
 #[link(name = "timestamp", kind = "static")]
 extern "C" {
@@ -135,20 +135,26 @@ pub fn create_pid_file(params: &Parameters) -> Outcome<()> {
     }
     if !params.pid_path.exists() {
         // match std::fs::create_dir_all(&pid_file) {
-        match std::fs::File::create(*params.pid_path) {
-            Err(why) => {
-                bad!("cannot create {:?}, {:?}", params.pid_path, why.kind())
-            }
-            Ok(_) => Ok(()),
+        info!("creating pid file: {}", params.pid_path.display());
+        if let Err(why) = std::fs::File::create(*params.pid_path) {
+            error!(
+                "cannot create '{}' {}",
+                params.pid_path.display(),
+                why.kind()
+            );
+            return bad!(
+                "cannot create '{}' {}",
+                params.pid_path.display(),
+                why.kind()
+            );
         }
-    } else {
-        Ok(()) // already created
     }
-    // fs::File::create(PID_FILE).expect("unable to create pid file, permissions?");
-    // let metadata = pid_file.metadata().unwrap();
-    // let mut permissions = metadata.permissions();
-    // permissions.set_readonly(false);
-    // fs::set_permissions(&pid_path, permissions).expect("cannot set permission");
+    Ok(()) // already created
+           // fs::File::create(PID_FILE).expect("unable to create pid file, permissions?");
+           // let metadata = pid_file.metadata().unwrap();
+           // let mut permissions = metadata.permissions();
+           // permissions.set_readonly(false);
+           // fs::set_permissions(&pid_path, permissions).expect("cannot set permission");
 }
 
 pub fn create_log_file(params: &Parameters) -> Outcome<()> {
@@ -159,13 +165,17 @@ pub fn create_log_file(params: &Parameters) -> Outcome<()> {
     if !params.log_path.exists() || params.clear_logs {
         if let Err(why) = std::fs::File::create(*params.log_path) {
             // truncates file if exists
-            return bad!("cannot create {:?}, {:?}", params.log_path, why.kind());
+            return bad!(
+                "cannot create '{}' {}",
+                params.log_path.display(),
+                why.kind()
+            );
         }
     }
     Ok(()) // already created
 }
 
-pub fn get_pid(params: &Parameters) -> Outcome<u16> {
+pub fn get_pid(params: &Parameters) -> Outcome<u32> {
     // let user = env!("USER");
     // let sinkd_path = if cfg!(target_os = "macos") {
     //     path::Path::new("/Users").join(user).join(".sinkd")
@@ -186,10 +196,9 @@ pub fn get_pid(params: &Parameters) -> Outcome<u16> {
             }
             Ok(contents) => {
                 let pid_str = String::from_utf8_lossy(&contents);
-                match pid_str.parse::<u16>() {
-                    Err(e2) => {
-                        // err_msg!("Couldn't parse pid: {}", e2)
-                        bad!("oh yeah baby!")
+                match pid_str.parse::<u32>() {
+                    Err(e) => {
+                        bad!("Couldn't parse pid: {}", e)
                     }
                     Ok(pid) => Ok(pid),
                 }
@@ -198,27 +207,24 @@ pub fn get_pid(params: &Parameters) -> Outcome<u16> {
     }
 }
 
-pub fn set_pid(params: &Parameters, pid: u16) -> Result<(), String> {
+pub fn set_pid(params: &Parameters, pid: u32) -> Outcome<()> {
     if !params.pid_path.exists() {
-        return Err(String::from("pid file not found"));
+        create_pid_file(&params)?;
     }
-
     if pid == 0 {
+        // if Parent process
         unsafe {
             // pid_file is typically set so unwrap here is safe
             let c_str = CString::new(params.pid_path.to_str().unwrap()).unwrap();
+            // delete a name and possibly the file it refers to
             libc::unlink(c_str.into_raw());
         }
-        Ok(())
     } else {
-        match std::fs::write(*params.pid_path, pid.to_ne_bytes()) {
-            Err(err) => {
-                let err_str = format!("couldn't clear pid in ~/.sinkd/pid\n{}", err);
-                Err(err_str)
-            }
-            Ok(()) => Ok(()),
+        if let Err(e) = std::fs::write(*params.pid_path, pid.to_string()) {
+            return bad!("couldn't write to '{}' {}", params.pid_path.display(), e);
         }
     }
+    Ok(())
 }
 
 /// Both macOS and Linux have the uname command
@@ -261,7 +267,7 @@ pub fn get_username() -> String {
 
 // this will resolve all known paths, converts relative to absolute
 pub fn resolve(path: &str) -> Outcome<PathBuf> {
-    // NOTE: `~` is a shell expansion not handled by system calls 
+    // NOTE: `~` is a shell expansion not handled by system calls
     if path.starts_with("~/") {
         let mut p = match std::env::var("HOME") {
             Ok(home_dir) => PathBuf::from(home_dir),
@@ -314,7 +320,7 @@ pub fn daemon(
                         WaitStatus::Exited(_, _) => {
                             return bad!(format!("{} encountered error", app_type))
                         }
-                        _ => (),
+                        _ => set_pid(params, child.as_raw() as u32)?,
                     },
                     Err(e) => eprintln!("Failed to wait on child?: {}", e),
                 }
@@ -329,6 +335,50 @@ pub fn daemon(
         }
         Err(_) => {
             bad!("Failed to fork process")
+        }
+    }
+}
+
+// pub fn end_process(params: &Parameters) -> Outcome<()> {
+//     if !params.debug && !have_permissions() {
+//         return bad!("Need to be root");
+//     }
+//     let pid = get_pid(params)?;
+//     if let Err(e) = std::process::Command::new("kill")
+//         .arg("-15")  //SIGTERM
+//         .arg(format!("{}", pid))
+//         .output()
+//     {
+//         return bad!("coudn't kill process {}", pid);
+//     }
+//     Ok(())
+// }
+
+pub fn end_process(params: &Parameters) -> Outcome<()> {
+    if !params.debug && !have_permissions() {
+        return bad!("Need to be root");
+    }
+
+    let pid = get_pid(params)?;
+    let nix_pid = Pid::from_raw(pid as i32);
+
+    match kill(nix_pid, Some(Signal::SIGTERM)) {
+        Ok(_) => {
+            // Process exists and can be signaled
+            if let Err(e) = std::process::Command::new("kill")
+                .arg("-15") // SIGTERM
+                .arg(format!("{}", pid))
+                .output()
+            {
+                return bad!("Couldn't kill process {} {}", pid, e);
+            }
+            Ok(())
+        }
+        Err(_) => {
+            bad!(
+                "Process with PID {} does not exist or cannot be signaled",
+                pid
+            )
         }
     }
 }

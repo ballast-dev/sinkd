@@ -89,9 +89,9 @@ pub fn format(arg: &str, attr: Attrs, color: Colors) -> String {
 macro_rules! fancy_debug {
     ($($arg:tt)*) => {{
         println!(
-            "\u{1b}[{};{}m>>{}\u{1b}[0m", 
-            $crate::fancy::Attrs::INVERSE, 
-            $crate::fancy::Colors::WHITE, 
+            "\u{1b}[{};{}m>>{}\u{1b}[0m",
+            $crate::fancy::Attrs::INVERSE,
+            $crate::fancy::Colors::WHITE,
             format_args!($($arg)*)
         );
     }}
@@ -101,9 +101,9 @@ macro_rules! fancy_debug {
 macro_rules! fancy_error {
     ($($arg:tt)*) => {{
         println!(
-            "\u{1b}[{};{}m>>{}\u{1b}[0m", 
-            $crate::fancy::Attrs::BOLD, 
-            $crate::fancy::Colors::RED, 
+            "\u{1b}[{};{}m>>{}\u{1b}[0m",
+            $crate::fancy::Attrs::BOLD,
+            $crate::fancy::Colors::RED,
             format_args!($($arg)*)
         );
     }}

@@ -89,10 +89,11 @@ pub fn init(params: &Parameters) -> Outcome<()> {
         Ok(_) => {
             ShipLog::init(params);
             info!("log initialized");
-            match utils::create_pid_file(params) {
-                Err(e) => Err(e),
-                Ok(_) => Ok(()),
-            }
+            Ok(())
+            // match utils::create_pid_file(params) {
+            //     Err(e) => Err(e),
+            //     Ok(_) => Ok(()),
+            // }
         }
     }
 }

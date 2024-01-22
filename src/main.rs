@@ -10,7 +10,8 @@ extern crate libc;
 extern crate nix;
 extern crate rpassword;
 
-#[macro_use] mod outcome;
+#[macro_use]
+mod outcome;
 mod cli;
 mod client;
 mod config;
@@ -47,8 +48,11 @@ fn check_path(p: &str) -> bool {
 fn egress<T>(outcome: Outcome<T>) -> ExitCode {
     match outcome {
         Ok(_) => {
-            fancy::println("operation completed successfully", 
-            fancy::Attrs::NORMAL, fancy::Colors::GREEN);
+            fancy::println(
+                "operation completed successfully",
+                fancy::Attrs::NORMAL,
+                fancy::Colors::GREEN,
+            );
             std::process::ExitCode::SUCCESS
         }
         Err(e) => {
@@ -66,8 +70,8 @@ fn main() -> ExitCode {
     let mut cli = crate::cli::build_sinkd();
     let matches = cli.get_matches_mut();
 
-    println!("{:?}", matches);
-    
+    // println!("{:?}", matches);
+
     let params = match Parameters::new(
         matches.get_count("verbose"),
         matches.get_flag("debug"),
@@ -76,7 +80,7 @@ fn main() -> ExitCode {
         // matches.get_many::<String>("user-configs"),
     ) {
         Ok(params) => params,
-        Err(e) => return egress::<String>(bad!(e))
+        Err(e) => return egress::<String>(bad!(e)),
     };
 
     if params.verbosity >= 3 {
@@ -87,6 +91,25 @@ fn main() -> ExitCode {
     }
 
     match matches.subcommand() {
+        // TODO: need to resolve paths before checking them
+        Some(("server", submatches)) => match submatches.subcommand() {
+            Some(("start", _)) => egress(server::start(&params)),
+            Some(("restart", _)) => egress(server::restart(&params)),
+            Some(("stop", _)) => egress(server::stop(&params)),
+            _ => {
+                cli.print_help().expect("sinkd usage: .... ");
+                ExitCode::from(ExitCode::SUCCESS)
+            }
+        },
+        Some(("client", submatches)) => match submatches.subcommand() {
+            Some(("start", _)) => egress(server::start(&params)),
+            Some(("restart", _)) => egress(server::restart(&params)),
+            Some(("stop", _)) => egress(server::stop(&params)),
+            _ => {
+                cli.print_help().expect("sinkd usage: .... ");
+                ExitCode::from(ExitCode::SUCCESS)
+            }
+        },
         Some(("add", submatches)) => {
             let mut share_paths = Vec::<&String>::new();
             let mut user_paths = Vec::<&String>::new();
@@ -100,6 +123,26 @@ fn main() -> ExitCode {
 
             egress(sinkd::add(share_paths, user_paths))
         }
+        Some(("rm", submatches)) => {
+            let mut share_paths = Vec::<&String>::new();
+            let mut user_paths = Vec::<&String>::new();
+
+            if let Some(shares) = submatches.get_many::<String>("share") {
+                share_paths = shares.filter(|p| check_path(p)).collect();
+            }
+            if let Some(paths) = submatches.get_many::<String>("path") {
+                user_paths = paths.filter(|p| check_path(p)).collect();
+            }
+            egress(sinkd::remove(share_paths, user_paths))
+        }
+        Some(("adduser", submatches)) => {
+            let users = submatches.get_many::<String>("user");
+            egress(sinkd::adduser(users))
+        }
+        Some(("rmuser", submatches)) => {
+            let users = submatches.get_many::<String>("user");
+            egress(sinkd::rmuser(users))
+        }
         Some(("ls", submatches)) => {
             // only list out tracking folders and files
             if let Some(paths) = submatches.get_many::<String>("path") {
@@ -108,24 +151,6 @@ fn main() -> ExitCode {
             } else {
                 egress(sinkd::list(None))
             }
-        }
-        Some(("rm", _)) => egress(sinkd::remove()),
-        Some(("start", submatches)) => {
-            if submatches.get_flag("server") {
-                egress(server::start(&params))
-            } else if submatches.get_flag("client") {
-                egress(client::start(&params))
-            } else {
-                egress::<String>(bad!("Need know which to start --server or --client?"))
-            }
-        }
-        Some(("stop", _)) => {
-            egress::<String>(bad!("under maintenance"))
-            // sinkd::stop();
-        }
-        Some(("restart", _)) => {
-            egress::<String>(bad!("under maintenance"))
-            // sinkd::restart(),
         }
         Some(("log", _)) => egress(sinkd::log(&params)),
         _ => {

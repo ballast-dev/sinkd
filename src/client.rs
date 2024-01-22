@@ -1,9 +1,8 @@
 use crate::{
-    config, 
-    ipc, 
-    outcome::Outcome, 
-    shiplog, 
-    utils::{self, Parameters}
+    config, ipc,
+    outcome::Outcome,
+    shiplog,
+    utils::{self, Parameters},
 };
 use crossbeam::channel::TryRecvError;
 use notify::{DebouncedEvent, Watcher};
@@ -20,12 +19,25 @@ use std::{
 
 static FATAL_FLAG: AtomicBool = AtomicBool::new(false);
 
-#[warn(unused_features)]
 pub fn start(params: &Parameters) -> Outcome<()> {
-    // TODO: need packager to setup file with correct permisions
     shiplog::init(params)?;
     utils::start_mosquitto()?;
     utils::daemon(init, "client", params)
+}
+
+pub fn stop(params: &Parameters) -> Outcome<()> {
+    utils::end_process(params)?;
+    Ok(())
+}
+
+pub fn restart(params: &Parameters) -> Outcome<()> {
+    match stop(params) {
+        Ok(_) => {
+            start(params)?;
+            Ok(())
+        }
+        Err(e) => return bad!(e),
+    }
 }
 
 fn init(params: &Parameters) -> Outcome<()> {
