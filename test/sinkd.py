@@ -22,18 +22,6 @@ def setup_env():
     SERVER_PATH.mkdir(exist_ok=True, parents=True)
 
 
-# def start_mosquitto():
-#     try:
-#         result = run("pgrep -f mosquitto", stdout=subprocess.PIPE)
-#         if result.returncode != 0:
-#             print("mosquitto is not running. starting mosquitto...")
-#             run("mosquitto -d")
-#         else:
-#             print("mosquitto is already running.")
-#     except Exception as e:
-#         print(f"An error occurred: {e}")
-
-
 def remove_subfiles(directory: Path):
     if directory:
         for f in directory.glob("*"):
@@ -56,16 +44,6 @@ def create_files(folder: Path, num_of_files: int, delay: float = 0.01):
         subprocess.run(["touch", filepath])
 
 
-def spawn_client():
-    sys_cfg = CLIENT_PATH.joinpath("etc_sinkd.conf")
-    usr_cfg = CLIENT_PATH.joinpath("sinkd.conf")
-    client = run(
-        f"./target/debug/sinkd start --debug --sys-cfg {sys_cfg} --usr-cfg {usr_cfg} --client"
-    )
-    if client.returncode != 0:
-        print("test_sinkd>> ", client.stderr, client.stdout)
-        exit(-1)
-    print("sucessfully spawned sinkd")
 
 
 def spawn_server():
@@ -76,13 +54,21 @@ def spawn_server():
         exit(-1)
     print("sucessfully spawned sinkd")
 
+def spawn_client():
+    sys_cfg = CLIENT_PATH.joinpath("etc_sinkd.conf")
+    usr_cfg = CLIENT_PATH.joinpath("sinkd.conf")
+    client = run(
+        f"./target/debug/sinkd client start -d -s {sys_cfg} -u {usr_cfg}"
+    )
+    if client.returncode != 0:
+        print("test_sinkd>> ", client.stderr, client.stdout)
+        exit(-1)
+    print("sucessfully spawned sinkd")
+
 
 def stop_sinkd():
-    kilt_sinkd = run("sudo pkill sinkd")
-    if kilt_sinkd.returncode != 0:
-        print("trouble pkilling sinkd")
-    else:
-        print("succeeded in stoping sinkd daemon")
+    run("sinkd client stop")
+    run("sinkd server stop")
 
 
 def run_situation():

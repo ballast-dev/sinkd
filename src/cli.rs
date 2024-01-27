@@ -25,6 +25,7 @@ pub fn build_sinkd() -> Command {
         .help("system configuration file to use")
         //? long help is '--help' versus '-h'
         .long_help("providing this flag will override default")
+        .short('s')
         .long("sys-cfg")
         .num_args(1)
         .global(true)
