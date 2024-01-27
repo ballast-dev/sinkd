@@ -5,10 +5,13 @@ use std::{
     fs,
     path::PathBuf,
     str::FromStr,
+    sync::Arc,
     time::{Duration, Instant},
 };
+use clap::parser::ValuesRef;
 
-use crate::utils::Parameters;
+use crate::utils::{self, Parameters};
+use crate::outcome::Outcome;
 
 // these are serially parsable
 #[derive(Debug, Serialize, Deserialize)]
@@ -78,37 +81,37 @@ impl ConfigParser {
     // The storage of files will be on a group name basis.
     // The name shall be config driven? Maybe a temp file to
     // store the hash of this sinkd group...
-    fn load_configs(&mut self, params: &Parameters) -> Result<(), String> {
-        if let Err(e) = self.load_sys_config(&params.system_config) {
+    fn parse_configs(&mut self, params: &Parameters) -> Outcome<()> {
+        if let Err(e) = self.parse_sys_config(&params.system_config) {
             match e {
                 ParseError::InvalidSyntax(syn) => {
-                    return Err(format!(
+                    return bad!(
                         "Invalid sytax in '{}': {}",
                         &params.system_config.display(),
                         syn
-                    ));
+                    );
                 }
                 ParseError::FileNotFound => {
-                    return Err(format!(
+                    return bad!(
                         "File not found: '{}'",
                         &params.system_config.display()
-                    ));
+                    );
                 }
                 _ => {
-                    return Err("load_configs unknown condition".to_string());
+                    return bad!("load_configs unknown condition");
                 }
             }
         }
 
         // TODO: create a "sinkd group" in /etc/sinkd.conf
         // TODO: to store the server files in, i.e. /srv/sinkd/<group_name>/<abs_path>
-        if let Err(ParseError::NoUserFound) = self.load_user_configs(&params.user_configs) {
+        if let Err(ParseError::NoUserFound) = self.parse_user_configs(&params.user_configs) {
             warn!("No user was loaded into sinkd, using only system configs");
         }
         Ok(())
     }
 
-    fn load_sys_config(&mut self, sys_config: &PathBuf) -> Result<(), ParseError> {
+    fn parse_sys_config(&mut self, sys_config: &PathBuf) -> Result<(), ParseError> {
         match fs::read_to_string(sys_config) {
             Err(_) => Err(ParseError::FileNotFound),
             Ok(output) => match toml::from_str(&output) {
@@ -122,8 +125,8 @@ impl ConfigParser {
         }
     }
 
-    fn load_user_configs(&mut self, user_configs: &Vec<PathBuf>) -> Result<(), ParseError> {
-        let mut _user_loaded = false;
+    fn parse_user_configs(&mut self, user_configs: &Vec<PathBuf>) -> Result<(), ParseError> {
+        let mut _user_parsed = false;
         if user_configs.is_empty() {
             // default behavior is to check system for users
             for user in &self.sys.users {
@@ -132,7 +135,7 @@ impl ConfigParser {
                 match ConfigParser::get_user_config(&user_config) {
                     Ok(_usr_cfg) => {
                         let _ = &self.users.insert(user_config, _usr_cfg);
-                        _user_loaded = true;
+                        _user_parsed = true;
                         continue;
                     }
                     Err(error) => match error {
@@ -151,7 +154,7 @@ impl ConfigParser {
                 match ConfigParser::get_user_config(user_config) {
                     Ok(_usr_cfg) => {
                         let _ = &self.users.insert(user_config.clone(), _usr_cfg);
-                        _user_loaded = true;
+                        _user_parsed = true;
                         continue;
                     }
                     Err(error) => match error {
@@ -167,7 +170,7 @@ impl ConfigParser {
             }
         }
 
-        if !_user_loaded {
+        if !_user_parsed {
             return Err(ParseError::NoUserFound);
         }
         Ok(())
@@ -197,9 +200,9 @@ pub struct Inode {
 
 pub type InodeMap = HashMap<PathBuf, Inode>;
 
-pub fn get(params: &Parameters) -> Result<(String, InodeMap), String> {
+pub fn get(params: &Parameters) -> Outcome<(String, InodeMap)> {
     let mut parser = ConfigParser::new();
-    parser.load_configs(params)?;
+    parser.parse_configs(params)?;
 
     let mut inode_map: InodeMap = HashMap::new();
 

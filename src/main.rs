@@ -71,13 +71,19 @@ fn main() -> ExitCode {
     let matches = cli.get_matches_mut();
 
     // println!("{:?}", matches);
+    let daemon_type = if let Some(("server", _)) = matches.subcommand() {
+        utils::DaemonType::Server
+    } else {
+        utils::DaemonType::Client 
+    };
 
     let params = match Parameters::new(
+        &daemon_type,
         matches.get_count("verbose"),
         matches.get_flag("debug"),
-        // system-config has a default value
-        // matches.get_one::<String>("server-config").unwrap(),
-        // matches.get_many::<String>("user-configs"),
+        // they both have a default value, so unwrap is safe here
+        matches.get_one::<String>("system-config").unwrap(),
+        matches.get_many::<String>("user-configs").unwrap(),
     ) {
         Ok(params) => params,
         Err(e) => return egress::<String>(bad!(e)),
@@ -91,7 +97,6 @@ fn main() -> ExitCode {
     }
 
     match matches.subcommand() {
-        // TODO: need to resolve paths before checking them
         Some(("server", submatches)) => match submatches.subcommand() {
             Some(("start", _)) => egress(server::start(&params)),
             Some(("restart", _)) => egress(server::restart(&params)),

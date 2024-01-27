@@ -40,6 +40,7 @@ pub fn build_sinkd() -> Command {
         .num_args(1..)  // might need to reconsider this 
         .value_delimiter(',')
         .action(ArgAction::Append)
+        .global(true)
         .default_value("~/.config/sinkdrc");
 
     // composable commands
@@ -79,6 +80,7 @@ pub fn build_sinkd() -> Command {
             .help("log files to /tmp, log-level set to debug")
             .global(true)
         )
+        .args([&system_config_arg, &user_configs_arg])
         .subcommand(Command::new("server")
             .about("manage sinkd server")
             .visible_alias("s")
@@ -95,7 +97,6 @@ pub fn build_sinkd() -> Command {
         .subcommand(Command::new("client")
             .about("manage sinkd client")
             .visible_alias("c")
-            .args([&system_config_arg, &user_configs_arg])
             .subcommand(Command::new("start")
                 .about("start the client daemon")
             )

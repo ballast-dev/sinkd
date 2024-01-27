@@ -5,7 +5,7 @@ use nix::sys::signal::{kill, Signal};
 use nix::unistd::Pid;
 use std::{
     ffi::CString,
-    fs::File,
+    fs,
     path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, Instant},
@@ -15,8 +15,15 @@ use crate::{fancy, ipc, outcome::Outcome};
 
 const TIMESTAMP_LENGTH: u8 = 25;
 
+#[derive(PartialEq)]
+pub enum DaemonType {
+    Client,
+    Server,
+}
+
 // TODO: move this into section of /etc/sinkd.conf
 pub struct Parameters<'a> {
+    pub daemon_type: &'a DaemonType,
     pub verbosity: u8,
     pub clear_logs: bool,
     pub debug: bool,
@@ -28,12 +35,15 @@ pub struct Parameters<'a> {
 
 impl<'a> Parameters<'a> {
     pub fn new(
+        daemon_type: &'a DaemonType,
         verbosity: u8,
         debug: bool,
-        // system_config: &String,
-        // user_configs: Option<ValuesRef<String>>,
+        system_config: &String,
+        user_configs: ValuesRef<String>,
     ) -> Outcome<Self> {
+        Parameters::create_log_dir(debug)?;
         Ok(Parameters {
+            daemon_type,
             verbosity: match (debug, verbosity) {
                 (true, _) => 4,
                 (false, 0) => 2, // default to warn log level
@@ -41,23 +51,57 @@ impl<'a> Parameters<'a> {
             },
             clear_logs: if debug { true } else { false },
             debug,
-            log_path: if debug {
-                Arc::new(Path::new("/tmp/sinkd.log"))
+            log_path: Parameters::get_log_path(debug, daemon_type),
+            pid_path: Parameters::get_pid_path(debug, daemon_type),
+            system_config: Parameters::resolve_system_config(system_config)?,
+            user_configs: if *daemon_type == DaemonType::Client {
+                Parameters::resolve_user_configs(user_configs)?
             } else {
-                Arc::new(Path::new("/var/log/sinkd.log"))
+                Arc::new(vec![PathBuf::from("not-used")])
             },
-            pid_path: if debug {
-                Arc::new(Path::new("/tmp/sinkd.pid"))
-            } else {
-                Arc::new(Path::new("/run/sinkd.pid"))
-            },
-            system_config: Arc::new(PathBuf::from("/etc/sinkd.conf")),
-            user_configs: Arc::new(vec![PathBuf::from("~/.config/sinkdrc")]), // system_config: Arc::new(Self::resolve_system_config(system_config)?),
-                                                                              // user_configs: Arc::new(Self::load_user_configs(user_configs)?),
         })
     }
 
-    fn resolve_system_config(system_config: &String) -> Outcome<PathBuf> {
+    fn create_log_dir(debug: bool) -> Outcome<()> {
+        let path = if debug {
+            Path::new("/tmp/sinkd")
+        } else {
+            Path::new("/var/log/sinkd")
+        };
+
+
+        if !path.exists() {
+            if !debug && !have_permissions() {
+                return bad!("Need elevated permissions to create /var/sinkd/ dir")
+            }
+            match fs::create_dir_all(path) {
+                Ok(_) => Ok(()),
+                Err(e) => bad!("Unable to create '{}'  {}", path.display(), e),
+            }
+        } else {
+            Ok(())
+        }
+    }
+
+    fn get_log_path(debug: bool, daemon_type: &'a DaemonType) -> Arc<&Path> {
+        match (debug, daemon_type) {
+            (true, DaemonType::Client) => Arc::new(Path::new("/tmp/sinkd/client.log")),
+            (true, DaemonType::Server) => Arc::new(Path::new("/tmp/sinkd/server.log")),
+            (false, DaemonType::Client) => Arc::new(Path::new("/var/log/sinkd/client.log")),
+            (false, DaemonType::Server) => Arc::new(Path::new("/var/log/sinkd/server.log")),
+        }
+    }
+
+    fn get_pid_path(debug: bool, daemon_type: &'a DaemonType) -> Arc<&Path> {
+        match (debug, daemon_type) {
+            (true, DaemonType::Client) => Arc::new(Path::new("/tmp/sinkd/client.pid")),
+            (true, DaemonType::Server) => Arc::new(Path::new("/tmp/sinkd/server.pid")),
+            (false, DaemonType::Client) => Arc::new(Path::new("/var/log/sinkd/client.pid")),
+            (false, DaemonType::Server) => Arc::new(Path::new("/var/log/sinkd/server.pid")),
+        }
+    }
+
+    fn resolve_system_config(system_config: &String) -> Outcome<Arc<PathBuf>> {
         match resolve(system_config) {
             Ok(normalized) => {
                 if normalized.is_dir() {
@@ -67,27 +111,25 @@ impl<'a> Parameters<'a> {
                         normalized.display()
                     )
                 } else {
-                    Ok(normalized)
+                    Ok(Arc::new(normalized))
                 }
             }
             Err(e) => bad!("system config path error: {}", e),
         }
     }
 
-    fn load_user_configs(user_configs: Option<ValuesRef<String>>) -> Outcome<Vec<PathBuf>> {
-        match user_configs {
-            Some(cfgs) => Ok(cfgs.map(|p| PathBuf::from(p)).collect()),
-            None => Ok(vec![]), // server doesn't need user configs
-        }
-    }
+    // fn load_user_configs(user_configs: Option<ValuesRef<String>>) -> Outcome<Vec<PathBuf>> {
+    //     match user_configs {
+    //         Some(cfgs) => Ok(cfgs.map(|p| PathBuf::from(p)).collect()),
+    //         None => Ok(vec![]), // server doesn't need user configs
+    //     }
+    // }
 
-    // this needs to resolve on "start --client"
-    pub fn resolve_user_configs(&mut self) -> Outcome<bool> {
+    pub fn resolve_user_configs(user_configs: ValuesRef<String>) -> Outcome<Arc<Vec<PathBuf>>> {
         let mut resolved_configs = Vec::new();
 
-        for cfg in &*self.user_configs {
-            let path = cfg.as_path().to_str().unwrap();
-            let normalized = resolve(path)?;
+        for cfg in user_configs {
+            let normalized = resolve(&cfg.to_string())?;
             if normalized.is_dir() {
                 return bad!(
                     "{} is a directory, not a file; aborting",
@@ -97,9 +139,7 @@ impl<'a> Parameters<'a> {
             resolved_configs.push(normalized);
         }
 
-        self.user_configs = Arc::new(resolved_configs);
-
-        Ok(true)
+        Ok(Arc::new(resolved_configs))
     }
 }
 

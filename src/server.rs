@@ -42,6 +42,7 @@ pub fn restart(params: &Parameters) -> Outcome<()> {
 }
 
 fn init(_: &Parameters) -> Outcome<()> {
+    // let cfg = config::get()?;
     let (mqtt_tx, mqtt_rx): (mpsc::Sender<ipc::Payload>, mpsc::Receiver<ipc::Payload>) =
         mpsc::channel();
 

@@ -48,7 +48,7 @@ def create_files(folder: Path, num_of_files: int, delay: float = 0.01):
 
 def spawn_server():
     sys_cfg = SERVER_PATH.joinpath("etc_sinkd.conf")
-    client = run(f"./target/debug/sinkd start --debug --sys-cfg {sys_cfg} --server")
+    client = run(f"./target/debug/sinkd server start -d -s {sys_cfg}")
     if client.returncode != 0:
         print("test_sinkd>> ", client.stderr, client.stdout)
         exit(-1)
@@ -67,8 +67,8 @@ def spawn_client():
 
 
 def stop_sinkd():
-    run("sinkd client stop")
-    run("sinkd server stop")
+    run("./target/debug/sinkd client -d stop")
+    run("./target/debug/sinkd server -d stop")
 
 
 def run_situation():
