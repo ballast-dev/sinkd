@@ -38,8 +38,8 @@ impl<'a> Parameters<'a> {
         daemon_type: &'a DaemonType,
         verbosity: u8,
         debug: bool,
-        system_config: &String,
-        user_configs: ValuesRef<String>,
+        system_config: Option<&String>,
+        user_configs: Option<ValuesRef<String>>,
     ) -> Outcome<Self> {
         Parameters::create_log_dir(debug)?;
         Ok(Parameters {
@@ -53,12 +53,8 @@ impl<'a> Parameters<'a> {
             debug,
             log_path: Parameters::get_log_path(debug, daemon_type),
             pid_path: Parameters::get_pid_path(debug, daemon_type),
-            system_config: Parameters::resolve_system_config(system_config)?,
-            user_configs: if *daemon_type == DaemonType::Client {
-                Parameters::resolve_user_configs(user_configs)?
-            } else {
-                Arc::new(vec![PathBuf::from("not-used")])
-            },
+            system_config: Parameters::resolve_system_config(daemon_type, system_config)?,
+            user_configs: Parameters::resolve_user_configs(daemon_type, user_configs)?,
         })
     }
 
@@ -69,10 +65,9 @@ impl<'a> Parameters<'a> {
             Path::new("/var/log/sinkd")
         };
 
-
         if !path.exists() {
             if !debug && !have_permissions() {
-                return bad!("Need elevated permissions to create /var/sinkd/ dir")
+                return bad!("Need elevated permissions to create /var/sinkd/ dir");
             }
             match fs::create_dir_all(path) {
                 Ok(_) => Ok(()),
@@ -101,8 +96,15 @@ impl<'a> Parameters<'a> {
         }
     }
 
-    fn resolve_system_config(system_config: &String) -> Outcome<Arc<PathBuf>> {
-        match resolve(system_config) {
+    fn resolve_system_config(
+        daemon_type: &'a DaemonType,
+        system_config: Option<&String>,
+    ) -> Outcome<Arc<PathBuf>> {
+        if *daemon_type == DaemonType::Server {
+            return Ok(Arc::new(PathBuf::from("not-used")));
+        }
+        // safe unwrap due to default args
+        match resolve(system_config.unwrap()) {
             Ok(normalized) => {
                 if normalized.is_dir() {
                     // TODO: have error codes
@@ -125,20 +127,27 @@ impl<'a> Parameters<'a> {
     //     }
     // }
 
-    pub fn resolve_user_configs(user_configs: ValuesRef<String>) -> Outcome<Arc<Vec<PathBuf>>> {
-        let mut resolved_configs = Vec::new();
-
-        for cfg in user_configs {
-            let normalized = resolve(&cfg.to_string())?;
-            if normalized.is_dir() {
-                return bad!(
-                    "{} is a directory, not a file; aborting",
-                    normalized.display()
-                );
-            }
-            resolved_configs.push(normalized);
+    pub fn resolve_user_configs(
+        daemon_type: &'a DaemonType,
+        user_configs: Option<ValuesRef<String>>,
+    ) -> Outcome<Arc<Vec<PathBuf>>> {
+        if *daemon_type == DaemonType::Server {
+            return Ok(Arc::new(vec![PathBuf::from("not-used")]));
         }
-
+        let mut resolved_configs = Vec::new();
+        // safe unwrap due to default args
+        if let Some(usr_cfgs) = user_configs {
+            for cfg in usr_cfgs {
+                let normalized = resolve(&cfg.to_string())?;
+                if normalized.is_dir() {
+                    return bad!(
+                        "{} is a directory, not a file; aborting",
+                        normalized.display()
+                    );
+                }
+                resolved_configs.push(normalized);
+            }
+        }
         Ok(Arc::new(resolved_configs))
     }
 }

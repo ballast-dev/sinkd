@@ -23,6 +23,7 @@ mod sinkd;
 mod test;
 mod utils;
 
+use clap::parser::ValuesRef;
 use outcome::Outcome;
 use std::{
     path::{Path, PathBuf},
@@ -71,19 +72,29 @@ fn main() -> ExitCode {
     let matches = cli.get_matches_mut();
 
     // println!("{:?}", matches);
-    let daemon_type = if let Some(("server", _)) = matches.subcommand() {
-        utils::DaemonType::Server
+    let mut system_config: Option<&String> = None;
+    let mut user_configs: Option<ValuesRef<String>> = None;
+    let daemon_type = if let Some(("client", _)) = matches.subcommand() {
+        match matches.subcommand() {
+            Some(("client", submatches)) => {
+                system_config = submatches.get_one("system-config");
+                user_configs = submatches.get_many("user-configs");
+            }
+            _ => ()
+        }
+        utils::DaemonType::Client
     } else {
-        utils::DaemonType::Client 
+        // default to server for params
+        utils::DaemonType::Server
     };
+
 
     let params = match Parameters::new(
         &daemon_type,
         matches.get_count("verbose"),
         matches.get_flag("debug"),
-        // they both have a default value, so unwrap is safe here
-        matches.get_one::<String>("system-config").unwrap(),
-        matches.get_many::<String>("user-configs").unwrap(),
+        system_config,
+        user_configs,
     ) {
         Ok(params) => params,
         Err(e) => return egress::<String>(bad!(e)),

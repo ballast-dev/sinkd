@@ -80,7 +80,6 @@ pub fn build_sinkd() -> Command {
             .help("log files to /tmp, log-level set to debug")
             .global(true)
         )
-        .args([&system_config_arg, &user_configs_arg])
         .subcommand(Command::new("server")
             .about("manage sinkd server")
             .visible_alias("s")
@@ -97,6 +96,8 @@ pub fn build_sinkd() -> Command {
         .subcommand(Command::new("client")
             .about("manage sinkd client")
             .visible_alias("c")
+            // global goes down stream
+            .args([&system_config_arg, &user_configs_arg])
             .subcommand(Command::new("start")
                 .about("start the client daemon")
             )
