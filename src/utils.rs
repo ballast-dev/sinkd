@@ -67,7 +67,7 @@ impl<'a> Parameters<'a> {
 
         if !path.exists() {
             if !debug && !have_permissions() {
-                return bad!("Need elevated permissions to create /var/sinkd/ dir");
+                return bad!("Need elevated permissions to create /var/sinkd/");
             }
             match fs::create_dir_all(path) {
                 Ok(_) => Ok(()),
@@ -337,10 +337,10 @@ pub fn resolve(path: &str) -> Outcome<PathBuf> {
     }
 }
 
-//? This command will not spawn new instances
-//? if mosquitto already active.
 pub fn start_mosquitto() -> Outcome<()> {
     debug!(">> spawn mosquitto daemon");
+    //? This command will not spawn new instances
+    //? if mosquitto already active.
     if let Err(spawn_error) = std::process::Command::new("mosquitto").arg("-d").spawn() {
         return bad!(format!(
             "Is mosquitto installed and in path? >> {}",

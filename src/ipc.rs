@@ -88,11 +88,11 @@ impl Payload {
         self.username = username.to_string();
         self
     }
-    pub fn set_paths(mut self, paths: Vec<PathBuf>) -> Self {
-        self.paths = paths; // ownership
+    pub fn paths<'a>(mut self, paths: Vec<&'a PathBuf>) -> Self {
+        self.paths = paths.into_iter().map(|path_ref| path_ref.clone()).collect();
         self
     }
-    pub fn set_date<'a>(mut self, date: &'a str) -> Self {
+    pub fn date<'a>(mut self, date: &'a str) -> Self {
         self.date = date.into();
         self
     }

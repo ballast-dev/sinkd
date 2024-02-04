@@ -57,9 +57,11 @@ fn init(params: &Parameters) -> Outcome<()> {
         Err(e) => return bad!("{}", e),
     };
 
+    // watch file events
     let watch_thread =
         thread::spawn(move || watch_entry(&mut inode_map, notify_rx, event_tx, &FATAL_FLAG));
 
+    // listen to messages from server
     let mqtt_thread =
         thread::spawn(
             move || match mqtt_entry(&srv_addr, &inode_map2, event_rx, &FATAL_FLAG) {
@@ -166,20 +168,21 @@ fn mqtt_entry(
         }
     }
 
+    // assume we are behind
+    let mut status = ipc::Status::NotReady(ipc::Reason::Behind); 
+
     // The server will send status updates to it's clients every 5 seconds
     loop {
         if fatal_flag.load(Ordering::SeqCst) {
             return bad!("mqtt_entry>> exit condition reached in watch thread");
         }
 
-        // process mqtt traffic from server
-        // first check latest message from server then send payload
         match mqtt_rx.try_recv() {
             Ok(message) => {
                 if let Some(msg) = message {
                     debug!("client>> got message!: {}", msg);
                     if let Ok(decoded_payload) = ipc::decode(msg.payload()) {
-                        // recieved message from server, need to process
+                        // process mqtt traffic from server
                         process(&event_rx, &mqtt_client, inode_map, decoded_payload);
                     } else {
                         error!("unable to decode message: {:?}", msg.payload())
@@ -215,20 +218,19 @@ fn process(
     match server_payload.status {
         ipc::Status::NotReady(reason) => match reason {
             ipc::Reason::Sinking => {
+                // we wait
                 std::thread::sleep(Duration::from_secs(5)); // should be config driven
             }
             ipc::Reason::Behind => {
-                // spawn rsync on the client?
-                // better to spawn on server to keep things in "lock step"
+                // let's sync up 
                 let _paths: Vec<&PathBuf> = inode_map.keys().collect();
+                utils::rsync(&ipc::Payload::new().paths(_paths));
 
-                // utils::rsync(&ipc::Payload::new().paths(*inode_map.keys().collect::<PathBuf>());
-
-                // if let Err(e) = mqtt_client.publish(
-                //     &ipc::Payload::new().status(ipc::Status::NotReady(ipc::Reason::Behind))
-                // ) {
-                //     error!("client>> couldn't publish Behind status, {}", e);
-                // }
+                if let Err(e) = mqtt_client.publish(
+                    &mut ipc::Payload::new().status(ipc::Status::NotReady(ipc::Reason::Behind))
+                ) {
+                    error!("client>> couldn't publish Behind status, {}", e);
+                }
             }
             ipc::Reason::Other => todo!(),
         },
@@ -276,9 +278,6 @@ fn get_watchers(
     }
 }
 
-fn cache(_path: &str) -> Result<(), String> {
-    Ok(())
-}
 
 // Will loop on file events until queue (channel) is empty
 // Using a HashSet to filter out redundancies will return

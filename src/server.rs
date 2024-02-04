@@ -8,8 +8,11 @@ use crate::{
     shiplog,
     utils::{self, Parameters},
 };
+use mqtt::Message;
 use paho_mqtt as mqtt;
 use std::{
+    fs,
+    path::Path,
     process,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -41,8 +44,30 @@ pub fn restart(params: &Parameters) -> Outcome<()> {
     }
 }
 
-fn init(_: &Parameters) -> Outcome<()> {
-    // let cfg = config::get()?;
+fn create_srv_dir(debug: bool) -> Outcome<()> {
+    let path = if debug {
+        Path::new("/tmp/sinkd/srv")
+    } else {
+        Path::new("/srv/sinkd")
+    };
+
+    if !path.exists() {
+        if !debug && !utils::have_permissions() {
+            return bad!("Need elevated permissions to create /srv/sinkd/");
+        }
+        match fs::create_dir_all(path) {
+            Ok(_) => Ok(()),
+            Err(e) => bad!("Unable to create '{}'  {}", path.display(), e),
+        }
+    } else {
+        Ok(())
+    }
+}
+
+fn init(params: &Parameters) -> Outcome<()> {
+    // TODO: server path is `/srv/sinkd/<user>/...`
+    create_srv_dir(params.debug)?;
+
     let (mqtt_tx, mqtt_rx): (mpsc::Sender<ipc::Payload>, mpsc::Receiver<ipc::Payload>) =
         mpsc::channel();
 
@@ -98,6 +123,14 @@ fn status_entry(
         if fatal_flag.load(Ordering::SeqCst) {
             return bad!("server>> synch thread exited, aborting mqtt thread");
         }
+        
+        {// send status 
+            let mut status_payload = ipc::Payload::new().status(ipc::Status::Ready);
+            // let status_msg = ipc::encode(&mut status_payload)?;
+            mqtt_client.publish(&mut status_payload)?;
+        }
+        // then recv queries
+            // and queue up rsync calls
         match mqtt_rx.try_recv() {
             Ok(msg) => {
                 // ! process mqtt messages
@@ -109,7 +142,9 @@ fn status_entry(
                             ipc::Reason::Behind => todo!(),
                             ipc::Reason::Other => todo!(),
                         },
-                        ipc::Status::Ready => todo!(),
+                        ipc::Status::Ready => {
+                            info!("recv: {:?}", msg);
+                        }
                     },
                     Err(e) => {
                         fatal_flag.load(Ordering::SeqCst);
@@ -150,8 +185,8 @@ fn synch_entry(
         if fatal_flag.load(Ordering::SeqCst) {
             return bad!("server>> mqtt_thread exited, aborting synch thread");
         }
+        // blocking call
         match synch_rx.recv() {
-            // blocking call
             Err(e) => {
                 error!("server:synch_entry hangup on reciever?: {}", e);
             }

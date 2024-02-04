@@ -118,9 +118,9 @@ fn main() -> ExitCode {
             }
         },
         Some(("client", submatches)) => match submatches.subcommand() {
-            Some(("start", _)) => egress(server::start(&params)),
-            Some(("restart", _)) => egress(server::restart(&params)),
-            Some(("stop", _)) => egress(server::stop(&params)),
+            Some(("start", _)) => egress(client::start(&params)),
+            Some(("restart", _)) => egress(client::restart(&params)),
+            Some(("stop", _)) => egress(client::stop(&params)),
             _ => {
                 cli.print_help().expect("sinkd usage: .... ");
                 ExitCode::from(ExitCode::SUCCESS)

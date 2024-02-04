@@ -81,19 +81,12 @@ impl log::Log for ShipLog {
 }
 
 pub fn init(params: &Parameters) -> Outcome<()> {
-    // if params.debug_mode {
-    //     std::fs::create_dir_all("~/.sinkd").unwrap();
-    // }
     match utils::create_log_file(params) {
         Err(e) => Err(e),
         Ok(_) => {
             ShipLog::init(params);
             info!("log initialized");
             Ok(())
-            // match utils::create_pid_file(params) {
-            //     Err(e) => Err(e),
-            //     Ok(_) => Ok(()),
-            // }
         }
     }
 }
