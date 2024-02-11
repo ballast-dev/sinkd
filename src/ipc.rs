@@ -42,11 +42,11 @@ impl fmt::Display for Status {
 pub struct Payload {
     pub hostname: String,
     pub username: String,
-    pub paths: Vec<PathBuf>,
+    pub src_paths: Vec<PathBuf>,
+    pub dest_path: String,
     pub date: String,
     pub cycle: u32,
     pub status: Status,
-    pub dest: String,
 }
 
 impl Payload {
@@ -54,30 +54,30 @@ impl Payload {
         Payload {
             hostname: utils::get_hostname(),
             username: utils::get_username(),
-            paths: vec![],
+            src_paths: vec![],
             date: String::from("2022Jan4"),
             cycle: 0,
             status: Status::Ready,
-            dest: String::from("server"),
+            dest_path: String::from("server"),
         }
     }
     pub fn from(
         hostname: String,
         username: String,
-        paths: Vec<PathBuf>,
+        src_paths: Vec<PathBuf>,
+        dest_path: String,
         date: String,
         cycle: u32,
         status: Status,
-        dest: String,
     ) -> Payload {
         Payload {
             hostname,
             username,
-            paths,
+            src_paths,
+            dest_path,
             date,
             cycle,
             status,
-            dest,
         }
     }
     pub fn hostname<'a>(mut self, hostname: &'a str) -> Self {
@@ -89,7 +89,7 @@ impl Payload {
         self
     }
     pub fn paths<'a>(mut self, paths: Vec<&'a PathBuf>) -> Self {
-        self.paths = paths.into_iter().map(|path_ref| path_ref.clone()).collect();
+        self.src_paths = paths.into_iter().map(|path_ref| path_ref.clone()).collect();
         self
     }
     pub fn date<'a>(mut self, date: &'a str) -> Self {
@@ -105,7 +105,7 @@ impl Payload {
         self
     }
     pub fn dest<'a>(mut self, dest: &'a str) -> Self {
-        self.dest = dest.into(); // ownership
+        self.dest_path = dest.into(); // ownership
         self
     }
     pub fn ready(self) -> Result<(), Reason> {
@@ -124,7 +124,7 @@ impl fmt::Display for Payload {
             self.hostname, self.username,
         )
         .unwrap();
-        for path in &self.paths {
+        for path in &self.src_paths {
             write!(f, "{}, ", path.display()).unwrap();
         }
         write!(

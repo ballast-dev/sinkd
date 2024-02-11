@@ -460,7 +460,7 @@ pub fn rsync(payload: &ipc::Payload) {
             error!("{:?}", x);
         }
         Ok(_) => {
-            info!("called rsync! dest:{} paths:", &payload.dest);
+            debug!("called rsync! dest:{} paths:", &payload.dest);
             for path in &payload.paths {
                 info!("\t{}", path.display());
             }

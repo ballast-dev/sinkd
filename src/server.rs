@@ -172,9 +172,9 @@ fn status_entry(
     }
 }
 
-/// The engine behind sinkd is rsync
-/// With mqtt messages that are relevant invoke this and mirror current client
-/// to this server
+// The engine behind sinkd is rsync
+// With mqtt messages that are relevant invoke this and mirror current client
+// to this server
 fn synch_entry(
     synch_rx: mpsc::Receiver<ipc::Payload>,
     fatal_flag: &AtomicBool,
@@ -193,7 +193,15 @@ fn synch_entry(
             Ok(payload) => {
                 // let mut num = cycle.lock().unwrap();
                 // *num += 1;
-                utils::rsync(&payload);
+                if let Ok(state_mutex) = state.lock() {
+                    match *state_mutex {
+                        ipc::Status::Ready => utils::rsync(&payload),
+                        ipc::Status::NotReady(_) => todo!()
+                    }
+                } else {
+                    fatal_flag.store(true, Ordering::SeqCst);
+                    return bad!("state mutex poisoned")
+                }
             }
         }
         std::thread::sleep(std::time::Duration::from_secs(1));
