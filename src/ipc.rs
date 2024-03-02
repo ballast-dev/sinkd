@@ -4,6 +4,7 @@ use paho_mqtt as mqtt;
 use serde::{Deserialize, Serialize};
 
 use crate::utils;
+use crate::outcome::Outcome;
 
 pub type Rx = mqtt::Receiver<Option<mqtt::Message>>;
 
@@ -73,8 +74,8 @@ impl Payload {
         Payload {
             hostname,
             username,
-            src_paths,
             dest_path,
+            src_paths,
             date,
             cycle,
             status,
@@ -88,8 +89,8 @@ impl Payload {
         self.username = username.to_string();
         self
     }
-    pub fn paths<'a>(mut self, paths: Vec<&'a PathBuf>) -> Self {
-        self.src_paths = paths.into_iter().map(|path_ref| path_ref.clone()).collect();
+    pub fn paths(mut self, paths: Vec<PathBuf>) -> Self {
+        self.src_paths = paths; // transfer ownership
         self
     }
     pub fn date<'a>(mut self, date: &'a str) -> Self {
@@ -245,13 +246,23 @@ impl MqttClient {
         }
     }
 
-    pub fn publish(&self, payload: &mut Payload) -> Result<(), mqtt::Error> {
-        self.client.publish(mqtt::Message::new(
-            &self.publish_topic,
-            encode(payload)?,
-            mqtt::QOS_0, // within local network, should be no lost packets
-        ))?;
-        Ok(())
+    pub fn publish(&self, payload: &mut Payload) -> Outcome<()> {
+        match self.client.publish(
+            mqtt::Message::new(
+                &self.publish_topic,
+                encode(payload)?,
+                mqtt::QOS_0, // within local network, should be no lost packets
+            )
+        ) {
+            Ok(_) => {
+                info!("published payload: {}", payload);
+                Ok(())
+            },
+            Err(e) => {
+                error!("could not publish payload {}", payload);
+                bad!("could not publish payload {}", payload)
+            }
+        }
     }
 }
 

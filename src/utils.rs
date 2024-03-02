@@ -437,6 +437,30 @@ pub fn rsync(payload: &ipc::Payload) {
 
     debug!("{}", payload);
 
+
+    // TODO: 
+    // FIXME 
+    // NOTE: 
+    // HACK: 
+    // WARNING: 
+    
+    let pull = payload.status == ipc::Status::NotReady(ipc::Reason::Behind);
+
+    let src: Vec<PathBuf> = if pull {
+        payload.src_paths.iter().map(|p| PathBuf::from(
+            format!("{}:{}", payload.hostname, p.display())
+        )).collect()
+    } else {
+        payload.src_paths.clone()
+    };
+
+    // NOTE: this is assuming that dest will always be a single point 
+    let dest: String = if pull {
+        payload.dest_path.clone()
+    } else {
+        format!("{}:{}", payload.hostname, payload.dest_path)
+    };
+
     // need to account for shared folders
     // and local sync? maybe useful for testing
     let mut cmd = std::process::Command::new("rsync"); // have to bind at .new()
@@ -446,24 +470,17 @@ pub fn rsync(payload: &ipc::Payload) {
         // .arg("--delete-excluded")
         // .arg("--max-size=SIZE") // (limit size of transfers)
         // .arg("--exclude=PATTERN") // loop through to all all paths
+        .args(&src)
+        .arg(&dest)
         ;
-
-    if &payload.dest == "client" {
-        // TODO: hostname + username for full path
-        cmd.args(&payload.paths).arg(&payload.hostname);
-    } else {
-        cmd.arg(&payload.hostname).args(&payload.paths);
-    }
+    
 
     match cmd.spawn() {
         Err(x) => {
             error!("{:?}", x);
         }
         Ok(_) => {
-            debug!("called rsync! dest:{} paths:", &payload.dest);
-            for path in &payload.paths {
-                info!("\t{}", path.display());
-            }
+            debug!("called rsync! src_paths: {:?}  dest_path: {}", src, dest);
         }
     }
 }
