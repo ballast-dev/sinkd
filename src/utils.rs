@@ -33,6 +33,15 @@ pub struct Parameters<'a> {
     pub user_configs: Arc<Vec<PathBuf>>,
 }
 
+impl<'a> std::fmt::Display for Parameters<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let deamon_type: &str = if *self.daemon_type == DaemonType::Client {
+            "daemon:type:client"
+        } else { "daemon:type:server" };
+        Ok(())
+    }
+}
+
 impl<'a> Parameters<'a> {
     pub fn new(
         daemon_type: &'a DaemonType,

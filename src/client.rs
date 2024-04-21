@@ -318,5 +318,3 @@ fn filter_file_events(event_rx: &mpsc::Receiver<PathBuf>) -> Outcome<Vec<PathBuf
     }
     Ok(event_paths)
 }
-
-// let ep = vec![ path_set.drain().map(|s| String::from(s.to_str().unwrap())).collect() ];

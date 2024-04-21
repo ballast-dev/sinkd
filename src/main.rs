@@ -100,6 +100,8 @@ fn main() -> ExitCode {
         Err(e) => return egress::<String>(bad!(e)),
     };
 
+    println!("{}", &params);
+
     if params.verbosity >= 3 {
         fancy_debug!("system config: {}", params.system_config.display());
         for user_cfg in params.user_configs.iter() {
