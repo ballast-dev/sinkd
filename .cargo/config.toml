@@ -1,10 +1,10 @@
-[env]
-# Static linking to musl prevents dynamic linking to openssl
-# OPENSSL_STATIC = true
-OPENSSL_LIB_DIR = "/usr/lib"
-OPENSSL_INCLUDE_DIR = "/usr/include/openssl"
-# LLVM_CONFIG_PATH = "/usr/bin/llvm-config"
-# LIBCLANG_STATIC_PATH = "/usr/lib/"
-
-[target.x86_64-unknown-linux-musl]
-rustflags = ["-C", "link-arg=-lc"]
+# [env]
+# # Static linking to musl prevents dynamic linking to openssl
+# # OPENSSL_STATIC = true
+# OPENSSL_LIB_DIR = "/usr/lib"
+# OPENSSL_INCLUDE_DIR = "/usr/include/openssl"
+# # LLVM_CONFIG_PATH = "/usr/bin/llvm-config"
+# # LIBCLANG_STATIC_PATH = "/usr/lib/"
+#
+# [target.x86_64-unknown-linux-musl]
+# rustflags = ["-C", "link-arg=-lc"]

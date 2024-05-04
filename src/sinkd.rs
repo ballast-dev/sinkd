@@ -69,7 +69,7 @@ pub fn list(paths: Option<Vec<&String>>) -> Outcome<bool> {
             for path in paths {
                 println!("path: {}", path);
             }
-            let user = env!("USER");
+            let user = std::env::var("USER").map_err(|e| e.to_string())?;
             fancy_debug!("user: {}", user);
             Ok(true)
         }

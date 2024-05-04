@@ -1,0 +1,10 @@
+services:
+  sinkd:
+    image: sinkd
+    volumes:
+      - type: bind
+        source: .
+        target: /repo
+    tty: true
+    entrypoint: ["perms.sh"]
+
