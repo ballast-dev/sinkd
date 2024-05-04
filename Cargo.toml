@@ -13,7 +13,7 @@ regex = "1.9"
 serde = { version = "1.0", features = ["derive"] }
 bincode = "1"
 toml = "0.8"
-nix = { version = "0.27", features = ["process", "signal"] }
+nix = { version = "0.28", features = ["process", "signal"] }
 # daemonize = "0.5.0"
 # "std" is to enable set_boxed_logger
 log = { version = "0.4", features = ["std"] }
@@ -43,3 +43,14 @@ cc = { version = "1.0" }
 # build_bindgen = ["paho-mqtt-sys/build_bindgen"]
 # ssl = ["paho-mqtt-sys/ssl"]
 # vendored-ssl = ["paho-mqtt-sys/vendored-ssl"]
+
+# [dev-dependencies]
+# # Clippy for linting
+# clippy = { version = "0.1", default-features = false, features = ["lints"] }
+
+[lint.clippy]
+perf = "warn"
+pedantic = "deny"
+correctness = "deny"
+suspicious = "deny"
+complexity = "deny"

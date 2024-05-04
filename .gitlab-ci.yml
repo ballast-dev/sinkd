@@ -1,0 +1,30 @@
+stages:
+  - build
+  - test
+  - deploy
+
+image: "rust:latest"
+
+build-job:
+  stage: build
+  script:
+    - echo "Compiling the code..."
+    - echo "Compile complete."
+
+test:cargo:
+  script:
+    - rustc --version && cargo --version  # Print version info for debugging
+    - cargo test --workspace --verbose
+
+
+test:lint-job: # parallel execution
+  script:
+    - cargo clippy
+
+deploy-job:      # This job runs in the deploy stage.
+  stage: deploy  # It only runs when *both* jobs in the test stage complete successfully.
+  environment: production
+  script:
+    - echo "Deploying application..."
+    - echo "Application successfully deployed."
+

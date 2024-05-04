@@ -1,0 +1,9 @@
+# this is getting involved
+# [target.x86_64-unknown-linux-musl]
+# CC = "/opt/cross/x86_64-linux-musl/bin/"
+# linker = "/opt/cross/x86_64-linux-musl/bin/x86_64-linux-musl-ld"            # linker to use
+# runner = "…"            # wrapper to run executables
+[env]
+OPENSSL_LIB_DIR = "/usr/include/openssl-1.1/openssl"
+OPENSSL_INCLUDE_DIR = "/usr/lib/openssl-1.1"
+rustflags = "-C link-arg=-s"  # custom flags for `rustc`
