@@ -13,6 +13,6 @@ useradd --home-dir /home/sinkd \
 	--shell /bin/bash \
 	sinkd
 
-echo "PATH=${PATH}" >>/home/.bashrc
+echo "PATH=${PATH}" >>/home/sinkd/.bashrc
 
 su --login sinkd

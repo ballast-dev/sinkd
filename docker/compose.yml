@@ -1,10 +1,9 @@
 services:
   sinkd:
     image: sinkd
+    container_name: sinkd_container
+    hostname: anchor
     volumes:
-      - type: bind
-        source: .
-        target: /repo
+      - ${TLD}:/repo
     tty: true
-    entrypoint: ["perms.sh"]
-
+    command: ["perms.sh"]
