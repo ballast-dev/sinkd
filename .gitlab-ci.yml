@@ -14,8 +14,8 @@ build-job:
     - rustc --version && cargo --version  # Print version info for debugging
     - cargo build --release
   artifacts:
-  paths:
-    - target/
+    paths:
+      - target/
 
 test:cargo:  # only runs after build
   script:
