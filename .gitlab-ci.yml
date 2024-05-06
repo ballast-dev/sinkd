@@ -1,25 +1,23 @@
+image: "rust:latest"
+
 stages:
   - build
   - test
   - deploy
 
-image: "rust:latest"
-
-before_script:
-  - apt-get update -yqq
-  - apt-get install -yqq --no-install-recommends \
-    build-essential \
-    cmake \
-    libssl-dev \
-    pkg-config
-
 build-job:
   stage: build
+  before_script:
+    - apt-get update -yqq
+    - apt-get install -yqq --no-install-recommends build-essential cmake libssl-dev pkg-config
   script:
     - rustc --version && cargo --version  # Print version info for debugging
     - cargo build --release
+  artifacts:
+  paths:
+    - target/
 
-test:cargo:
+test:cargo:  # only runs after build
   script:
     - cargo test --workspace --verbose
 
