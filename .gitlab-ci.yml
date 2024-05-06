@@ -8,6 +8,7 @@ stages:
 build-job:
   stage: build
   before_script:
+    - rustup component add clippy
     - apt-get update -yqq
     - apt-get install -yqq --no-install-recommends build-essential cmake libssl-dev pkg-config
   script:
