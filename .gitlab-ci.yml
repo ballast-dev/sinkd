@@ -5,22 +5,23 @@ stages:
 
 image: "rust:latest"
 
-# Optional: Install a C compiler, cmake and git into the container.
-# You will often need this when you (or any of your dependencies) depends on C code.
 before_script:
   - apt-get update -yqq
-  - apt-get install -yqq --no-install-recommends openssl-dev
+  - apt-get install -yqq --no-install-recommends openssl-dev \
+      build-essential \
+      cmake \
+      libssl-dev \
+      pkg-config
 
 build-job:
   stage: build
   script:
-    - echo "Compiling the code..."
-    - echo "Compile complete."
+    - rustc --version && cargo --version  # Print version info for debugging
+    - cargo build --release
 
 test:cargo:
   script:
-    - rustc --version && cargo --version  # Print version info for debugging
-    # - cargo test --workspace --verbose
+    - cargo test --workspace --verbose
 
 
 test:lint-job: # parallel execution
