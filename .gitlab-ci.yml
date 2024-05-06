@@ -5,12 +5,14 @@ stages:
   - test
   - deploy
 
-build-job:
-  stage: build
+default:
   before_script:
     - rustup component add clippy
     - apt-get update -yqq
     - apt-get install -yqq --no-install-recommends build-essential cmake libssl-dev pkg-config
+
+build-job:
+  stage: build
   script:
     - rustc --version && cargo --version  # Print version info for debugging
     - cargo build --release
