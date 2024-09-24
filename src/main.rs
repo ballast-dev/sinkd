@@ -66,6 +66,7 @@ fn egress<T>(outcome: Outcome<T>) -> ExitCode {
 
 #[allow(dead_code)]
 fn main() -> ExitCode {
+    println!("sinkd start...");
     println!("Running sinkd at {}", utils::get_timestamp("%T"));
 
     let mut cli = crate::cli::build_sinkd();

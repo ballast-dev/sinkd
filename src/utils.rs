@@ -4,7 +4,7 @@ use libc::{c_char, c_uint};
 use nix::sys::signal::{kill, Signal};
 use nix::unistd::Pid;
 use std::{
-    ffi::CString,
+    ffi::{CStr, CString},
     fs,
     path::{Path, PathBuf},
     sync::Arc,
@@ -12,8 +12,6 @@ use std::{
 };
 
 use crate::{fancy, ipc, outcome::Outcome};
-
-const TIMESTAMP_LENGTH: u8 = 25;
 
 #[derive(PartialEq)]
 pub enum DaemonType {
@@ -167,17 +165,20 @@ extern "C" {
 }
 
 pub fn get_timestamp(fmt_str: &str) -> String {
-    let ret_str = CString::new(Vec::with_capacity(TIMESTAMP_LENGTH.into())).unwrap();
-    let ret_ptr: *mut c_char = ret_str.into_raw();
+    const TIMESTAMP_LENGTH: usize = 25;
+    let mut buffer = vec![0u8; TIMESTAMP_LENGTH];
 
-    let _fmt_str = CString::new(fmt_str.as_bytes()).unwrap();
-    let stamp: CString;
+    let ret_ptr = buffer.as_mut_ptr() as *mut c_char;
+    let c_fmt_str = CString::new(fmt_str.as_bytes()).expect("failed to create CString");
+
     unsafe {
-        timestamp(ret_ptr, TIMESTAMP_LENGTH.into(), _fmt_str.as_ptr());
-        stamp = CString::from_raw(ret_ptr);
+        timestamp(ret_ptr, TIMESTAMP_LENGTH as c_uint, c_fmt_str.as_ptr());
     }
-    let v = stamp.into_bytes();
-    String::from_utf8_lossy(&v).into_owned()
+
+    // convert buffer to CStr
+    let c_str = unsafe { CStr::from_ptr(ret_ptr) };
+    // convert CStr to Rust String
+    c_str.to_string_lossy().into_owned()
 }
 
 pub fn have_permissions() -> bool {
