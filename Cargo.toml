@@ -22,7 +22,6 @@ rpassword = "7"
 
 # the dependency openssl-sys has bindings which are needed for cross compile
 paho-mqtt = { version = "0.12", features = ["vendored-ssl"] }
-# paho-mqtt = "0.12"
 
 [dev-dependencies]
 futures-util = "0.3"

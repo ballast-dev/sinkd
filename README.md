@@ -22,6 +22,16 @@ across many computers.
 1. Physical access to your files
 1. Granular permissions per user  
 
+## Development
+Dependencies:
+
+- `cmake`
+- `make`
+- `cargo` (rust)
+- `perl` (for openssl cross compile)
+- `gcc` C compiler (for openssl cross compile) 
+
+
 ### Roadmap
 
 - use `btrfs` on a virtual mount for ease of snapshotting
