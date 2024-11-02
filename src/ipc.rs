@@ -3,8 +3,8 @@ use std::{fmt, path::PathBuf, time};
 use paho_mqtt as mqtt;
 use serde::{Deserialize, Serialize};
 
-use crate::utils;
 use crate::outcome::Outcome;
+use crate::utils;
 
 pub type Rx = mqtt::Receiver<Option<mqtt::Message>>;
 
@@ -247,17 +247,15 @@ impl MqttClient {
     }
 
     pub fn publish(&self, payload: &mut Payload) -> Outcome<()> {
-        match self.client.publish(
-            mqtt::Message::new(
-                &self.publish_topic,
-                encode(payload)?,
-                mqtt::QOS_0, // within local network, should be no lost packets
-            )
-        ) {
+        match self.client.publish(mqtt::Message::new(
+            &self.publish_topic,
+            encode(payload)?,
+            mqtt::QOS_0, // within local network, should be no lost packets
+        )) {
             Ok(_) => {
                 info!("published payload: {}", payload);
                 Ok(())
-            },
+            }
             Err(e) => {
                 error!("could not publish payload {}", payload);
                 bad!("could not publish payload {}", payload)

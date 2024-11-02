@@ -44,8 +44,6 @@ def create_files(folder: Path, num_of_files: int, delay: float = 0.01):
         subprocess.run(["touch", filepath])
 
 
-
-
 def spawn_server():
     client = run("./target/debug/sinkd server start -d")
     if client.returncode != 0:

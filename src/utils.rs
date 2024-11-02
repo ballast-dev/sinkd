@@ -3,6 +3,7 @@ use clap::parser::ValuesRef;
 use libc::{c_char, c_uint};
 use nix::sys::signal::{kill, Signal};
 use nix::unistd::Pid;
+use std::fmt::Write;
 use std::{
     ffi::{CStr, CString},
     fs,
@@ -33,10 +34,11 @@ pub struct Parameters<'a> {
 
 impl<'a> std::fmt::Display for Parameters<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let deamon_type: &str = if *self.daemon_type == DaemonType::Client {
-            "daemon:type:client"
-        } else { "daemon:type:server" };
-        Ok(())
+        if *self.daemon_type == DaemonType::Client {
+            f.write_str("daemon:type:client")
+        } else {
+            f.write_str("daemon:type:server")
+        }
     }
 }
 
@@ -110,21 +112,34 @@ impl<'a> Parameters<'a> {
         if *daemon_type == DaemonType::Server {
             return Ok(Arc::new(PathBuf::from("not-used")));
         }
-        // safe unwrap due to default args
-        match resolve(system_config.unwrap()) {
-            Ok(normalized) => {
-                if normalized.is_dir() {
-                    // TODO: have error codes
-                    bad!(
-                        "{} is a directory not a file, aborting",
-                        normalized.display()
-                    )
-                } else {
-                    Ok(Arc::new(normalized))
+
+        let cfg_path: PathBuf;
+
+        if system_config.is_some() {
+            match resolve(system_config.unwrap()) {
+                Ok(normalized) => {
+                    if normalized.is_dir() {
+                        return bad!(
+                            "{} is a directory not a file, aborting",
+                            normalized.display()
+                        );
+                    } else if normalized.exists() {
+                        cfg_path = PathBuf::from(normalized);
+                    } else {
+                        return bad!("{} does not exist", normalized.display());
+                    }
                 }
+                Err(e) => return bad!("system config path error: {}", e),
             }
-            Err(e) => bad!("system config path error: {}", e),
+        } else if cfg!(target_os = "macos") {
+            cfg_path = PathBuf::from("/opt/sinkd/sinkd.conf");
+        } else if cfg!(target_os = "windows") {
+            cfg_path = PathBuf::from("/somepath/sinkd.conf");
+        } else {
+            cfg_path = PathBuf::from("/etc/sinkd.conf");
         }
+
+        Ok(Arc::new(cfg_path))
     }
 
     // fn load_user_configs(user_configs: Option<ValuesRef<String>>) -> Outcome<Vec<PathBuf>> {
@@ -447,24 +462,25 @@ pub fn rsync(payload: &ipc::Payload) {
 
     debug!("{}", payload);
 
+    // TODO:
+    // FIXME
+    // NOTE:
+    // HACK:
+    // WARNING:
 
-    // TODO: 
-    // FIXME 
-    // NOTE: 
-    // HACK: 
-    // WARNING: 
-    
     let pull = payload.status == ipc::Status::NotReady(ipc::Reason::Behind);
 
     let src: Vec<PathBuf> = if pull {
-        payload.src_paths.iter().map(|p| PathBuf::from(
-            format!("{}:{}", payload.hostname, p.display())
-        )).collect()
+        payload
+            .src_paths
+            .iter()
+            .map(|p| PathBuf::from(format!("{}:{}", payload.hostname, p.display())))
+            .collect()
     } else {
         payload.src_paths.clone()
     };
 
-    // NOTE: this is assuming that dest will always be a single point 
+    // NOTE: this is assuming that dest will always be a single point
     let dest: String = if pull {
         payload.dest_path.clone()
     } else {
@@ -481,9 +497,7 @@ pub fn rsync(payload: &ipc::Payload) {
         // .arg("--max-size=SIZE") // (limit size of transfers)
         // .arg("--exclude=PATTERN") // loop through to all all paths
         .args(&src)
-        .arg(&dest)
-        ;
-    
+        .arg(&dest);
 
     match cmd.spawn() {
         Err(x) => {

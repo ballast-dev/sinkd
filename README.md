@@ -1,5 +1,7 @@
 # ![image](resources/imgs/sinkd-black-txt.png)
 
+## _Don't get out of `sinkd`_ ⚓︎
+
 _**Everything and the kitchen sink**_  
 
 ## Deployable Cloud

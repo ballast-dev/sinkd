@@ -19,7 +19,7 @@ use std::{
         mpsc, Arc, Mutex,
     },
     thread,
-    time::Duration
+    time::Duration,
 };
 
 static FATAL_FLAG: AtomicBool = AtomicBool::new(false);
@@ -48,8 +48,12 @@ pub fn restart(params: &Parameters) -> Outcome<()> {
 fn create_srv_dir(debug: bool) -> Outcome<()> {
     let path = if debug {
         Path::new("/tmp/sinkd/srv")
+    } else if cfg!(windows) {
+        Path::new("/Program Files/sinkd/srv")
     } else {
-        Path::new("/srv/sinkd")
+        // NOTE: macos has System Integrity Protection (SIP)
+        // or APFS volume protections, which do not allow /srv to be writable
+        Path::new("/opt/sinkd")
     };
 
     if !path.exists() {
@@ -90,7 +94,10 @@ fn init(params: &Parameters) -> Outcome<()> {
     });
 
     if let Err(status_thread_err) = status_thread.join() {
-        error!("server:status_thread join error! >> {:?}", status_thread_err);
+        error!(
+            "server:status_thread join error! >> {:?}",
+            status_thread_err
+        );
         process::exit(1);
     }
     if let Err(synch_thread_err) = synch_thread.join() {
@@ -124,12 +131,14 @@ fn status_entry(
         if fatal_flag.load(Ordering::SeqCst) {
             return bad!("server>> synch thread exited, aborting mqtt thread");
         }
-        
-        {// send status 
-            let mut status_payload = ipc::Payload::new().status(ipc::Status::Ready);
-            // let status_msg = ipc::encode(&mut status_payload)?;
-            mqtt_client.publish(&mut status_payload)?;
-        }
+
+        //{
+        // send status
+        let mut status_payload = ipc::Payload::new().status(ipc::Status::Ready);
+        // let status_msg = ipc::encode(&mut status_payload)?;
+        mqtt_client.publish(&mut status_payload)?;
+        //}
+
         // then recv queries
         // and queue up rsync calls
         match mqtt_rx.try_recv() {
@@ -144,14 +153,14 @@ fn status_entry(
                             ipc::Reason::Other => todo!(),
                         },
                         ipc::Status::Ready => {
-                            // TODO 
+                            // TODO
                             // 1. recieve msg from client
                             // 2. if in good state switch status to "synchronizing"
-                            // 3. call rsync <client> <server> <opts> 
+                            // 3. call rsync <client> <server> <opts>
                             // 4. once finished switch state to "ready"
-                            // TODO 
+                            // TODO
                             info!("recv: {:?}", msg);
-                            
+
                             let this_cycle = match cycle.lock() {
                                 Ok(l) => *l,
                                 Err(e) => {
@@ -183,7 +192,6 @@ fn status_entry(
                         error!("state lock busted")
                     }
                 }
-
             }
             Err(err) => match err {
                 crossbeam::channel::TryRecvError::Empty => {
@@ -230,7 +238,7 @@ fn synch_entry(
                     }
                 } else {
                     fatal_flag.store(true, Ordering::SeqCst);
-                    return bad!("state mutex poisoned")
+                    return bad!("state mutex poisoned");
                 }
             }
         }
@@ -238,7 +246,7 @@ fn synch_entry(
     }
 }
 
-fn publish<'a>(mqtt_client: &mqtt::Client, msg: &'a str) {
+fn publish(mqtt_client: &mqtt::Client, msg: &str) {
     if let Err(e) = mqtt_client.publish(mqtt::Message::new("sinkd/status", msg, mqtt::QOS_0)) {
         error!("server:publish >> {}", e);
     }

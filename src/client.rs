@@ -7,14 +7,14 @@ use crate::{
 use crossbeam::channel::TryRecvError;
 use notify::{DebouncedEvent, Watcher};
 use std::{
-    collections::HashSet, 
-    path::PathBuf, 
+    collections::HashSet,
+    path::PathBuf,
     sync::{
         atomic::{AtomicBool, Ordering},
         mpsc,
-    }, 
-    thread, 
-    time::{Duration, Instant}
+    },
+    thread,
+    time::{Duration, Instant},
 };
 
 static FATAL_FLAG: AtomicBool = AtomicBool::new(false);
@@ -170,7 +170,7 @@ fn mqtt_entry(
 
     // assume we are behind
     // FIXME: use this!
-    let mut status = ipc::Status::NotReady(ipc::Reason::Behind); 
+    let mut status = ipc::Status::NotReady(ipc::Reason::Behind);
 
     // The server will send status updates to it's clients every 5 seconds
     loop {
@@ -184,7 +184,8 @@ fn mqtt_entry(
                     debug!("client>> got message!: {}", msg);
                     if let Ok(decoded_payload) = ipc::decode(msg.payload()) {
                         // process mqtt traffic from server
-                        if let Err(e) = process(&event_rx, &mqtt_client, inode_map, decoded_payload) {
+                        if let Err(e) = process(&event_rx, &mqtt_client, inode_map, decoded_payload)
+                        {
                             error!("process: {}", e);
                         }
                     } else {
@@ -226,15 +227,15 @@ fn process(
                 Ok(())
             }
             ipc::Reason::Behind => {
-                // let's sync up 
+                // let's sync up
                 let mut payload = ipc::Payload::new()
                     .status(ipc::Status::NotReady(ipc::Reason::Behind))
                     .paths(inode_map.keys().map(|p| p.clone()).collect());
 
                 utils::rsync(&payload);
                 mqtt_client.publish(&mut payload)
-            },
-        
+            }
+
             ipc::Reason::Other => todo!(),
         },
         ipc::Status::Ready => {
@@ -287,7 +288,6 @@ fn get_watchers(
         bad!("nothing to watch! aborting")
     }
 }
-
 
 // Will loop on file events until queue (channel) is empty
 // Using a HashSet to filter out redundancies will return

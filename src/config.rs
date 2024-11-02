@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 // Serialized structures from Configuration
+use clap::parser::ValuesRef;
 use std::{
     collections::HashMap,
     fs,
@@ -8,10 +9,9 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use clap::parser::ValuesRef;
 
-use crate::utils::{self, Parameters};
 use crate::outcome::Outcome;
+use crate::utils::{self, Parameters};
 
 // these are serially parsable
 #[derive(Debug, Serialize, Deserialize)]
@@ -92,10 +92,7 @@ impl ConfigParser {
                     );
                 }
                 ParseError::FileNotFound => {
-                    return bad!(
-                        "File not found: '{}'",
-                        &params.system_config.display()
-                    );
+                    return bad!("File not found: '{}'", &params.system_config.display());
                 }
                 _ => {
                     return bad!("load_configs unknown condition");
