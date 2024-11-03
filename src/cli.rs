@@ -27,9 +27,7 @@ pub fn build_sinkd() -> Command {
         .long_help("providing this flag will override default")
         .short('s')
         .long("sys-cfg")
-        .num_args(1)
-        .global(true)
-        .default_value("/etc/sinkd.conf");
+        .num_args(1);
 
     let user_configs_arg = Arg::new("user-configs")
         .help("user configuration file(s) to use")
@@ -39,9 +37,7 @@ pub fn build_sinkd() -> Command {
         .long("usr-cfg")
         .num_args(1..)  // might need to reconsider this 
         .value_delimiter(',')
-        .action(ArgAction::Append)
-        .global(true)
-        .default_value("~/.config/sinkdrc");
+        .action(ArgAction::Append);
 
     // composable commands
 

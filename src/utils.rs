@@ -60,10 +60,10 @@ impl<'a> Parameters<'a> {
             },
             clear_logs: if debug { true } else { false },
             debug,
-            log_path: Parameters::get_log_path(debug, daemon_type),
-            pid_path: Parameters::get_pid_path(debug, daemon_type),
-            system_config: Parameters::resolve_system_config(daemon_type, system_config)?,
-            user_configs: Parameters::resolve_user_configs(daemon_type, user_configs)?,
+            log_path: Self::get_log_path(debug, daemon_type),
+            pid_path: Self::get_pid_path(debug, daemon_type),
+            system_config: Self::resolve_system_config(daemon_type, system_config)?,
+            user_configs: Self::resolve_user_configs(daemon_type, user_configs)?,
         })
     }
 
@@ -104,8 +104,8 @@ impl<'a> Parameters<'a> {
             (false, DaemonType::Server) => Arc::new(Path::new("/var/log/sinkd/server.pid")),
         }
     }
-    
-    //?  -- server config -- 
+
+    //?  -- server config --
     //?  this will be outside of client config
     //?  /srv/sinkd/sinkd_server.conf
     //?  /opt/sinkd/sinkd_server.conf
@@ -125,6 +125,7 @@ impl<'a> Parameters<'a> {
         let cfg_path: PathBuf;
 
         if system_config.is_some() {
+            println!("DEBUG>> {}", system_config.unwrap());
             match resolve(system_config.unwrap()) {
                 Ok(normalized) => {
                     if normalized.is_dir() {
@@ -167,8 +168,8 @@ impl<'a> Parameters<'a> {
         }
 
         let mut resolved_configs = vec![
-               resolve("~/.config/sinkd/sinkd.conf")?,
-               resolve("~/sinkd.conf")?,
+            resolve("~/.config/sinkd/sinkd.conf")?,
+            resolve("~/sinkd.conf")?,
         ];
 
         // safe unwrap due to default args
