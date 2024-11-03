@@ -1,10 +1,14 @@
-use std::{fmt, path::PathBuf, time};
-
+use nix::sys::signal::{kill, Signal};
+use nix::unistd::Pid;
 use paho_mqtt as mqtt;
 use serde::{Deserialize, Serialize};
+use std::{
+    fmt,
+    path::{Path, PathBuf},
+    time::{Duration, Instant},
+};
 
-use crate::outcome::Outcome;
-use crate::utils;
+use crate::{bad, ipc, outcome::Outcome, parameters::Parameters, shiplog, utils};
 
 pub type Rx = mqtt::Receiver<Option<mqtt::Message>>;
 
@@ -138,7 +142,7 @@ impl fmt::Display for Payload {
 
 /// Adds timestamp and serializes payload for transfer
 pub fn encode(payload: &mut Payload) -> Result<Vec<u8>, mqtt::Error> {
-    payload.date = utils::get_timestamp("%Y%m%d");
+    payload.date = shiplog::get_timestamp("%Y%m%d");
     match bincode::serialize(payload) {
         Err(e) => Err(mqtt::Error::GeneralString(format!(
             "FATAL, bincode::serialize >> {}",
@@ -184,7 +188,7 @@ impl MqttClient {
 
         // Define the set of options for the connection
         let conn_opts = mqtt::ConnectOptionsBuilder::new_v3()
-            .keep_alive_interval(time::Duration::from_secs(20))
+            .keep_alive_interval(Duration::from_secs(20))
             .clean_session(true)
             .will_message(lwt)
             .finalize();
@@ -277,5 +281,137 @@ fn resolve_host(host: Option<&str>) -> Result<String, mqtt::Error> {
             }
         }
         None => Err(mqtt::Error::General("Need host string")),
+    }
+}
+
+pub fn start_mosquitto() -> Outcome<()> {
+    debug!(">> spawn mosquitto daemon");
+    //? This command will not spawn new instances
+    //? if mosquitto already active.
+    if let Err(spawn_error) = std::process::Command::new("mosquitto").arg("-d").spawn() {
+        return bad!(format!(
+            "Is mosquitto installed and in path? >> {}",
+            spawn_error
+        ));
+    }
+    Ok(())
+}
+
+pub fn daemon(
+    func: fn(&Parameters) -> Outcome<()>,
+    app_type: &str,
+    params: &Parameters,
+) -> Outcome<()> {
+    use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
+    use nix::unistd::{fork, ForkResult};
+
+    match unsafe { fork() } {
+        Ok(ForkResult::Parent { child, .. }) => {
+            let start_time = Instant::now();
+            let timeout = Duration::from_secs(2);
+
+            while start_time.elapsed() < timeout {
+                match waitpid(child, Some(WaitPidFlag::WNOHANG)) {
+                    Ok(status) => match status {
+                        WaitStatus::Exited(_, _) => {
+                            return bad!(format!("{} encountered error", app_type))
+                        }
+                        _ => shiplog::set_pid(params, child.as_raw() as u32)?,
+                    },
+                    Err(e) => eprintln!("Failed to wait on child?: {}", e),
+                }
+                std::thread::sleep(Duration::from_secs(1));
+            }
+            println!("spawned, logging to '{}'", params.log_path.display());
+            Ok(())
+        }
+        Ok(ForkResult::Child) => {
+            info!("about to start daemon...");
+            func(params)
+        }
+        Err(_) => {
+            bad!("Failed to fork process")
+        }
+    }
+}
+
+pub fn end_process(params: &Parameters) -> Outcome<()> {
+    if !params.debug && !utils::have_permissions() {
+        return bad!("Need to be root");
+    }
+
+    let pid = shiplog::get_pid(params)?;
+    let nix_pid = Pid::from_raw(pid as i32);
+
+    match kill(nix_pid, Some(Signal::SIGTERM)) {
+        Ok(_) => {
+            // Process exists and can be signaled
+            if let Err(e) = std::process::Command::new("kill")
+                .arg("-15") // SIGTERM
+                .arg(format!("{}", pid))
+                .output()
+            {
+                return bad!("Couldn't kill process {} {}", pid, e);
+            }
+            Ok(())
+        }
+        Err(_) => {
+            bad!(
+                "Process with PID {} does not exist or cannot be signaled",
+                pid
+            )
+        }
+    }
+}
+
+pub fn rsync(payload: &ipc::Payload) {
+    // Agnostic pathing allows sinkd not to care about user folder structure
+
+    debug!("{}", payload);
+
+    // TODO:
+    // FIXME
+    // NOTE:
+    // HACK:
+    // WARNING:
+
+    let pull = payload.status == ipc::Status::NotReady(ipc::Reason::Behind);
+
+    let src: Vec<PathBuf> = if pull {
+        payload
+            .src_paths
+            .iter()
+            .map(|p| PathBuf::from(format!("{}:{}", payload.hostname, p.display())))
+            .collect()
+    } else {
+        payload.src_paths.clone()
+    };
+
+    // NOTE: this is assuming that dest will always be a single point
+    let dest: String = if pull {
+        payload.dest_path.clone()
+    } else {
+        format!("{}:{}", payload.hostname, payload.dest_path)
+    };
+
+    // need to account for shared folders
+    // and local sync? maybe useful for testing
+    let mut cmd = std::process::Command::new("rsync"); // have to bind at .new()
+    cmd.arg("-atR") // archive, timestamps, relative
+        .arg("--delete") // delete on destination if not reflected in source
+        //? RSYNC options to consider
+        // .arg("--delete-excluded")
+        // .arg("--max-size=SIZE") // (limit size of transfers)
+        // .arg("--exclude=PATTERN") // loop through to all all paths
+        .args(&src)
+        .arg(&dest);
+
+    match cmd.spawn() {
+        Err(x) => {
+            error!("{:?}", x);
+        }
+        Ok(_) => {
+            debug!("called rsync! src_paths: {:?}  dest_path: {}", src, dest);
+        }
     }
 }

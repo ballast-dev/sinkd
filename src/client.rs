@@ -1,9 +1,4 @@
-use crate::{
-    config, ipc,
-    outcome::Outcome,
-    shiplog,
-    utils::{self, Parameters},
-};
+use crate::{bad, config, ipc, outcome::Outcome, parameters::Parameters, shiplog};
 use crossbeam::channel::TryRecvError;
 use notify::{DebouncedEvent, Watcher};
 use std::{
@@ -21,12 +16,12 @@ static FATAL_FLAG: AtomicBool = AtomicBool::new(false);
 
 pub fn start(params: &Parameters) -> Outcome<()> {
     shiplog::init(params)?;
-    utils::start_mosquitto()?;
-    utils::daemon(init, "client", params)
+    ipc::start_mosquitto()?;
+    ipc::daemon(init, "client", params)
 }
 
 pub fn stop(params: &Parameters) -> Outcome<()> {
-    utils::end_process(params)?;
+    ipc::end_process(params)?;
     Ok(())
 }
 
@@ -232,7 +227,7 @@ fn process(
                     .status(ipc::Status::NotReady(ipc::Reason::Behind))
                     .paths(inode_map.keys().map(|p| p.clone()).collect());
 
-                utils::rsync(&payload);
+                ipc::rsync(&payload);
                 mqtt_client.publish(&mut payload)
             }
 

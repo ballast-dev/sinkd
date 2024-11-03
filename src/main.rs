@@ -11,12 +11,14 @@ extern crate nix;
 extern crate rpassword;
 
 #[macro_use]
-mod outcome;
 mod cli;
 mod client;
 mod config;
 mod fancy;
 mod ipc;
+#[macro_use]
+mod outcome;
+mod parameters;
 mod server;
 mod shiplog;
 mod sinkd;
@@ -30,7 +32,7 @@ use std::{
     process::ExitCode,
 };
 
-use crate::utils::Parameters;
+use crate::parameters::{DaemonType, Parameters};
 
 fn check_path(p: &str) -> bool {
     let p = Path::new(p);
@@ -67,7 +69,7 @@ fn egress<T>(outcome: Outcome<T>) -> ExitCode {
 #[allow(dead_code)]
 fn main() -> ExitCode {
     println!("sinkd start...");
-    println!("Running sinkd at {}", utils::get_timestamp("%T"));
+    println!("Running sinkd at {}", shiplog::get_timestamp("%T"));
 
     let mut cli = crate::cli::build_sinkd();
     let matches = cli.get_matches_mut();
@@ -83,10 +85,10 @@ fn main() -> ExitCode {
             }
             _ => (),
         }
-        utils::DaemonType::Client
+        DaemonType::Client
     } else {
         // default to server for params
-        utils::DaemonType::Server
+        DaemonType::Server
     };
 
     let params = match Parameters::new(

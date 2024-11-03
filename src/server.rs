@@ -2,13 +2,8 @@
 //   / __/__ _____  _____ ____
 //  _\ \/ -_) __/ |/ / -_) __/
 // /___/\__/_/  |___/\__/_/
-use crate::{
-    fancy_debug, ipc,
-    outcome::Outcome,
-    shiplog,
-    utils::{self, Parameters},
-};
-use mqtt::Message;
+use crate::{fancy_debug, ipc, outcome::Outcome, parameters::Parameters, shiplog, utils};
+//use mqtt::Message;
 use paho_mqtt as mqtt;
 use std::{
     fs,
@@ -26,12 +21,12 @@ static FATAL_FLAG: AtomicBool = AtomicBool::new(false);
 
 pub fn start(params: &Parameters) -> Outcome<()> {
     shiplog::init(params)?;
-    utils::start_mosquitto()?;
-    utils::daemon(init, "server", params)
+    ipc::start_mosquitto()?;
+    ipc::daemon(init, "server", params)
 }
 
 pub fn stop(params: &Parameters) -> Outcome<()> {
-    utils::end_process(params)?;
+    ipc::end_process(params)?;
     Ok(())
 }
 
@@ -230,7 +225,7 @@ fn synch_entry(
                 // *num += 1;
                 if let Ok(state_mutex) = state.lock() {
                     match *state_mutex {
-                        ipc::Status::Ready => utils::rsync(&payload),
+                        ipc::Status::Ready => ipc::rsync(&payload),
                         ipc::Status::NotReady(_) => {
                             info!("not ready... wait 2 secs");
                             std::thread::sleep(Duration::from_secs(2)); // should be config driven

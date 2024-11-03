@@ -4,11 +4,7 @@
 
 use clap::parser::ValuesRef;
 
-use crate::outcome::Outcome;
-use crate::shiplog;
-use crate::utils::Parameters;
-use crate::{config, utils};
-use crate::{fancy, fancy_debug};
+use crate::{config, fancy, fancy_debug, log, outcome::Outcome, parameters::Parameters, utils};
 use std::fs;
 
 // adds entry to ~/.sinkd/sinkd.conf
