@@ -28,7 +28,7 @@ pub fn stop(params: &Parameters) -> Outcome<()> {
 
 pub fn restart(params: &Parameters) -> Outcome<()> {
     match stop(params) {
-        Ok(_) => {
+        Ok(()) => {
             start(params)?;
             Ok(())
         }
@@ -61,7 +61,7 @@ fn init(params: &Parameters) -> Outcome<()> {
     let mqtt_thread =
         thread::spawn(
             move || match mqtt_entry(&srv_addr, &inode_map2, event_rx, &FATAL_FLAG) {
-                Ok(_) => Ok(()),
+                Ok(()) => Ok(()),
                 Err(e) => {
                     error!("client>> FATAL condition in mqtt_entry, {}", e);
                     Err(e)
@@ -72,7 +72,7 @@ fn init(params: &Parameters) -> Outcome<()> {
     watch_thread.join().unwrap();
     match mqtt_thread.join().unwrap() {
         Err(e) => Err(e),
-        Ok(_) => Ok(()),
+        Ok(()) => Ok(()),
     }
 }
 
@@ -116,14 +116,14 @@ fn watch_entry(
         match notify_rx.try_recv() {
             // blocking call
             Ok(event) => match event {
-                DebouncedEvent::Create(path) => check_interval(path, inode_map, &event_tx),
-                DebouncedEvent::Write(path) => check_interval(path, inode_map, &event_tx),
-                DebouncedEvent::Chmod(path) => check_interval(path, inode_map, &event_tx),
-                DebouncedEvent::Remove(path) => check_interval(path, inode_map, &event_tx),
-                DebouncedEvent::Rename(path, _) => check_interval(path, inode_map, &event_tx),
-                DebouncedEvent::Rescan => {}
-                DebouncedEvent::NoticeWrite(_) => {}
-                DebouncedEvent::NoticeRemove(_) => {}
+                DebouncedEvent::Create(path)
+                | DebouncedEvent::Write(path)
+                | DebouncedEvent::Chmod(path)
+                | DebouncedEvent::Remove(path)
+                | DebouncedEvent::Rename(path, _) => check_interval(path, inode_map, &event_tx),
+                DebouncedEvent::Rescan
+                | DebouncedEvent::NoticeWrite(_)
+                | DebouncedEvent::NoticeRemove(_) => {}
                 DebouncedEvent::Error(error, option_path) => {
                     info!(
                         "What was the error? {:?}\n the path should be: {:?}",
@@ -134,7 +134,7 @@ fn watch_entry(
             },
             Err(err) => match err {
                 mpsc::TryRecvError::Empty => {
-                    std::thread::sleep(std::time::Duration::from_millis(200))
+                    std::thread::sleep(std::time::Duration::from_millis(200));
                 }
                 mpsc::TryRecvError::Disconnected => {
                     error!("FATAL: notify_rx hung up in watch_entry");
@@ -185,7 +185,7 @@ fn mqtt_entry(
                             error!("process: {}", e);
                         }
                     } else {
-                        error!("unable to decode message: {:?}", msg.payload())
+                        error!("unable to decode message: {:?}", msg.payload());
                     }
                 } else {
                     error!("client>> mqtt_thread: empty message?");
@@ -197,7 +197,7 @@ fn mqtt_entry(
                     return bad!("mqtt_rx hung up?");
                 }
                 TryRecvError::Empty => {
-                    debug!("waiting on message...")
+                    debug!("waiting on message...");
                 }
             },
         }
@@ -241,15 +241,12 @@ fn process(
                 Err(e) => return bad!("{}", e),
             };
             payload.cycle += 1;
-            match mqtt_client.publish(&mut payload) {
-                Err(e) => {
-                    error!("unable to publish {}", e);
-                    bad!("unable to publish {}", e)
-                }
-                Ok(_) => {
-                    info!("published payload: {}", payload);
-                    Ok(())
-                }
+            if let Err(e) = mqtt_client.publish(&mut payload) {
+                error!("unable to publish {}", e);
+                bad!("unable to publish {}", e)
+            } else {
+                info!("published payload: {}", payload);
+                Ok(())
             }
         }
     }
@@ -261,27 +258,24 @@ fn get_watchers(
 ) -> Outcome<Vec<notify::RecommendedWatcher>> {
     let mut watchers: Vec<notify::RecommendedWatcher> = Vec::new();
 
-    for (pathbuf, _) in inode_map.iter() {
+    for pathbuf in inode_map.keys() {
         //TODO: use 'system_interval' to setup notification events
         let mut watcher =
             notify::watcher(tx.clone(), Duration::from_secs(1)).expect("couldn't create watch");
 
-        match watcher.watch(pathbuf, notify::RecursiveMode::Recursive) {
-            Err(_) => {
-                warn!("unable to set watcher for: '{}'", pathbuf.display());
-                continue;
-            }
-            Ok(_) => {
-                info!("set watcher for: '{}'", pathbuf.display());
-                watchers.push(watcher);
-            }
+        if let Err(_) = watcher.watch(pathbuf, notify::RecursiveMode::Recursive) {
+            warn!("unable to set watcher for: '{}'", pathbuf.display());
+            continue;
+        } else {
+            info!("set watcher for: '{}'", pathbuf.display());
+            watchers.push(watcher);
         }
     }
 
-    if !watchers.is_empty() {
-        Ok(watchers)
-    } else {
+    if watchers.is_empty() {
         bad!("nothing to watch! aborting")
+    } else {
+        Ok(watchers)
     }
 }
 

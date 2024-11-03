@@ -76,15 +76,7 @@ impl Payload {
         cycle: u32,
         status: Status,
     ) -> Payload {
-        Payload {
-            hostname,
-            username,
-            dest_path,
-            src_paths,
-            date,
-            cycle,
-            status,
-        }
+        Payload { hostname, username, src_paths, dest_path, date, cycle, status }
     }
     pub fn hostname(mut self, hostname: &str) -> Self {
         self.hostname = hostname.to_string();
@@ -146,8 +138,7 @@ pub fn encode(payload: &mut Payload) -> Result<Vec<u8>, mqtt::Error> {
     payload.date = shiplog::get_timestamp("%Y%m%d");
     match bincode::serialize(payload) {
         Err(e) => Err(mqtt::Error::GeneralString(format!(
-            "FATAL, bincode::serialize >> {}",
-            e
+            "FATAL, bincode::serialize >> {e}"
         ))),
         Ok(stream) => Ok(stream),
     }
@@ -253,7 +244,7 @@ impl MqttClient {
             encode(payload)?,
             mqtt::QOS_0, // within local network, should be no lost packets
         )) {
-            Ok(_) => {
+            Ok(()) => {
                 info!("published payload: {}", payload);
                 Ok(())
             }
@@ -274,7 +265,7 @@ fn resolve_host(host: Option<&str>) -> Result<String, mqtt::Error> {
                     "did you intend on localhost?, check '/etc/sinkd.conf'",
                 ))
             } else {
-                Ok(format!("tcp://{}:1883", _str))
+                Ok(format!("tcp://{_str}:1883"))
             }
         }
         None => Err(mqtt::Error::General("Need host string")),
@@ -315,7 +306,7 @@ pub fn daemon(
                         }
                         _ => shiplog::set_pid(params, child.as_raw() as u32)?,
                     },
-                    Err(e) => eprintln!("Failed to wait on child?: {}", e),
+                    Err(e) => eprintln!("Failed to wait on child?: {e}"),
                 }
                 std::thread::sleep(Duration::from_secs(1));
             }
@@ -341,11 +332,11 @@ pub fn end_process(params: &Parameters) -> Outcome<()> {
     let nix_pid = Pid::from_raw(pid as i32);
 
     match kill(nix_pid, Some(Signal::SIGTERM)) {
-        Ok(_) => {
+        Ok(()) => {
             // Process exists and can be signaled
             if let Err(e) = std::process::Command::new("kill")
                 .arg("-15") // SIGTERM
-                .arg(format!("{}", pid))
+                .arg(format!("{pid}"))
                 .output()
             {
                 return bad!("Couldn't kill process {} {}", pid, e);

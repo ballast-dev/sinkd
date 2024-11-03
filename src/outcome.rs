@@ -107,13 +107,13 @@ impl From<paho_mqtt::Error> for Failure {
     fn from(error: paho_mqtt::Error) -> Self {
         let mut err_str = String::from("ERROR Paho>> ");
         match error {
-            paho_mqtt::Error::Paho(e) => { err_str.push_str(&format!("library, num: {}", e)); }
-            paho_mqtt::Error::PahoDescr(num, msg) => { err_str.push_str(&format!("description(redundant):{}, {}", num, msg)); }
-            paho_mqtt::Error::Publish(num, msg) => { err_str.push_str(&format!("publish num:{}, msg:{}", num, msg)); }
-            paho_mqtt::Error::ReasonCode(code) => { err_str.push_str(&format!("mqttv5 reason code: {}", code)); }
+            paho_mqtt::Error::Paho(e) => { err_str.push_str(&format!("library, num: {e}")); }
+            paho_mqtt::Error::PahoDescr(num, msg) => { err_str.push_str(&format!("description(redundant):{num}, {msg}")); }
+            paho_mqtt::Error::Publish(num, msg) => { err_str.push_str(&format!("publish num:{num}, msg:{msg}")); }
+            paho_mqtt::Error::ReasonCode(code) => { err_str.push_str(&format!("mqttv5 reason code: {code}")); }
             paho_mqtt::Error::BadTopicFilter => { err_str.push_str("Bad Topic Filter"); }
-            paho_mqtt::Error::Io(num) => { err_str.push_str(&format!("IO lowlevel: {}", num)); }
-            paho_mqtt::Error::Utf8(e) => { err_str.push_str(&format!("parsing UTF8 str: {}", e)); }
+            paho_mqtt::Error::Io(num) => { err_str.push_str(&format!("IO lowlevel: {num}")); }
+            paho_mqtt::Error::Utf8(e) => { err_str.push_str(&format!("parsing UTF8 str: {e}")); }
             paho_mqtt::Error::Nul(_) => { err_str.push_str("Nul"); }
             paho_mqtt::Error::Conversion => { err_str.push_str("conversion between types"); }
             paho_mqtt::Error::Timeout => { err_str.push_str("timeout from synchronous operation"); }

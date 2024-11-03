@@ -21,7 +21,7 @@ pub fn get_timestamp(fmt_str: &str) -> String {
     const TIMESTAMP_LENGTH: usize = 25;
     let mut buffer = vec![0u8; TIMESTAMP_LENGTH];
 
-    let ret_ptr = buffer.as_mut_ptr() as *mut c_char;
+    let ret_ptr = buffer.as_mut_ptr().cast::<c_char>();
     let c_fmt_str = CString::new(fmt_str.as_bytes()).expect("failed to create CString");
 
     unsafe {
@@ -105,13 +105,10 @@ impl log::Log for ShipLog {
 }
 
 pub fn init(params: &Parameters) -> Outcome<()> {
-    match shiplog::create_log_file(params) {
-        Err(e) => Err(e),
-        Ok(_) => {
-            ShipLog::init(params);
-            info!("log initialized");
-            Ok(())
-        }
+    if let Err(e) = shiplog::create_log_file(params) { Err(e) } else {
+        ShipLog::init(params);
+        info!("log initialized");
+        Ok(())
     }
 }
 

@@ -90,9 +90,8 @@ impl ConfigParser {
                 ParseError::FileNotFound => {
                     return bad!("File not found: '{}'", &params.system_config.display());
                 }
-                _ => {
-                    return bad!("load_configs unknown condition");
-                }
+                ParseError::NoUserFound => return bad!("No user found"),
+                _ => return bad!("load_configs unknown condition"),
             }
         }
 
@@ -124,7 +123,7 @@ impl ConfigParser {
             // default behavior is to check system for users
             for user in &self.sys.users {
                 let user_config =
-                    PathBuf::from_str(&format!("/home/{}/.config/sinkd.conf", user)).unwrap();
+                    PathBuf::from_str(&format!("/home/{user}/.config/sinkd.conf")).unwrap();
                 match ConfigParser::get_user_config(&user_config) {
                     Ok(_usr_cfg) => {
                         let _ = &self.users.insert(user_config, _usr_cfg);
@@ -200,7 +199,7 @@ pub fn get(params: &Parameters) -> Outcome<(String, InodeMap)> {
 
     let mut inode_map: InodeMap = HashMap::new();
 
-    for anchor in parser.sys.shares.iter() {
+    for anchor in &parser.sys.shares {
         // if !inode_map.contains_key(&anchor.path) {
         inode_map.entry(anchor.path.clone()).or_insert(Inode {
             excludes: anchor.excludes.clone(),
@@ -209,7 +208,7 @@ pub fn get(params: &Parameters) -> Outcome<(String, InodeMap)> {
             event: false,
         });
     }
-    for (_, cfg) in parser.users.iter() {
+    for cfg in parser.users.values() {
         for anchor in &cfg.anchors {
             inode_map.entry(anchor.path.clone()).or_insert(Inode {
                 excludes: anchor.excludes.clone(),

@@ -32,7 +32,7 @@ pub fn stop(params: &Parameters) -> Outcome<()> {
 
 pub fn restart(params: &Parameters) -> Outcome<()> {
     match stop(params) {
-        Ok(_) => {
+        Ok(()) => {
             start(params)?;
             Ok(())
         }
@@ -56,7 +56,7 @@ fn create_srv_dir(debug: bool) -> Outcome<()> {
             return bad!("Need elevated permissions to create /srv/sinkd/");
         }
         match fs::create_dir_all(path) {
-            Ok(_) => Ok(()),
+            Ok(()) => Ok(()),
             Err(e) => bad!("Unable to create '{}'  {}", path.display(), e),
         }
     } else {
@@ -141,58 +141,55 @@ fn status_entry(
             Ok(msg) => {
                 // ! process mqtt messages
                 // need to figure out state of server before synchronizing
-                match state.lock() {
-                    Ok(mut state) => match *state {
-                        ipc::Status::NotReady(reason) => match reason {
-                            ipc::Reason::Sinking => todo!(),
-                            ipc::Reason::Behind => todo!(),
-                            ipc::Reason::Other => todo!(),
-                        },
-                        ipc::Status::Ready => {
-                            // TODO
-                            // 1. recieve msg from client
-                            // 2. if in good state switch status to "synchronizing"
-                            // 3. call rsync <client> <server> <opts>
-                            // 4. once finished switch state to "ready"
-                            // TODO
-                            info!("recv: {:?}", msg);
-
-                            let this_cycle = match cycle.lock() {
-                                Ok(l) => *l,
-                                Err(_e) => {
-                                    fatal_flag.load(Ordering::SeqCst);
-                                    error!("cycle lock busted");
-                                    -1
-                                }
-                            };
-
-                            if this_cycle == -1 {
-                                return bad!("server>> cycle lock busted");
-                            }
-
-                            let payload = ipc::decode(msg.unwrap().payload())?;
-
-                            if payload.cycle as i32 >= this_cycle {
-                                *state = ipc::Status::NotReady(ipc::Reason::Sinking);
-                                todo!("call rsync");
-                                if mqtt_client.publish(&mut payload).is_err() {
-                                    // TODO
-                                    unimplemented!()
-                                }
-                                synch_tx.send(payload).unwrap(); // value moves/consumed here
-                            }
-                        }
+                if let Ok(mut state) = state.lock() { match *state {
+                    ipc::Status::NotReady(reason) => match reason {
+                        ipc::Reason::Sinking => todo!(),
+                        ipc::Reason::Behind => todo!(),
+                        ipc::Reason::Other => todo!(),
                     },
-                    Err(_) => {
-                        fatal_flag.load(Ordering::SeqCst);
-                        error!("state lock busted")
+                    ipc::Status::Ready => {
+                        // TODO
+                        // 1. recieve msg from client
+                        // 2. if in good state switch status to "synchronizing"
+                        // 3. call rsync <client> <server> <opts>
+                        // 4. once finished switch state to "ready"
+                        // TODO
+                        info!("recv: {:?}", msg);
+
+                        let this_cycle = match cycle.lock() {
+                            Ok(l) => *l,
+                            Err(_e) => {
+                                fatal_flag.load(Ordering::SeqCst);
+                                error!("cycle lock busted");
+                                -1
+                            }
+                        };
+
+                        if this_cycle == -1 {
+                            return bad!("server>> cycle lock busted");
+                        }
+
+                        let payload = ipc::decode(msg.unwrap().payload())?;
+
+                        if payload.cycle as i32 >= this_cycle {
+                            *state = ipc::Status::NotReady(ipc::Reason::Sinking);
+                            todo!("call rsync");
+                            if mqtt_client.publish(&mut payload).is_err() {
+                                // TODO
+                                unimplemented!()
+                            }
+                            synch_tx.send(payload).unwrap(); // value moves/consumed here
+                        }
                     }
+                } } else {
+                    fatal_flag.load(Ordering::SeqCst);
+                    error!("state lock busted");
                 }
             }
             Err(err) => match err {
                 crossbeam::channel::TryRecvError::Empty => {
                     std::thread::sleep(std::time::Duration::from_millis(1500));
-                    debug!("server>> mqtt loop...")
+                    debug!("server>> mqtt loop...");
                 }
                 crossbeam::channel::TryRecvError::Disconnected => {
                     fatal_flag.store(true, Ordering::SeqCst);

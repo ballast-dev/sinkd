@@ -88,7 +88,7 @@ impl Parameters {
                 return bad!("Need elevated permissions to create /var/sinkd/");
             }
             match fs::create_dir_all(path) {
-                Ok(_) => Ok(()),
+                Ok(()) => Ok(()),
                 Err(e) => bad!("Unable to create '{}'  {}", path.display(), e),
             }
         } else {

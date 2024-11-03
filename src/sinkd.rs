@@ -12,20 +12,20 @@ use crate::{fancy_debug, outcome::Outcome, parameters::Parameters};
 
 pub fn add(share_paths: Vec<&String>, user_paths: Vec<&String>) -> Outcome<()> {
     for p in &share_paths {
-        println!("share_path: {}", p);
+        println!("share_path: {p}");
     }
     for p in &user_paths {
-        println!("user_path: {}", p);
+        println!("user_path: {p}");
     }
     Ok(())
 }
 
 pub fn remove(share_paths: Vec<&String>, user_paths: Vec<&String>) -> Outcome<()> {
     for p in &share_paths {
-        println!("share_path: {}", p);
+        println!("share_path: {p}");
     }
     for p in &user_paths {
-        println!("user_path: {}", p);
+        println!("user_path: {p}");
     }
     Ok(())
 }
@@ -58,7 +58,7 @@ pub fn list(paths: Option<Vec<&String>>) -> Outcome<bool> {
     match paths {
         Some(paths) => {
             for path in paths {
-                println!("path: {}", path);
+                println!("path: {path}");
             }
             let user = std::env::var("USER").map_err(|e| e.to_string())?;
             fancy_debug!("user: {}", user);
