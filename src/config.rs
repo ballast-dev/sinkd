@@ -277,7 +277,7 @@ pub fn resolve(path: &str) -> Outcome<PathBuf> {
                 return bad!("HOME env var not defined: {}", e);
             }
         };
-        p.push(&path.strip_prefix("~/").unwrap());
+        p.push(path.strip_prefix("~/").unwrap());
         match p.canonicalize() {
             Ok(resolved) => Ok(resolved),
             Err(e) => bad!("{} '{}'", e, p.display()),

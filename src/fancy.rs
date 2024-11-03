@@ -3,52 +3,51 @@ use std::fmt;
 //--------------------
 // C O L O R S
 //--------------------
-#[allow(non_camel_case_types)]
 #[allow(dead_code)]
 pub enum Colors {
     // Foreground
-    BLACK = 30,
-    RED = 31,
-    GREEN = 32,
-    YELLOW = 33,
-    BLUE = 34,
-    PURPLE = 35,
-    CYAN = 36,
-    WHITE = 37,
-    BRIGHT_BLUE = 94,
-    BRIGHT_PURPLE = 95,
+    Black = 30,
+    Red = 31,
+    Green = 32,
+    Yellow = 33,
+    Blue = 34,
+    Purple = 35,
+    Cyan = 36,
+    White = 37,
+    BrightBlue = 94,
+    BrightPurple = 95,
     // Background
-    BgBLACK = 40,
-    BgRED = 41,
-    BgGREEN = 42,
-    BgYELLOW = 43,
-    BgBLUE = 44,
-    BgPURPLE = 45,
-    BgCYAN = 46,
-    BgWHITE = 47,
+    BgBlack = 40,
+    BgRed = 41,
+    BgGreen = 42,
+    BgYellow = 43,
+    BgBlue = 44,
+    BgPurple = 45,
+    BgCyan = 46,
+    BgWhite = 47,
 }
 
 impl fmt::Display for Colors {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Colors::BLACK => write!(f, "30"),
-            Colors::RED => write!(f, "31"),
-            Colors::GREEN => write!(f, "32"),
-            Colors::YELLOW => write!(f, "33"),
-            Colors::BLUE => write!(f, "34"),
-            Colors::PURPLE => write!(f, "35"),
-            Colors::CYAN => write!(f, "36"),
-            Colors::WHITE => write!(f, "37"),
-            Colors::BRIGHT_BLUE => write!(f, "94"),
-            Colors::BRIGHT_PURPLE => write!(f, "95"),
-            Colors::BgBLACK => write!(f, "40"),
-            Colors::BgRED => write!(f, "41"),
-            Colors::BgGREEN => write!(f, "42"),
-            Colors::BgYELLOW => write!(f, "43"),
-            Colors::BgBLUE => write!(f, "44"),
-            Colors::BgPURPLE => write!(f, "45"),
-            Colors::BgCYAN => write!(f, "46"),
-            Colors::BgWHITE => write!(f, "47"),
+            Colors::Black => write!(f, "30"),
+            Colors::Red => write!(f, "31"),
+            Colors::Green => write!(f, "32"),
+            Colors::Yellow => write!(f, "33"),
+            Colors::Blue => write!(f, "34"),
+            Colors::Purple => write!(f, "35"),
+            Colors::Cyan => write!(f, "36"),
+            Colors::White => write!(f, "37"),
+            Colors::BrightBlue => write!(f, "94"),
+            Colors::BrightPurple => write!(f, "95"),
+            Colors::BgBlack => write!(f, "40"),
+            Colors::BgRed => write!(f, "41"),
+            Colors::BgGreen => write!(f, "42"),
+            Colors::BgYellow => write!(f, "43"),
+            Colors::BgBlue => write!(f, "44"),
+            Colors::BgPurple => write!(f, "45"),
+            Colors::BgCyan => write!(f, "46"),
+            Colors::BgWhite => write!(f, "47"),
         }
     }
 }
@@ -56,19 +55,19 @@ impl fmt::Display for Colors {
 #[allow(dead_code)]
 pub enum Attrs {
     // # Attributes
-    NORMAL = 0,
-    BOLD = 1,
-    UNDERLINE = 4,
-    INVERSE = 7, // foreground becomes background (vice-versa)
+    Normal = 0,
+    Bold = 1,
+    Underline = 4,
+    Inverse = 7, // foreground becomes background (vice-versa)
 }
 
 impl fmt::Display for Attrs {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Attrs::NORMAL => write!(f, "0"),
-            Attrs::BOLD => write!(f, "1"),
-            Attrs::UNDERLINE => write!(f, "4"),
-            Attrs::INVERSE => write!(f, "7"),
+            Attrs::Normal => write!(f, "0"),
+            Attrs::Bold => write!(f, "1"),
+            Attrs::Underline => write!(f, "4"),
+            Attrs::Inverse => write!(f, "7"),
         }
     }
 }
@@ -92,8 +91,8 @@ macro_rules! fancy_debug {
     ($($arg:tt)*) => {{
         println!(
             "\u{1b}[{};{}m>>{}\u{1b}[0m",
-            $crate::fancy::Attrs::INVERSE,
-            $crate::fancy::Colors::WHITE,
+            $crate::fancy::Attrs::Inverse,
+            $crate::fancy::Colors::White,
             format_args!($($arg)*)
         );
     }}
@@ -104,8 +103,8 @@ macro_rules! fancy_error {
     ($($arg:tt)*) => {{
         println!(
             "\u{1b}[{};{}m>>{}\u{1b}[0m",
-            $crate::fancy::Attrs::BOLD,
-            $crate::fancy::Colors::RED,
+            $crate::fancy::Attrs::Bold,
+            $crate::fancy::Colors::Red,
             format_args!($($arg)*)
         );
     }}

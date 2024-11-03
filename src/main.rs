@@ -37,8 +37,8 @@ fn check_path(p: &str) -> bool {
     } else {
         fancy::println(
             &format!("path doesn't exist: {}", &p.display()),
-            fancy::Attrs::BOLD,
-            fancy::Colors::RED,
+            fancy::Attrs::Bold,
+            fancy::Colors::Red,
         );
         false
     }
@@ -49,8 +49,8 @@ fn egress<T>(outcome: Outcome<T>) -> ExitCode {
         Ok(_) => {
             fancy::println(
                 "operation completed successfully",
-                fancy::Attrs::NORMAL,
-                fancy::Colors::GREEN,
+                fancy::Attrs::Normal,
+                fancy::Colors::Green,
             );
             std::process::ExitCode::SUCCESS
         }
@@ -74,12 +74,9 @@ fn main() -> ExitCode {
     let mut system_config: Option<&String> = None;
     let mut user_configs: Option<ValuesRef<String>> = None;
     let daemon_type = if let Some(("client", _)) = matches.subcommand() {
-        match matches.subcommand() {
-            Some(("client", submatches)) => {
-                system_config = submatches.get_one("system-config");
-                user_configs = submatches.get_many("user-configs");
-            }
-            _ => (),
+        if let Some(("client", submatches)) = matches.subcommand() {
+            system_config = submatches.get_one("system-config");
+            user_configs = submatches.get_many("user-configs");
         }
         DaemonType::Client
     } else {
@@ -88,7 +85,7 @@ fn main() -> ExitCode {
     };
 
     let params = match Parameters::new(
-        &daemon_type,
+        daemon_type,
         matches.get_count("verbose"),
         matches.get_flag("debug"),
         system_config,
@@ -114,7 +111,7 @@ fn main() -> ExitCode {
             Some(("stop", _)) => egress(server::stop(&params)),
             _ => {
                 cli.print_help().expect("sinkd usage: .... ");
-                ExitCode::from(ExitCode::SUCCESS)
+                ExitCode::SUCCESS
             }
         },
         Some(("client", submatches)) => match submatches.subcommand() {
@@ -123,7 +120,7 @@ fn main() -> ExitCode {
             Some(("stop", _)) => egress(client::stop(&params)),
             _ => {
                 cli.print_help().expect("sinkd usage: .... ");
-                ExitCode::from(ExitCode::SUCCESS)
+                ExitCode::SUCCESS
             }
         },
         Some(("add", submatches)) => {
@@ -171,7 +168,7 @@ fn main() -> ExitCode {
         Some(("log", _)) => egress(sinkd::log(&params)),
         _ => {
             cli.print_help().expect("sinkd usage: .... ");
-            ExitCode::from(ExitCode::SUCCESS)
+            ExitCode::SUCCESS
         }
     }
 }

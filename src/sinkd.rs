@@ -84,7 +84,7 @@ pub fn log(params: &Parameters) -> Outcome<bool> {
     // error!("oops");
     print!(
         "{}",
-        fs::read_to_string(*params.log_path).expect("couldn't read log file, check permissions")
+        fs::read_to_string(&params.log_path).expect("couldn't read log file, check permissions")
     );
     Ok(true)
 }

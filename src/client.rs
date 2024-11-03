@@ -166,7 +166,7 @@ fn mqtt_entry(
 
     // assume we are behind
     // FIXME: use this!
-    let mut status = ipc::Status::NotReady(ipc::Reason::Behind);
+    let _status = ipc::Status::NotReady(ipc::Reason::Behind);
 
     // The server will send status updates to it's clients every 5 seconds
     loop {
@@ -226,7 +226,7 @@ fn process(
                 // let's sync up
                 let mut payload = ipc::Payload::new()
                     .status(ipc::Status::NotReady(ipc::Reason::Behind))
-                    .paths(inode_map.keys().map(|p| p.clone()).collect());
+                    .paths(inode_map.keys().cloned().collect());
 
                 ipc::rsync(&payload);
                 mqtt_client.publish(&mut payload)
@@ -237,7 +237,7 @@ fn process(
         ipc::Status::Ready => {
             let mut payload = ipc::Payload::new();
             payload = match filter_file_events(event_rx) {
-                Ok(filtered_paths) => payload.paths(filtered_paths.into()),
+                Ok(filtered_paths) => payload.paths(filtered_paths),
                 Err(e) => return bad!("{}", e),
             };
             payload.cycle += 1;
@@ -278,7 +278,7 @@ fn get_watchers(
         }
     }
 
-    if watchers.len() > 0 {
+    if !watchers.is_empty() {
         Ok(watchers)
     } else {
         bad!("nothing to watch! aborting")

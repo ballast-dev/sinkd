@@ -54,6 +54,7 @@ pub struct Payload {
     pub status: Status,
 }
 
+#[allow(dead_code)]
 impl Payload {
     pub fn new() -> Payload {
         Payload {
@@ -85,11 +86,11 @@ impl Payload {
             status,
         }
     }
-    pub fn hostname<'a>(mut self, hostname: &'a str) -> Self {
+    pub fn hostname(mut self, hostname: &str) -> Self {
         self.hostname = hostname.to_string();
         self
     }
-    pub fn username<'a>(mut self, username: &'a str) -> Self {
+    pub fn username(mut self, username: &str) -> Self {
         self.username = username.to_string();
         self
     }
@@ -97,7 +98,7 @@ impl Payload {
         self.src_paths = paths; // transfer ownership
         self
     }
-    pub fn date<'a>(mut self, date: &'a str) -> Self {
+    pub fn date(mut self, date: &str) -> Self {
         self.date = date.into();
         self
     }
@@ -109,7 +110,7 @@ impl Payload {
         self.status = status;
         self
     }
-    pub fn dest<'a>(mut self, dest: &'a str) -> Self {
+    pub fn dest(mut self, dest: &str) -> Self {
         self.dest_path = dest.into(); // ownership
         self
     }
@@ -199,11 +200,7 @@ impl MqttClient {
         debug!(
             "Connecting to the MQTT broker host:{} subs:[{}], pub_topic:{}",
             host.unwrap_or("unknown"),
-            subscriptions
-                .iter()
-                .map(|&element| element)
-                .collect::<Vec<_>>()
-                .join(" "),
+            subscriptions.to_vec().join(" "),
             publish_topic
         );
         match cli.connect(conn_opts) {
@@ -369,8 +366,8 @@ pub fn rsync(payload: &ipc::Payload) {
 
     debug!("{}", payload);
 
+    // FIXME:
     // TODO:
-    // FIXME
     // NOTE:
     // HACK:
     // WARNING:

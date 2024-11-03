@@ -14,20 +14,20 @@ pub enum DaemonType {
 }
 
 // TODO: move this into section of /etc/sinkd.conf
-pub struct Parameters<'a> {
-    pub daemon_type: &'a DaemonType,
+pub struct Parameters {
+    pub daemon_type: DaemonType,
     pub verbosity: u8,
     pub clear_logs: bool,
     pub debug: bool,
-    pub log_path: Arc<&'a Path>,
-    pub pid_path: Arc<&'a Path>,
+    pub log_path: PathBuf,
+    pub pid_path: PathBuf,
     pub system_config: Arc<PathBuf>,
     pub user_configs: Arc<Vec<PathBuf>>,
 }
 
-impl<'a> std::fmt::Display for Parameters<'a> {
+impl std::fmt::Display for Parameters {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if *self.daemon_type == DaemonType::Client {
+        if self.daemon_type == DaemonType::Client {
             f.write_str("daemon:type:client")
         } else {
             f.write_str("daemon:type:server")
@@ -35,29 +35,45 @@ impl<'a> std::fmt::Display for Parameters<'a> {
     }
 }
 
-impl<'a> Parameters<'a> {
+impl Parameters {
     pub fn new(
-        daemon_type: &'a DaemonType,
+        daemon_type: DaemonType,
         verbosity: u8,
         debug: bool,
         system_config: Option<&String>,
         user_configs: Option<ValuesRef<String>>,
     ) -> Outcome<Self> {
         Parameters::create_log_dir(debug)?;
-        Ok(Parameters {
-            daemon_type,
-            verbosity: match (debug, verbosity) {
-                (true, _) => 4,
-                (false, 0) => 2, // default to warn log level
-                (_, v) => v,
-            },
-            clear_logs: if debug { true } else { false },
-            debug,
-            log_path: Self::get_log_path(debug, daemon_type),
-            pid_path: Self::get_pid_path(debug, daemon_type),
-            system_config: Self::resolve_system_config(daemon_type, system_config)?,
-            user_configs: Self::resolve_user_configs(daemon_type, user_configs)?,
-        })
+        match daemon_type {
+            DaemonType::Server => Ok(Parameters {
+                daemon_type: DaemonType::Server,
+                verbosity: match (debug, verbosity) {
+                    (true, _) => 4,
+                    (false, 0) => 2, // default to warn log level
+                    (_, v) => v,
+                },
+                clear_logs: debug,
+                debug,
+                log_path: Self::get_log_path(debug, DaemonType::Server),
+                pid_path: Self::get_pid_path(debug, DaemonType::Server),
+                system_config: Arc::new(PathBuf::new()), // not used
+                user_configs: Arc::new(vec![]),          // not used
+            }),
+            DaemonType::Client => Ok(Parameters {
+                daemon_type: DaemonType::Client,
+                verbosity: match (debug, verbosity) {
+                    (true, _) => 4,
+                    (false, 0) => 2, // default to warn log level
+                    (_, v) => v,
+                },
+                clear_logs: debug,
+                debug,
+                log_path: Self::get_log_path(debug, DaemonType::Client),
+                pid_path: Self::get_pid_path(debug, DaemonType::Client),
+                system_config: Self::resolve_system_config(system_config)?,
+                user_configs: Self::resolve_user_configs(user_configs)?,
+            }),
+        }
     }
 
     fn create_log_dir(debug: bool) -> Outcome<()> {
@@ -80,21 +96,21 @@ impl<'a> Parameters<'a> {
         }
     }
 
-    fn get_log_path(debug: bool, daemon_type: &'a DaemonType) -> Arc<&Path> {
+    fn get_log_path(debug: bool, daemon_type: DaemonType) -> PathBuf {
         match (debug, daemon_type) {
-            (true, DaemonType::Client) => Arc::new(Path::new("/tmp/sinkd/client.log")),
-            (true, DaemonType::Server) => Arc::new(Path::new("/tmp/sinkd/server.log")),
-            (false, DaemonType::Client) => Arc::new(Path::new("/var/log/sinkd/client.log")),
-            (false, DaemonType::Server) => Arc::new(Path::new("/var/log/sinkd/server.log")),
+            (true, DaemonType::Client) => PathBuf::from("/tmp/sinkd/client.log"),
+            (true, DaemonType::Server) => PathBuf::from("/tmp/sinkd/server.log"),
+            (false, DaemonType::Client) => PathBuf::from("/var/log/sinkd/client.log"),
+            (false, DaemonType::Server) => PathBuf::from("/var/log/sinkd/server.log"),
         }
     }
 
-    fn get_pid_path(debug: bool, daemon_type: &'a DaemonType) -> Arc<&Path> {
+    fn get_pid_path(debug: bool, daemon_type: DaemonType) -> PathBuf {
         match (debug, daemon_type) {
-            (true, DaemonType::Client) => Arc::new(Path::new("/tmp/sinkd/client.pid")),
-            (true, DaemonType::Server) => Arc::new(Path::new("/tmp/sinkd/server.pid")),
-            (false, DaemonType::Client) => Arc::new(Path::new("/var/log/sinkd/client.pid")),
-            (false, DaemonType::Server) => Arc::new(Path::new("/var/log/sinkd/server.pid")),
+            (true, DaemonType::Client) => PathBuf::from("/tmp/sinkd/client.pid"),
+            (true, DaemonType::Server) => PathBuf::from("/tmp/sinkd/server.pid"),
+            (false, DaemonType::Client) => PathBuf::from("/var/log/sinkd/client.pid"),
+            (false, DaemonType::Server) => PathBuf::from("/var/log/sinkd/server.pid"),
         }
     }
 
@@ -107,14 +123,8 @@ impl<'a> Parameters<'a> {
 
     // If command line argument given, that supercedes precedence
     // else default path will be read
-    fn resolve_system_config(
-        daemon_type: &'a DaemonType,
-        system_config: Option<&String>,
-    ) -> Outcome<Arc<PathBuf>> {
+    fn resolve_system_config(system_config: Option<&String>) -> Outcome<Arc<PathBuf>> {
         // FIXME: need to setup "server_config" which is separate from system/user
-        if *daemon_type == DaemonType::Server {
-            return Ok(Arc::new(PathBuf::from("not-used")));
-        }
 
         let cfg_path: PathBuf;
 
@@ -128,7 +138,7 @@ impl<'a> Parameters<'a> {
                             normalized.display()
                         );
                     } else if normalized.exists() {
-                        cfg_path = PathBuf::from(normalized);
+                        cfg_path = normalized;
                     } else {
                         return bad!("{} does not exist", normalized.display());
                     }
@@ -149,13 +159,8 @@ impl<'a> Parameters<'a> {
     // If command line argument supplied, system config not read
     // list of users are supplied from system config
     pub fn resolve_user_configs(
-        daemon_type: &'a DaemonType,
         user_configs: Option<ValuesRef<String>>,
     ) -> Outcome<Arc<Vec<PathBuf>>> {
-        if *daemon_type == DaemonType::Server {
-            return Ok(Arc::new(vec![PathBuf::from("not-used")]));
-        }
-
         let mut resolved_configs = Vec::<PathBuf>::new();
 
         //let mut resolved_configs = vec![

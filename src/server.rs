@@ -36,7 +36,7 @@ pub fn restart(params: &Parameters) -> Outcome<()> {
             start(params)?;
             Ok(())
         }
-        Err(e) => return bad!(e),
+        Err(e) => bad!(e),
     }
 }
 
@@ -102,17 +102,18 @@ fn init(params: &Parameters) -> Outcome<()> {
     Ok(())
 }
 
-fn dispatch(msg: &Option<mqtt::Message>) {
-    if let Some(msg) = msg {
-        let payload = std::str::from_utf8(msg.payload()).unwrap();
-        debug!("topic: {}\tpayload: {}", msg.topic(), payload);
-        todo!();
-    } else {
-        error!("malformed mqtt message");
-    }
-}
+//fn dispatch(msg: &Option<mqtt::Message>) {
+//    if let Some(msg) = msg {
+//        let payload = std::str::from_utf8(msg.payload()).unwrap();
+//        debug!("topic: {}\tpayload: {}", msg.topic(), payload);
+//        todo!();
+//    } else {
+//        error!("malformed mqtt message");
+//    }
+//}
 
 //? This thread is to ensure no lost messages from mqtt
+#[allow(unused_variables, unreachable_code)]
 fn status_entry(
     synch_tx: mpsc::Sender<ipc::Payload>,
     fatal_flag: &AtomicBool,
@@ -158,7 +159,7 @@ fn status_entry(
 
                             let this_cycle = match cycle.lock() {
                                 Ok(l) => *l,
-                                Err(e) => {
+                                Err(_e) => {
                                     fatal_flag.load(Ordering::SeqCst);
                                     error!("cycle lock busted");
                                     -1
@@ -169,7 +170,7 @@ fn status_entry(
                                 return bad!("server>> cycle lock busted");
                             }
 
-                            let mut payload = ipc::decode(msg.unwrap().payload())?;
+                            let payload = ipc::decode(msg.unwrap().payload())?;
 
                             if payload.cycle as i32 >= this_cycle {
                                 *state = ipc::Status::NotReady(ipc::Reason::Sinking);
@@ -205,6 +206,7 @@ fn status_entry(
 // The engine behind sinkd is rsync
 // With mqtt messages that are relevant invoke this and mirror current client
 // to this server
+#[allow(unused_variables)]
 fn synch_entry(
     synch_rx: mpsc::Receiver<ipc::Payload>,
     fatal_flag: &AtomicBool,
@@ -241,6 +243,7 @@ fn synch_entry(
     }
 }
 
+#[allow(dead_code)]
 fn publish(mqtt_client: &mqtt::Client, msg: &str) {
     if let Err(e) = mqtt_client.publish(mqtt::Message::new("sinkd/status", msg, mqtt::QOS_0)) {
         error!("server:publish >> {}", e);

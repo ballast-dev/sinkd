@@ -52,3 +52,7 @@ run *args: build-no-warn
 start:
     sudo systemctl start docker
     docker container start sinkd
+
+clippy:
+    cargo clippy -- -W clippy::perf -D clippy::pedantic -D clippy::correctness -D clippy::suspicious -D clippy::complexity
+

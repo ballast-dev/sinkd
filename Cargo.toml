@@ -8,14 +8,12 @@ build = "src/build.rs"
 [dependencies]
 clap = "4"
 crossbeam = "0.8"
-notify = "4.0.17"
+notify = "4.0"
 regex = "1.9"
 serde = { version = "1.0", features = ["derive"] }
 bincode = "1"
 toml = "0.8"
 nix = { version = "0.28", features = ["process", "signal"] }
-# daemonize = "0.5.0"
-# "std" is to enable set_boxed_logger
 log = { version = "0.4", features = ["std"] }
 libc = "0.2"
 rpassword = "7"
@@ -30,22 +28,6 @@ async-std = "1"
 [build-dependencies]
 # cargo lib to build c code statically
 cc = { version = "1" }
-# clang-sys = { features = ["static"]}
-# paho-mqtt-sys = { version = "0.7", features = ["vendored-ssl"]}
-# PAHO is messing this up, they are using their own openssl-src
-# openssl = { version = "0.10", features = ["vendored"] }
-
-
-# [features]
-# default = ["bundled", "ssl"]
-# bundled = ["paho-mqtt-sys/bundled"]
-# build_bindgen = ["paho-mqtt-sys/build_bindgen"]
-# ssl = ["paho-mqtt-sys/ssl"]
-# vendored-ssl = ["paho-mqtt-sys/vendored-ssl"]
-
-# [dev-dependencies]
-# # Clippy for linting
-# clippy = { version = "0.1", default-features = false, features = ["lints"] }
 
 [lint.clippy]
 perf = "warn"
@@ -53,3 +35,4 @@ pedantic = "deny"
 correctness = "deny"
 suspicious = "deny"
 complexity = "deny"
+

@@ -45,7 +45,7 @@ impl ShipLog {
             file: OpenOptions::new()
                 .append(true)
                 .create(true)
-                .open(*params.log_path)
+                .open(&params.log_path)
                 .expect("couldn't create log file"),
         }
     }
@@ -122,7 +122,7 @@ pub fn create_pid_file(params: &Parameters) -> Outcome<()> {
     if !params.pid_path.exists() {
         // match std::fs::create_dir_all(&pid_file) {
         info!("creating pid file: {}", params.pid_path.display());
-        if let Err(why) = std::fs::File::create(*params.pid_path) {
+        if let Err(why) = std::fs::File::create(&params.pid_path) {
             error!(
                 "cannot create '{}' {}",
                 params.pid_path.display(),
@@ -149,7 +149,7 @@ pub fn create_log_file(params: &Parameters) -> Outcome<()> {
     }
 
     if !params.log_path.exists() || params.clear_logs {
-        if let Err(why) = std::fs::File::create(*params.log_path) {
+        if let Err(why) = std::fs::File::create(&params.log_path) {
             // truncates file if exists
             return bad!(
                 "cannot create '{}' {}",
@@ -172,7 +172,7 @@ pub fn get_pid(params: &Parameters) -> Outcome<u32> {
     if !params.pid_path.exists() {
         bad!("pid file not found")
     } else {
-        match std::fs::read(*params.pid_path) {
+        match std::fs::read(&params.pid_path) {
             Err(err) => {
                 bad!(format!(
                     "Cannot read {}: {}",
@@ -195,7 +195,7 @@ pub fn get_pid(params: &Parameters) -> Outcome<u32> {
 
 pub fn set_pid(params: &Parameters, pid: u32) -> Outcome<()> {
     if !params.pid_path.exists() {
-        create_pid_file(&params)?;
+        create_pid_file(params)?;
     }
     if pid == 0 {
         // if Parent process
@@ -205,10 +205,8 @@ pub fn set_pid(params: &Parameters, pid: u32) -> Outcome<()> {
             // delete a name and possibly the file it refers to
             libc::unlink(c_str.into_raw());
         }
-    } else {
-        if let Err(e) = std::fs::write(*params.pid_path, pid.to_string()) {
-            return bad!("couldn't write to '{}' {}", params.pid_path.display(), e);
-        }
+    } else if let Err(e) = std::fs::write(&params.pid_path, pid.to_string()) {
+        return bad!("couldn't write to '{}' {}", &params.pid_path.display(), e);
     }
     Ok(())
 }
