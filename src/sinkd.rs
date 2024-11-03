@@ -1,12 +1,7 @@
-#![allow(dead_code)]
-#![allow(unused_variables)]
-#![allow(unused_imports)]
-
 use clap::parser::ValuesRef;
-
-use crate::{config, fancy, fancy_debug, log, outcome::Outcome, parameters::Parameters, utils};
 use std::fs;
 
+use crate::{fancy_debug, outcome::Outcome, parameters::Parameters};
 // adds entry to ~/.sinkd/sinkd.conf
 // tells daemon to read config again
 // send a SIGHUP signal

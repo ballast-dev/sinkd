@@ -1,15 +1,16 @@
-use crate::{outcome::Outcome, parameters::Parameters, shiplog, utils};
 use libc::{c_char, c_uint};
 use log::{Level, LevelFilter, Metadata, Record};
 use std::io::prelude::*;
 use std::{
     ffi::{CStr, CString},
     fs::OpenOptions, // for writeln!
-    path::{Path, PathBuf},
-    time::{Duration, Instant},
+                     //path::PathBuf,
+                     //time::{Duration, Instant},
 };
 
-const TEN_MEGABYTES: u64 = (1024 ^ 2) * 10;
+use crate::{config, outcome::Outcome, parameters::Parameters, shiplog};
+
+//const TEN_MEGABYTES: u64 = (1024 ^ 2) * 10;
 
 #[link(name = "timestamp", kind = "static")]
 extern "C" {
@@ -61,15 +62,15 @@ impl ShipLog {
         println!("Logging to: '{}'", params.log_path.display());
     }
 
-    fn log_rotate(mut self, path: PathBuf) {
-        self.file.flush().expect("unable to flush log file");
-        drop(self.file); // drop closes the file
-        self.file = OpenOptions::new()
-            .append(true)
-            .create(true)
-            .open(path)
-            .expect("couldn't create log file")
-    }
+    //fn log_rotate(mut self, path: PathBuf) {
+    //    self.file.flush().expect("unable to flush log file");
+    //    drop(self.file); // drop closes the file
+    //    self.file = OpenOptions::new()
+    //        .append(true)
+    //        .create(true)
+    //        .open(path)
+    //        .expect("couldn't create log file")
+    //}
 }
 
 impl log::Log for ShipLog {
@@ -93,7 +94,7 @@ impl log::Log for ShipLog {
             .expect("couldn't write to log file");
 
             // writeln!(&self.file, "{}[{}]FILESIZE OVER TEN-MEGABYTES({}): {}",
-            //         utils::get_timestamp("%T"),
+            //         config::get_timestamp("%T"),
             //         record.level(),
             //         &self.file.metadata().unwrap().len(),
             //         record.args()).expect("couldn't write to log file");
@@ -115,7 +116,7 @@ pub fn init(params: &Parameters) -> Outcome<()> {
 }
 
 pub fn create_pid_file(params: &Parameters) -> Outcome<()> {
-    if !params.debug && !utils::have_permissions() {
+    if !params.debug && !config::have_permissions() {
         return bad!("need to be root");
     }
     if !params.pid_path.exists() {
@@ -143,7 +144,7 @@ pub fn create_pid_file(params: &Parameters) -> Outcome<()> {
 }
 
 pub fn create_log_file(params: &Parameters) -> Outcome<()> {
-    if !params.debug && !utils::have_permissions() {
+    if !params.debug && !config::have_permissions() {
         return bad!("Need to be root to create log file");
     }
 

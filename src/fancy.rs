@@ -73,6 +73,7 @@ impl fmt::Display for Attrs {
     }
 }
 
+#[allow(dead_code)]
 pub fn print(arg: &str, attr: Attrs, color: Colors) {
     print!("\u{1b}[{};{}m{}\u{1b}[0m", attr, color, arg);
 }
@@ -81,6 +82,7 @@ pub fn println(arg: &str, attr: Attrs, color: Colors) {
     println!("\u{1b}[{};{}m{}\u{1b}[0m", attr, color, arg);
 }
 
+#[allow(dead_code)]
 pub fn format(arg: &str, attr: Attrs, color: Colors) -> String {
     format!("\u{1b}[{};{}m{}\u{1b}[0m", attr, color, arg)
 }

@@ -2,8 +2,6 @@
 //   / __/__ _____  _____ ____
 //  _\ \/ -_) __/ |/ / -_) __/
 // /___/\__/_/  |___/\__/_/
-use crate::{fancy_debug, ipc, outcome::Outcome, parameters::Parameters, shiplog, utils};
-//use mqtt::Message;
 use paho_mqtt as mqtt;
 use std::{
     fs,
@@ -16,6 +14,8 @@ use std::{
     thread,
     time::Duration,
 };
+
+use crate::{config, ipc, outcome::Outcome, parameters::Parameters, shiplog};
 
 static FATAL_FLAG: AtomicBool = AtomicBool::new(false);
 
@@ -52,7 +52,7 @@ fn create_srv_dir(debug: bool) -> Outcome<()> {
     };
 
     if !path.exists() {
-        if !debug && !utils::have_permissions() {
+        if !debug && !config::have_permissions() {
             return bad!("Need elevated permissions to create /srv/sinkd/");
         }
         match fs::create_dir_all(path) {

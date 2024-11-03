@@ -1,4 +1,3 @@
-use crate::{bad, config, ipc, outcome::Outcome, parameters::Parameters, shiplog};
 use crossbeam::channel::TryRecvError;
 use notify::{DebouncedEvent, Watcher};
 use std::{
@@ -11,6 +10,8 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+
+use crate::{bad, config, ipc, outcome::Outcome, parameters::Parameters, shiplog};
 
 static FATAL_FLAG: AtomicBool = AtomicBool::new(false);
 

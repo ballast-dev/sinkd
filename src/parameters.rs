@@ -1,12 +1,11 @@
 use clap::parser::ValuesRef;
-// Common Utilities
 use std::{
     fs,
     path::{Path, PathBuf},
     sync::Arc,
 };
 
-use crate::{fancy, outcome::Outcome, utils};
+use crate::{config, outcome::Outcome};
 
 #[derive(PartialEq)]
 pub enum DaemonType {
@@ -69,7 +68,7 @@ impl<'a> Parameters<'a> {
         };
 
         if !path.exists() {
-            if !debug && !utils::have_permissions() {
+            if !debug && !config::have_permissions() {
                 return bad!("Need elevated permissions to create /var/sinkd/");
             }
             match fs::create_dir_all(path) {
@@ -121,7 +120,7 @@ impl<'a> Parameters<'a> {
 
         if system_config.is_some() {
             println!("DEBUG>> {}", system_config.unwrap());
-            match utils::resolve(system_config.unwrap()) {
+            match config::resolve(system_config.unwrap()) {
                 Ok(normalized) => {
                     if normalized.is_dir() {
                         return bad!(
@@ -167,7 +166,7 @@ impl<'a> Parameters<'a> {
         // safe unwrap due to default args
         if let Some(usr_cfgs) = user_configs {
             for cfg in usr_cfgs {
-                let normalized = utils::resolve(&cfg.to_string())?;
+                let normalized = config::resolve(&cfg.to_string())?;
                 if normalized.is_dir() {
                     return bad!(
                         "{} is a directory, not a file; aborting",
@@ -182,7 +181,7 @@ impl<'a> Parameters<'a> {
             // WARN: user configs are pulled from system and additionally supplied
             // through command line arg
             for _cfg in default_cfgs {
-                //match utils::resolve(_cfg) {
+                //match config::resolve(_cfg) {
                 //    Ok(usr_cfg) =>
                 //}
             }

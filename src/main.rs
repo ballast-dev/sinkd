@@ -23,14 +23,10 @@ mod server;
 mod shiplog;
 mod sinkd;
 mod test;
-mod utils;
 
 use clap::parser::ValuesRef;
 use outcome::Outcome;
-use std::{
-    path::{Path, PathBuf},
-    process::ExitCode,
-};
+use std::{path::Path, process::ExitCode};
 
 use crate::parameters::{DaemonType, Parameters};
 
