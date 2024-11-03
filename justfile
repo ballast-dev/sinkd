@@ -38,7 +38,7 @@ wipe: rm-container rm-image
 rm-container:
     @docker container rm -f sinkd
 
-# jump in!!! 
+# jump in!!!
 attach:
     # need to check if started 
     @docker container attach sinkd
@@ -54,6 +54,6 @@ start:
     docker container start sinkd
 
 clippy:
-    cargo clippy --fix \
+    cargo clippy --fix --allow-dirty --allow-staged \
     -- -W clippy::perf -D clippy::pedantic -D clippy::correctness -D clippy::suspicious -D clippy::complexity
 

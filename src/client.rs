@@ -2,7 +2,7 @@ use crossbeam::channel::TryRecvError;
 use notify::{DebouncedEvent, Watcher};
 use std::{
     collections::HashSet,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
         mpsc,
@@ -81,7 +81,7 @@ fn init(params: &Parameters) -> Outcome<()> {
 // interval. In other words events are filtered against intervals (per inode) and added
 // to the synch queue.
 fn check_interval(
-    event_path: PathBuf,
+    event_path: &Path,
     inode_map: &mut config::InodeMap,
     event_tx: &mpsc::Sender<PathBuf>,
 ) {
@@ -120,7 +120,7 @@ fn watch_entry(
                 | DebouncedEvent::Write(path)
                 | DebouncedEvent::Chmod(path)
                 | DebouncedEvent::Remove(path)
-                | DebouncedEvent::Rename(path, _) => check_interval(path, inode_map, &event_tx),
+                | DebouncedEvent::Rename(path, _) => check_interval(&path, inode_map, &event_tx),
                 DebouncedEvent::Rescan
                 | DebouncedEvent::NoticeWrite(_)
                 | DebouncedEvent::NoticeRemove(_) => {}
@@ -263,13 +263,16 @@ fn get_watchers(
         let mut watcher =
             notify::watcher(tx.clone(), Duration::from_secs(1)).expect("couldn't create watch");
 
-        if let Err(_) = watcher.watch(pathbuf, notify::RecursiveMode::Recursive) {
+        if watcher
+            .watch(pathbuf, notify::RecursiveMode::Recursive)
+            .is_err()
+        {
             warn!("unable to set watcher for: '{}'", pathbuf.display());
             continue;
-        } else {
-            info!("set watcher for: '{}'", pathbuf.display());
-            watchers.push(watcher);
         }
+
+        info!("set watcher for: '{}'", pathbuf.display());
+        watchers.push(watcher);
     }
 
     if watchers.is_empty() {

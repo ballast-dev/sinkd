@@ -91,7 +91,6 @@ impl ConfigParser {
                     return bad!("File not found: '{}'", &params.system_config.display());
                 }
                 ParseError::NoUserFound => return bad!("No user found"),
-                _ => return bad!("load_configs unknown condition"),
             }
         }
 
