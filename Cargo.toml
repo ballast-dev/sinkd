@@ -29,10 +29,3 @@ async-std = "1"
 # cargo lib to build c code statically
 cc = { version = "1" }
 
-[lint.clippy]
-perf = "warn"
-pedantic = "deny"
-correctness = "deny"
-suspicious = "deny"
-complexity = "deny"
-

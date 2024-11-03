@@ -54,5 +54,6 @@ start:
     docker container start sinkd
 
 clippy:
-    cargo clippy -- -W clippy::perf -D clippy::pedantic -D clippy::correctness -D clippy::suspicious -D clippy::complexity
+    cargo clippy --fix \
+    -- -W clippy::perf -D clippy::pedantic -D clippy::correctness -D clippy::suspicious -D clippy::complexity
 
