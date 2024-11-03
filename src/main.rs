@@ -46,24 +46,6 @@ fn check_path(p: &str) -> bool {
     }
 }
 
-fn resolve_system_config(arg: Option<String>) -> Option<String> {
-    if arg.is_some() {
-        let _path = PathBuf::from(arg.clone().unwrap());
-        if _path.exists() {
-            arg
-        } else {
-            fancy_error!("ERROR: '{}' does not exist", _path.display());
-            std::process::exit(1)
-        }
-    } else if cfg!(target_os = "macos") {
-        Some(String::from("/opt/sinkd/sinkd.conf"))
-    } else if cfg!(target_os = "windows") {
-        Some(String::from("/somepath/sinkd/sinkd.conf"))
-    } else {
-        Some(String::from("/etc/sinkd.conf"))
-    }
-}
-
 fn egress<T>(outcome: Outcome<T>) -> ExitCode {
     match outcome {
         Ok(_) => {

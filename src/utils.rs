@@ -104,11 +104,20 @@ impl<'a> Parameters<'a> {
             (false, DaemonType::Server) => Arc::new(Path::new("/var/log/sinkd/server.pid")),
         }
     }
+    
+    //?  -- server config -- 
+    //?  this will be outside of client config
+    //?  /srv/sinkd/sinkd_server.conf
+    //?  /opt/sinkd/sinkd_server.conf
+    //?  -> the server files will reside in
+    //?  /opt/sinkd/srv/...
 
+    // this i
     fn resolve_system_config(
         daemon_type: &'a DaemonType,
         system_config: Option<&String>,
     ) -> Outcome<Arc<PathBuf>> {
+        // FIXME: need to setup "server_config" which is separate from system/user
         if *daemon_type == DaemonType::Server {
             return Ok(Arc::new(PathBuf::from("not-used")));
         }
@@ -156,7 +165,12 @@ impl<'a> Parameters<'a> {
         if *daemon_type == DaemonType::Server {
             return Ok(Arc::new(vec![PathBuf::from("not-used")]));
         }
-        let mut resolved_configs = Vec::new();
+
+        let mut resolved_configs = vec![
+               resolve("~/.config/sinkd/sinkd.conf")?,
+               resolve("~/sinkd.conf")?,
+        ];
+
         // safe unwrap due to default args
         if let Some(usr_cfgs) = user_configs {
             for cfg in usr_cfgs {
@@ -167,7 +181,7 @@ impl<'a> Parameters<'a> {
                         normalized.display()
                     );
                 }
-                resolved_configs.push(normalized);
+                resolved_configs.insert(0, normalized);
             }
         }
         Ok(Arc::new(resolved_configs))
