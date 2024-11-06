@@ -26,6 +26,7 @@ mod test;
 
 use clap::parser::ValuesRef;
 use outcome::Outcome;
+use shiplog::ShipLog;
 use std::{path::Path, process::ExitCode};
 
 use crate::parameters::{DaemonType, Parameters};
@@ -47,11 +48,11 @@ fn check_path(p: &str) -> bool {
 fn egress<T>(outcome: Outcome<T>) -> ExitCode {
     match outcome {
         Ok(_) => {
-            fancy::println(
-                "operation completed successfully",
-                fancy::Attrs::Normal,
-                fancy::Colors::Green,
-            );
+            //fancy::println(
+            //    "operation completed successfully",
+            //    fancy::Attrs::Normal,
+            //    fancy::Colors::Green,
+            //);
             std::process::ExitCode::SUCCESS
         }
         Err(e) => {
@@ -64,8 +65,7 @@ fn egress<T>(outcome: Outcome<T>) -> ExitCode {
 
 #[allow(dead_code)]
 fn main() -> ExitCode {
-    println!("sinkd start...");
-    println!("Running sinkd at {}", shiplog::get_timestamp("%T"));
+    println!("timestamp {}", shiplog::get_timestamp("%T"));
 
     let mut cli = crate::cli::build_sinkd();
     let matches = cli.get_matches_mut();
@@ -95,9 +95,16 @@ fn main() -> ExitCode {
         Err(e) => return egress::<String>(bad!(e)),
     };
 
-    println!("{}", &params);
+    if params.debug {
+        println!("{}", &params);
+    }
 
-    if params.verbosity >= 3 {
+    if let Err(e) = ShipLog::init(&params) {
+        println!("shiplog error: {e}");
+        return ExitCode::FAILURE;
+    }
+
+    if params.verbosity >= 3 && params.daemon_type == DaemonType::Client {
         fancy_debug!("system config: {}", params.system_config.display());
         for user_cfg in params.user_configs.iter() {
             fancy_debug!("user config: {}", user_cfg.display());

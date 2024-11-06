@@ -8,7 +8,12 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{bad, config, ipc, outcome::Outcome, parameters::Parameters, shiplog};
+use crate::{
+    bad, config, ipc,
+    outcome::Outcome,
+    parameters::{DaemonType, Parameters},
+    shiplog,
+};
 
 pub type Rx = mqtt::Receiver<Option<mqtt::Message>>;
 
@@ -76,7 +81,15 @@ impl Payload {
         cycle: u32,
         status: Status,
     ) -> Payload {
-        Payload { hostname, username, src_paths, dest_path, date, cycle, status }
+        Payload {
+            hostname,
+            username,
+            src_paths,
+            dest_path,
+            date,
+            cycle,
+            status,
+        }
     }
     pub fn hostname(mut self, hostname: &str) -> Self {
         self.hostname = hostname.to_string();
@@ -169,31 +182,28 @@ impl MqttClient {
             .finalize();
         let cli = mqtt::Client::new(opts)?;
 
-        // Initialize the consumer before connecting
         let rx = cli.start_consuming();
 
-        // Define last will message
         let lwt = mqtt::MessageBuilder::new()
             .topic("sinkd/server")
             .payload("Sync consumer lost connection")
             .finalize();
 
-        // Define the set of options for the connection
         let conn_opts = mqtt::ConnectOptionsBuilder::new_v3()
             .keep_alive_interval(Duration::from_secs(20))
             .clean_session(true)
             .will_message(lwt)
             .finalize();
 
-        let qos = [1, 1];
+        let qos = vec![1; subscriptions.len()]; // Ensure QoS length matches subscriptions
 
-        // Make the connection to the broker
         debug!(
-            "Connecting to the MQTT broker host:{} subs:[{}], pub_topic:{}",
+            "Connecting to MQTT broker at host: {}, subscriptions: [{}], publish_topic: {}",
             host.unwrap_or("unknown"),
-            subscriptions.to_vec().join(" "),
+            subscriptions.to_vec().join(", "),
             publish_topic
         );
+
         match cli.connect(conn_opts) {
             Ok(rsp) => {
                 if let Some(con_rsp) = rsp.connect_response() {
@@ -202,36 +212,26 @@ impl MqttClient {
                         con_rsp.server_uri, con_rsp.mqtt_version
                     );
                     if con_rsp.session_present {
-                        Err(mqtt::Error::General(
-                            "client session already present on broker",
-                        ))
-                    } else {
-                        // Register subscriptions on the server
-                        debug!("Subscribing to topics with requested QoS: {:?}...", qos);
-
-                        cli.subscribe_many(subscriptions, &qos)
-                            .and_then(|rsp| {
-                                rsp.subscribe_many_response()
-                                    .ok_or(mqtt::Error::General("Bad response"))
-                            })
-                            .map(|vqos| {
-                                debug!("QoS granted: {:?}", vqos);
-                            })?;
-
-                        Ok((
-                            MqttClient {
-                                client: cli,
-                                publish_topic: publish_topic.to_owned(),
-                            },
-                            rx,
-                        ))
+                        return Err(mqtt::Error::General("Client session already present on broker"));
                     }
+
+                    debug!("Subscribing to topics: {:?} with QoS {:?}", subscriptions, qos);
+                    cli.subscribe_many(subscriptions, &qos)
+                        .map_err(|_| mqtt::Error::General("Failed to subscribe to topics"))?;
+
+                    Ok((
+                        MqttClient {
+                            client: cli,
+                            publish_topic: publish_topic.to_owned(),
+                        },
+                        rx,
+                    ))
                 } else {
-                    Err(mqtt::Error::General("no connection response?"))
+                    Err(mqtt::Error::General("No connection response from broker"))
                 }
             }
             Err(e) => Err(mqtt::Error::GeneralString(format!(
-                "Could not connect to the broker '{}', is the mosquitto broker running? {:?}",
+                "Could not connect to broker '{}': {:?}. Ensure the broker is running and reachable.",
                 host.unwrap_or("unknown"),
                 e
             ))),
@@ -242,7 +242,7 @@ impl MqttClient {
         match self.client.publish(mqtt::Message::new(
             &self.publish_topic,
             encode(payload)?,
-            mqtt::QOS_0, // within local network, should be no lost packets
+            mqtt::QOS_1, // at least once
         )) {
             Ok(()) => {
                 info!("published payload: {}", payload);
@@ -258,17 +258,15 @@ impl MqttClient {
 
 fn resolve_host(host: Option<&str>) -> Result<String, mqtt::Error> {
     match host {
-        Some("localhost") => Ok(String::from("tcp://localhost:1883")),
-        Some(_str) => {
-            if _str.starts_with('/') {
-                Err(mqtt::Error::General(
-                    "did you intend on localhost?, check '/etc/sinkd.conf'",
-                ))
-            } else {
-                Ok(format!("tcp://{_str}:1883"))
-            }
+        Some(h) if h.starts_with('/') => Err(mqtt::Error::General(
+            "Invalid hostname: it looks like a path. Did you mean 'localhost'?",
+        )),
+        Some(h) => {
+            let fq_host = format!("tcp://{}:1883", h);
+            debug!("Fully qualified host: {}", fq_host);
+            Ok(fq_host)
         }
-        None => Err(mqtt::Error::General("Need host string")),
+        None => Err(mqtt::Error::General("Host string is required but missing")),
     }
 }
 
@@ -328,6 +326,19 @@ pub fn end_process(params: &Parameters) -> Outcome<()> {
         return bad!("Need to be root");
     }
 
+    // TODO: return PID_NOT_FOUND
+    if !params.pid_path.exists() {
+        println!(
+            "sinkd {} is not running",
+            if params.daemon_type == DaemonType::Client {
+                "client"
+            } else {
+                "server"
+            }
+        );
+        return Ok(());
+    }
+
     let pid = shiplog::get_pid(params)?;
     let nix_pid = Pid::from_raw(pid as i32);
 
@@ -341,6 +352,7 @@ pub fn end_process(params: &Parameters) -> Outcome<()> {
             {
                 return bad!("Couldn't kill process {} {}", pid, e);
             }
+            shiplog::rm_pid(params)?;
             Ok(())
         }
         Err(_) => {

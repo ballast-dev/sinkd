@@ -35,12 +35,11 @@ pub fn get_timestamp(fmt_str: &str) -> String {
 }
 
 pub struct ShipLog {
-    // big rope to moor ship to harbor
     file: std::fs::File,
 }
 
 impl ShipLog {
-    pub fn new(params: &Parameters) -> Self {
+    fn new(params: &Parameters) -> Self {
         ShipLog {
             file: OpenOptions::new()
                 .append(true)
@@ -50,8 +49,9 @@ impl ShipLog {
         }
     }
 
-    pub fn init(params: &Parameters) {
-        log::set_boxed_logger(Box::new(ShipLog::new(params))).unwrap();
+    pub fn init(params: &Parameters) -> Outcome<()> {
+        create_log_file(params)?;
+        log::set_boxed_logger(Box::new(Self::new(params))).expect("unable to create logger");
         log::set_max_level(match params.verbosity {
             1 => LevelFilter::Error,
             2 => LevelFilter::Warn,
@@ -60,6 +60,8 @@ impl ShipLog {
             // _ => LevelFilter::Trace,
         });
         println!("Logging to: '{}'", params.log_path.display());
+        info!("log initialized");
+        Ok(())
     }
 
     //fn log_rotate(mut self, path: PathBuf) {
@@ -104,15 +106,7 @@ impl log::Log for ShipLog {
     fn flush(&self) {}
 }
 
-pub fn init(params: &Parameters) -> Outcome<()> {
-    if let Err(e) = shiplog::create_log_file(params) { Err(e) } else {
-        ShipLog::init(params);
-        info!("log initialized");
-        Ok(())
-    }
-}
-
-pub fn create_pid_file(params: &Parameters) -> Outcome<()> {
+fn create_pid_file(params: &Parameters) -> Outcome<()> {
     if !params.debug && !config::have_permissions() {
         return bad!("need to be root");
     }
@@ -132,15 +126,16 @@ pub fn create_pid_file(params: &Parameters) -> Outcome<()> {
             );
         }
     }
-    Ok(()) // already created
-           // fs::File::create(PID_FILE).expect("unable to create pid file, permissions?");
-           // let metadata = pid_file.metadata().unwrap();
-           // let mut permissions = metadata.permissions();
-           // permissions.set_readonly(false);
-           // fs::set_permissions(&pid_path, permissions).expect("cannot set permission");
+    Ok(())
+    // already created
+    // fs::File::create(PID_FILE).expect("unable to create pid file, permissions?");
+    // let metadata = pid_file.metadata().unwrap();
+    // let mut permissions = metadata.permissions();
+    // permissions.set_readonly(false);
+    // fs::set_permissions(&pid_path, permissions).expect("cannot set permission");
 }
 
-pub fn create_log_file(params: &Parameters) -> Outcome<()> {
+fn create_log_file(params: &Parameters) -> Outcome<()> {
     if !params.debug && !config::have_permissions() {
         return bad!("Need to be root to create log file");
     }
@@ -159,13 +154,6 @@ pub fn create_log_file(params: &Parameters) -> Outcome<()> {
 }
 
 pub fn get_pid(params: &Parameters) -> Outcome<u32> {
-    // let user = env!("USER");
-    // let sinkd_path = if cfg!(target_os = "macos") {
-    //     path::Path::new("/Users").join(user).join(".sinkd")
-    // } else {
-    //     path::Path::new("/home").join(user).join(".sinkd")
-    // };
-
     if !params.pid_path.exists() {
         bad!("pid file not found")
     } else {
@@ -204,6 +192,16 @@ pub fn set_pid(params: &Parameters, pid: u32) -> Outcome<()> {
         }
     } else if let Err(e) = std::fs::write(&params.pid_path, pid.to_string()) {
         return bad!("couldn't write to '{}' {}", &params.pid_path.display(), e);
+    }
+    Ok(())
+}
+
+pub fn rm_pid(params: &Parameters) -> Outcome<()> {
+    if !params.debug && !config::have_permissions() {
+        return bad!("Need to be root to create pid file");
+    }
+    if params.pid_path.exists() {
+        std::fs::remove_file(&params.pid_path)?;
     }
     Ok(())
 }

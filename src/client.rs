@@ -11,19 +11,17 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{bad, config, ipc, outcome::Outcome, parameters::Parameters, shiplog};
+use crate::{bad, config, ipc, outcome::Outcome, parameters::Parameters};
 
 static FATAL_FLAG: AtomicBool = AtomicBool::new(false);
 
 pub fn start(params: &Parameters) -> Outcome<()> {
-    shiplog::init(params)?;
     ipc::start_mosquitto()?;
     ipc::daemon(init, "client", params)
 }
 
 pub fn stop(params: &Parameters) -> Outcome<()> {
-    ipc::end_process(params)?;
-    Ok(())
+    ipc::end_process(params)
 }
 
 pub fn restart(params: &Parameters) -> Outcome<()> {
@@ -108,6 +106,7 @@ fn watch_entry(
     event_tx: mpsc::Sender<PathBuf>,
     fatal_flag: &AtomicBool,
 ) {
+    debug!("-------- watch_entry --------");
     loop {
         if fatal_flag.load(Ordering::SeqCst) {
             break;
@@ -152,17 +151,15 @@ fn mqtt_entry(
     fatal_flag: &AtomicBool,
 ) -> Outcome<()> {
     let _payload = ipc::Payload::new();
-    let (mqtt_client, mqtt_rx): (ipc::MqttClient, ipc::Rx);
-    match ipc::MqttClient::new(Some(server_addr), &["sinkd/server"], "sinkd/clients") {
-        Ok((client, rx)) => {
-            mqtt_client = client;
-            mqtt_rx = rx;
-        }
-        Err(e) => {
-            fatal_flag.store(true, Ordering::SeqCst);
-            return bad!("Unable to create mqtt client, {}", e);
-        }
-    }
+
+    let (mqtt_client, mqtt_rx): (ipc::MqttClient, ipc::Rx) =
+        match ipc::MqttClient::new(Some(server_addr), &["sinkd/server"], "sinkd/clients") {
+            Ok((client, rx)) => (client, rx),
+            Err(e) => {
+                fatal_flag.store(true, Ordering::SeqCst);
+                return bad!("Unable to create mqtt client, {}", e);
+            }
+        };
 
     // assume we are behind
     // FIXME: use this!

@@ -5,9 +5,9 @@ use std::{
     sync::Arc,
 };
 
-use crate::{config, outcome::Outcome};
+use crate::{config, fancy, outcome::Outcome};
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub enum DaemonType {
     Client,
     Server,
@@ -27,11 +27,38 @@ pub struct Parameters {
 
 impl std::fmt::Display for Parameters {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.daemon_type == DaemonType::Client {
-            f.write_str("daemon:type:client")
-        } else {
-            f.write_str("daemon:type:server")
-        }
+        f.write_str(&fancy::format(
+            &format!(
+                r#"🎨 Parameters 🔍
+daemon_type:{}
+verbosity:{}
+clear_logs:{}
+debug:{}
+log_path:{}
+pid_path:{}
+system_config:{}
+user configs: [{}]
+"#,
+                if self.daemon_type == DaemonType::Client {
+                    "client"
+                } else {
+                    "server"
+                },
+                self.verbosity,
+                self.clear_logs,
+                self.debug,
+                self.log_path.display(),
+                self.pid_path.display(),
+                self.system_config.display(),
+                self.user_configs
+                    .iter()
+                    .map(|p| p.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            fancy::Attrs::Bold,
+            fancy::Colors::Yellow,
+        ))
     }
 }
 
@@ -44,36 +71,26 @@ impl Parameters {
         user_configs: Option<ValuesRef<String>>,
     ) -> Outcome<Self> {
         Parameters::create_log_dir(debug)?;
-        match daemon_type {
-            DaemonType::Server => Ok(Parameters {
-                daemon_type: DaemonType::Server,
-                verbosity: match (debug, verbosity) {
-                    (true, _) => 4,
-                    (false, 0) => 2, // default to warn log level
-                    (_, v) => v,
-                },
-                clear_logs: debug,
-                debug,
-                log_path: Self::get_log_path(debug, DaemonType::Server),
-                pid_path: Self::get_pid_path(debug, DaemonType::Server),
-                system_config: Arc::new(PathBuf::new()), // not used
-                user_configs: Arc::new(vec![]),          // not used
-            }),
-            DaemonType::Client => Ok(Parameters {
-                daemon_type: DaemonType::Client,
-                verbosity: match (debug, verbosity) {
-                    (true, _) => 4,
-                    (false, 0) => 2, // default to warn log level
-                    (_, v) => v,
-                },
-                clear_logs: debug,
-                debug,
-                log_path: Self::get_log_path(debug, DaemonType::Client),
-                pid_path: Self::get_pid_path(debug, DaemonType::Client),
-                system_config: Self::resolve_system_config(system_config)?,
-                user_configs: Self::resolve_user_configs(user_configs)?,
-            }),
-        }
+        Ok(Parameters {
+            daemon_type: daemon_type.clone(),
+            verbosity: match (debug, verbosity) {
+                (true, _) => 4,
+                (false, 0) => 2, // default to warn log level
+                (_, v) => v,
+            },
+            clear_logs: debug,
+            debug,
+            log_path: Self::get_log_path(debug, &daemon_type),
+            pid_path: Self::get_pid_path(debug, &daemon_type),
+            system_config: match daemon_type {
+                DaemonType::Client => Self::resolve_system_config(system_config)?,
+                DaemonType::Server => Arc::new(PathBuf::new()),
+            },
+            user_configs: match daemon_type {
+                DaemonType::Client => Self::resolve_user_configs(user_configs)?,
+                DaemonType::Server => Arc::new(vec![]),
+            },
+        })
     }
 
     fn create_log_dir(debug: bool) -> Outcome<()> {
@@ -96,7 +113,7 @@ impl Parameters {
         }
     }
 
-    fn get_log_path(debug: bool, daemon_type: DaemonType) -> PathBuf {
+    fn get_log_path(debug: bool, daemon_type: &DaemonType) -> PathBuf {
         match (debug, daemon_type) {
             (true, DaemonType::Client) => PathBuf::from("/tmp/sinkd/client.log"),
             (true, DaemonType::Server) => PathBuf::from("/tmp/sinkd/server.log"),
@@ -105,7 +122,7 @@ impl Parameters {
         }
     }
 
-    fn get_pid_path(debug: bool, daemon_type: DaemonType) -> PathBuf {
+    fn get_pid_path(debug: bool, daemon_type: &DaemonType) -> PathBuf {
         match (debug, daemon_type) {
             (true, DaemonType::Client) => PathBuf::from("/tmp/sinkd/client.pid"),
             (true, DaemonType::Server) => PathBuf::from("/tmp/sinkd/server.pid"),
@@ -153,6 +170,8 @@ impl Parameters {
             cfg_path = PathBuf::from("/etc/sinkd.conf");
         }
 
+        debug!("system config: {}", cfg_path.display());
+
         Ok(Arc::new(cfg_path))
     }
 
@@ -162,11 +181,6 @@ impl Parameters {
         user_configs: Option<ValuesRef<String>>,
     ) -> Outcome<Arc<Vec<PathBuf>>> {
         let mut resolved_configs = Vec::<PathBuf>::new();
-
-        //let mut resolved_configs = vec![
-        //    resolve("~/.config/sinkd/sinkd.conf")?,
-        //    resolve("~/sinkd.conf")?,
-        //];
 
         // safe unwrap due to default args
         if let Some(usr_cfgs) = user_configs {
@@ -186,11 +200,22 @@ impl Parameters {
             // WARN: user configs are pulled from system and additionally supplied
             // through command line arg
             for _cfg in default_cfgs {
-                //match config::resolve(_cfg) {
-                //    Ok(usr_cfg) =>
-                //}
+                match config::resolve(_cfg) {
+                    Ok(resolved_user_config) => resolved_configs.push(resolved_user_config),
+                    Err(e) => error!("Unable to resolve {_cfg}  {e}"),
+                }
             }
         }
+
+        debug!(
+            "user configs: [{}]",
+            resolved_configs
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+
         Ok(Arc::new(resolved_configs))
     }
 }
