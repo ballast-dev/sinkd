@@ -3,7 +3,6 @@ use std::{
     collections::HashMap,
     fs,
     path::PathBuf,
-    str::FromStr,
     time::{Duration, Instant},
 };
 
@@ -73,10 +72,6 @@ impl ConfigParser {
         }
     }
 
-    // If just system configs are used that is enough.
-    // The storage of files will be on a group name basis.
-    // The name shall be config driven? Maybe a temp file to
-    // store the hash of this sinkd group...
     fn parse_configs(&mut self, params: &Parameters) -> Outcome<()> {
         if let Err(e) = self.parse_sys_config(&params.system_config) {
             match e {
@@ -108,8 +103,7 @@ impl ConfigParser {
             Ok(output) => match toml::from_str(&output) {
                 Err(error) => Err(ParseError::InvalidSyntax(error.to_string())),
                 Ok(toml_parsed) => {
-                    //? toml_parsed is converted into Rust via serde lib
-                    self.sys = toml_parsed;
+                    self.sys = toml_parsed; // NOTE: converted into Rust via serde lib
                     Ok(())
                 }
             },
@@ -117,51 +111,25 @@ impl ConfigParser {
     }
 
     fn parse_user_configs(&mut self, user_configs: &Vec<PathBuf>) -> Result<(), ParseError> {
-        let mut _user_parsed = false;
-        if user_configs.is_empty() {
-            // default behavior is to check system for users
-            for user in &self.sys.users {
-                let user_config =
-                    PathBuf::from_str(&format!("/home/{user}/.config/sinkd.conf")).unwrap();
-                match ConfigParser::get_user_config(&user_config) {
-                    Ok(_usr_cfg) => {
-                        let _ = &self.users.insert(user_config, _usr_cfg);
-                        _user_parsed = true;
-                        continue;
-                    }
-                    Err(error) => match error {
-                        ParseError::FileNotFound => {
-                            error!("File not found: {}", user_config.display());
-                        }
-                        ParseError::InvalidSyntax(syntax) => {
-                            error!("Invalid syntax in: {}: {}", user_config.display(), syntax);
-                        }
-                        _ => (),
-                    },
+        for user_config in user_configs {
+            match ConfigParser::get_user_config(user_config) {
+                Ok(_usr_cfg) => {
+                    let _ = &self.users.insert(user_config.clone(), _usr_cfg);
+                    continue;
                 }
-            }
-        } else {
-            for user_config in user_configs {
-                match ConfigParser::get_user_config(user_config) {
-                    Ok(_usr_cfg) => {
-                        let _ = &self.users.insert(user_config.clone(), _usr_cfg);
-                        _user_parsed = true;
-                        continue;
+                Err(error) => match error {
+                    ParseError::FileNotFound => {
+                        error!("File not found: {}", user_config.display());
                     }
-                    Err(error) => match error {
-                        ParseError::FileNotFound => {
-                            error!("File not found: {}", user_config.display());
-                        }
-                        ParseError::InvalidSyntax(syntax) => {
-                            error!("Invalid syntax in: {}: {}", user_config.display(), syntax);
-                        }
-                        _ => (),
-                    },
-                }
+                    ParseError::InvalidSyntax(syntax) => {
+                        error!("Invalid syntax in: {}: {}", user_config.display(), syntax);
+                    }
+                    _ => (),
+                },
             }
         }
 
-        if !_user_parsed {
+        if self.users.is_empty() {
             return Err(ParseError::NoUserFound);
         }
         Ok(())
@@ -199,7 +167,6 @@ pub fn get(params: &Parameters) -> Outcome<(String, InodeMap)> {
     let mut inode_map: InodeMap = HashMap::new();
 
     for anchor in &parser.sys.shares {
-        // if !inode_map.contains_key(&anchor.path) {
         inode_map.entry(anchor.path.clone()).or_insert(Inode {
             excludes: anchor.excludes.clone(),
             interval: Duration::from_secs(anchor.interval),
@@ -227,42 +194,20 @@ pub fn have_permissions() -> bool {
     }
 }
 
-/// Both macOS and Linux have the uname command
-pub fn get_hostname() -> String {
-    match std::process::Command::new("uname").arg("-n").output() {
-        Err(e) => {
-            error!("uname didn't work? {}", e);
-            String::from("uname-error")
-        }
-        Ok(output) => {
-            let mut v = output.stdout.to_ascii_lowercase();
-            v.truncate(v.len() - 1); // strip newline
-            debug!("{}", std::str::from_utf8(&v).unwrap());
-            String::from_utf8(v).unwrap_or_else(|_| {
-                error!("invalid string from uname -a");
-                String::from("invalid-hostname")
-            })
-        }
-    }
+pub fn get_hostname() -> Outcome<String> {
+    let name = hostname::get()?;
+    Ok(name.to_string_lossy().into_owned())
 }
 
-/// Both macOS and Linux have the whoami command
-pub fn get_username() -> String {
-    match std::process::Command::new("whoami").output() {
-        Err(e) => {
-            error!("whoami didn't work? {}", e);
-            String::from("whoami error")
-        }
-        Ok(output) => {
-            let mut v = output.stdout.to_ascii_lowercase();
-            v.truncate(v.len() - 1); // strip newline
-            debug!("{}", std::str::from_utf8(&v).unwrap());
-            String::from_utf8(v).unwrap_or_else(|_| {
-                error!("invalid string from whoami");
-                String::from("invalid-username")
-            })
-        }
+pub fn get_username() -> Outcome<String> {
+    if let Some(username) = std::env::var("USER")
+        .ok()
+        .or(std::env::var("USERNAME").ok())
+    {
+        debug!("got username: {username}");
+        return Ok(username);
     }
+    bad!("Username not found")
 }
 
 // this will resolve all known paths, converts relative to absolute

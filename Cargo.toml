@@ -6,26 +6,25 @@ edition = "2021"
 build = "src/build.rs"
 
 [dependencies]
+bincode = "1"
 clap = "4"
 crossbeam = "0.8"
-notify = "4.0"
-regex = "1.9"
-serde = { version = "1.0", features = ["derive"] }
-bincode = "1"
-toml = "0.8"
-nix = { version = "0.28", features = ["process", "signal"] }
-log = { version = "0.4", features = ["std"] }
+hostname = "0.4.0"
 libc = "0.2"
+log = { version = "0.4", features = ["std"] }
+nix = { version = "0.28", features = ["process", "signal"] }
+notify = "4.0"
+paho-mqtt = { version = "0.12", features = ["vendored-ssl"] }  # build ssl
+regex = "1.9"
 rpassword = "7"
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
 
-# the dependency openssl-sys has bindings which are needed for cross compile
-paho-mqtt = { version = "0.12", features = ["vendored-ssl"] }
 
 [dev-dependencies]
-futures-util = "0.3"
 async-std = "1"
+futures-util = "0.3"
 
 [build-dependencies]
-# cargo lib to build c code statically
 cc = { version = "1" }
 

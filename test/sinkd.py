@@ -45,27 +45,24 @@ def create_files(folder: Path, num_of_files: int, delay: float = 0.01):
 
 
 def spawn_server():
-    client = run("./target/debug/sinkd server start -d")
+    client = run("./target/debug/sinkd -d server start")
     if client.returncode != 0:
         print("test_sinkd>> ", client.stderr, client.stdout)
         exit(-1)
-    print("sucessfully spawned sinkd")
+
 
 def spawn_client():
-    sys_cfg = CLIENT_PATH.joinpath("etc_sinkd.conf")
-    usr_cfg = CLIENT_PATH.joinpath("sinkd.conf")
-    client = run(
-        f"./target/debug/sinkd client start -d -s {sys_cfg} -u {usr_cfg}"
-    )
+    # sys_cfg = CLIENT_PATH.joinpath("etc_sinkd.conf")
+    # usr_cfg = CLIENT_PATH.joinpath("sinkd.conf")
+    client = run("./target/debug/sinkd client start -d")
     if client.returncode != 0:
         print("test_sinkd>> ", client.stderr, client.stdout)
         exit(-1)
-    print("sucessfully spawned sinkd")
 
 
 def stop_sinkd():
-    run("./target/debug/sinkd client -d stop")
-    run("./target/debug/sinkd server -d stop")
+    run("./target/debug/sinkd -d client stop")
+    run("./target/debug/sinkd -d server stop")
 
 
 def run_situation():

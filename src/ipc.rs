@@ -24,9 +24,10 @@ pub enum Reason {
     Other,
 }
 
-#[derive(PartialEq, Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(PartialEq, Default, Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum Status {
     NotReady(Reason),
+    #[default]
     Ready,
 }
 
@@ -48,30 +49,32 @@ impl fmt::Display for Status {
 }
 
 /// Only time a Payload is sent is to say "new edits"
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Payload {
     pub hostname: String,
     pub username: String,
     pub src_paths: Vec<PathBuf>,
-    pub dest_path: String,
     pub date: String,
     pub cycle: u32,
     pub status: Status,
+    pub dest_path: String,
 }
 
 #[allow(dead_code)]
 impl Payload {
-    pub fn new() -> Payload {
-        Payload {
-            hostname: config::get_hostname(),
-            username: config::get_username(),
+    pub fn new() -> Outcome<Payload> {
+        //Ok(Payload::default())
+        Ok(Payload {
+            hostname: config::get_hostname()?,
+            username: config::get_username()?,
             src_paths: vec![],
             date: String::from("2022Jan4"),
             cycle: 0,
             status: Status::Ready,
             dest_path: String::from("server"),
-        }
+        })
     }
+
     pub fn from(
         hostname: String,
         username: String,
@@ -91,39 +94,41 @@ impl Payload {
             status,
         }
     }
-    pub fn hostname(mut self, hostname: &str) -> Self {
-        self.hostname = hostname.to_string();
+
+    pub fn hostname<S: Into<String>>(mut self, hostname: S) -> Self {
+        self.hostname = hostname.into();
         self
     }
-    pub fn username(mut self, username: &str) -> Self {
-        self.username = username.to_string();
+
+    pub fn username<S: Into<String>>(mut self, username: S) -> Self {
+        self.username = username.into();
         self
     }
-    pub fn paths(mut self, paths: Vec<PathBuf>) -> Self {
-        self.src_paths = paths; // transfer ownership
+
+    pub fn src_paths(mut self, paths: Vec<PathBuf>) -> Self {
+        self.src_paths = paths;
         self
     }
-    pub fn date(mut self, date: &str) -> Self {
+
+    /// Must be in form YYYYMMMDD, i.e. 2022Jan4
+    pub fn date<S: Into<String>>(mut self, date: S) -> Self {
         self.date = date.into();
         self
     }
+
     pub fn cycle(mut self, cycle: u32) -> Self {
         self.cycle = cycle;
         self
     }
+
     pub fn status(mut self, status: Status) -> Self {
         self.status = status;
         self
     }
-    pub fn dest(mut self, dest: &str) -> Self {
-        self.dest_path = dest.into(); // ownership
+
+    pub fn dest_path<S: Into<String>>(mut self, dest_path: S) -> Self {
+        self.dest_path = dest_path.into();
         self
-    }
-    pub fn ready(self) -> Result<(), Reason> {
-        match self.status {
-            Status::Ready => Ok(()),
-            Status::NotReady(reason) => Err(reason),
-        }
     }
 }
 
@@ -176,9 +181,12 @@ impl MqttClient {
         subscriptions: &[&str],
         publish_topic: &str,
     ) -> Result<(Self, mqtt::Receiver<Option<mqtt::Message>>), mqtt::Error> {
+        let hostname = config::get_hostname()
+            .map_err(|_| mqtt::Error::GeneralString(String::from("unable to get hostname")))?;
         let opts = mqtt::CreateOptionsBuilder::new()
             .server_uri(resolve_host(host)?)
-            .client_id(config::get_hostname())
+            // TODO: should pass params
+            //.client_id(hostname)  // MUST BE UNIQUE
             .finalize();
         let cli = mqtt::Client::new(opts)?;
 

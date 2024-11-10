@@ -106,7 +106,6 @@ fn watch_entry(
     event_tx: mpsc::Sender<PathBuf>,
     fatal_flag: &AtomicBool,
 ) {
-    debug!("-------- watch_entry --------");
     loop {
         if fatal_flag.load(Ordering::SeqCst) {
             break;
@@ -162,45 +161,63 @@ fn mqtt_entry(
         };
 
     // assume we are behind
-    // FIXME: use this!
-    let _status = ipc::Status::NotReady(ipc::Reason::Behind);
+    let mut server_status = ipc::Status::NotReady(ipc::Reason::Behind);
 
     // The server will send status updates to it's clients every 5 seconds
     loop {
         if fatal_flag.load(Ordering::SeqCst) {
-            return bad!("mqtt_entry>> exit condition reached in watch thread");
+            return bad!("client:mqtt_entry>> exit condition reached in watch thread");
         }
 
         match mqtt_rx.try_recv() {
             Ok(message) => {
+                debug!("{:?}", message);
                 if let Some(msg) = message {
                     debug!("client>> got message!: {}", msg);
                     if let Ok(decoded_payload) = ipc::decode(msg.payload()) {
                         // process mqtt traffic from server
-                        if let Err(e) = process(&event_rx, &mqtt_client, inode_map, decoded_payload)
-                        {
-                            error!("process: {}", e);
+                        server_status = decoded_payload.status;
+                        if let Err(e) = process(&event_rx, &mqtt_client, inode_map, server_status) {
+                            error!("client:mqtt_entry>> process: {}", e);
                         }
                     } else {
-                        error!("unable to decode message: {:?}", msg.payload());
+                        error!(
+                            "client:mqtt_entry>> unable to decode message: {:?}",
+                            msg.payload()
+                        );
                     }
                 } else {
-                    error!("client>> mqtt_thread: empty message?");
+                    error!("client:mqtt_entry>> empty message?");
                 }
             }
             Err(e) => match e {
                 TryRecvError::Disconnected => {
                     fatal_flag.store(true, Ordering::SeqCst);
-                    return bad!("mqtt_rx hung up?");
+                    return bad!("client:mqtt_entry>> mqtt_rx hung up?");
                 }
                 TryRecvError::Empty => {
-                    debug!("waiting on message...");
+                    debug!("client:mqtt_entry>> waiting on message...");
                 }
             },
         }
 
+        //if let Err(e) = process(&event_rx, &mqtt_client, inode_map, server_status) {
+        //    debug!("client:mqtt_entry>> unable to process... {e}");
+        //}
+
+        // test from client to server
+        match ipc::Payload::new() {
+            Ok(mut p) => {
+                p = p.src_paths(vec![PathBuf::from("debug/path")]);
+                if let Err(e) = mqtt_client.publish(&mut p) {
+                    debug!("client:mqtt_entry>> can't publish?  {e}");
+                }
+            }
+            Err(e) => debug!("client:mqtt_entry>> unable to create payload {e}"),
+        };
+
         // TODO: add 'system_interval' to config
-        std::thread::sleep(Duration::from_secs(1));
+        std::thread::sleep(Duration::from_secs(5));
     }
 }
 
@@ -208,22 +225,20 @@ fn process(
     event_rx: &mpsc::Receiver<PathBuf>,
     mqtt_client: &ipc::MqttClient,
     inode_map: &config::InodeMap,
-    server_payload: ipc::Payload,
+    status: ipc::Status,
 ) -> Outcome<()> {
-    // process received message from server
-
-    match server_payload.status {
+    match status {
         ipc::Status::NotReady(reason) => match reason {
             ipc::Reason::Sinking => {
-                info!("server sinking... wait 5 secs");
+                info!("client:process>> server sinking... wait 5 secs");
                 std::thread::sleep(Duration::from_secs(5)); // should be config driven
                 Ok(())
             }
             ipc::Reason::Behind => {
                 // let's sync up
-                let mut payload = ipc::Payload::new()
+                let mut payload = ipc::Payload::new()?
                     .status(ipc::Status::NotReady(ipc::Reason::Behind))
-                    .paths(inode_map.keys().cloned().collect());
+                    .src_paths(inode_map.keys().cloned().collect());
 
                 ipc::rsync(&payload);
                 mqtt_client.publish(&mut payload)
@@ -232,9 +247,10 @@ fn process(
             ipc::Reason::Other => todo!(),
         },
         ipc::Status::Ready => {
-            let mut payload = ipc::Payload::new();
-            payload = match filter_file_events(event_rx) {
-                Ok(filtered_paths) => payload.paths(filtered_paths),
+            debug!("client:process>> ipc::Status::Ready");
+            let mut payload = ipc::Payload::new()?;
+            match filter_file_events(event_rx) {
+                Ok(filtered_paths) => payload.src_paths = filtered_paths,
                 Err(e) => return bad!("{}", e),
             };
             payload.cycle += 1;

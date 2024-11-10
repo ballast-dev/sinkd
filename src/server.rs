@@ -134,8 +134,10 @@ fn status_entry(
             return bad!("server>> synch thread exited, aborting mqtt thread");
         }
 
-        let mut status_payload = ipc::Payload::new().status(ipc::Status::Ready);
-        mqtt_client.publish(&mut status_payload)?;
+        let mut status_payload = ipc::Payload::new()?.status(ipc::Status::Ready);
+        if let Err(e) = mqtt_client.publish(&mut status_payload) {
+            debug!("server:status_entry>> couldn't publish status? '{}'", e);
+        }
 
         // then recv queries
         // and queue up rsync calls
@@ -157,7 +159,7 @@ fn status_entry(
                             // 3. call rsync <client> <server> <opts>
                             // 4. once finished switch state to "ready"
                             // TODO
-                            info!("recv: {:?}", msg);
+                            debug!("server:status_entry>> State::Ready {:?}", msg);
 
                             let this_cycle = match cycle.lock() {
                                 Ok(l) => *l,
@@ -172,16 +174,31 @@ fn status_entry(
                                 return bad!("server>> cycle lock busted");
                             }
 
-                            let payload = ipc::decode(msg.unwrap().payload())?;
-
-                            if payload.cycle as i32 >= this_cycle {
-                                *state = ipc::Status::NotReady(ipc::Reason::Sinking);
-                                todo!("call rsync");
-                                if mqtt_client.publish(&mut payload).is_err() {
-                                    unimplemented!()
-                                }
-                                synch_tx.send(payload).unwrap(); // value moves/consumed here
+                            //let payload = match ipc::decode(msg.unwrap().payload()) {
+                            if let Some(msg) = msg {
+                                match ipc::decode(msg.payload()) {
+                                    Ok(p) => {
+                                        debug!("server:status_entry>> able to decode 😄 '{}'", p)
+                                    }
+                                    Err(e) => {
+                                        debug!(
+                                            "server:status_entry>> unable to decode 😦>> '{}'",
+                                            e
+                                        )
+                                    }
+                                };
+                            } else {
+                                debug!("server:status_entry>> recv empty msg")
                             }
+
+                            //if payload.cycle as i32 >= this_cycle {
+                            //    *state = ipc::Status::NotReady(ipc::Reason::Sinking);
+                            //    todo!("call rsync");
+                            //    if mqtt_client.publish(&mut payload).is_err() {
+                            //        unimplemented!()
+                            //    }
+                            //    synch_tx.send(payload).unwrap(); // value moves/consumed here
+                            //}
                         }
                     }
                 } else {
@@ -191,7 +208,7 @@ fn status_entry(
             }
             Err(err) => match err {
                 crossbeam::channel::TryRecvError::Empty => {
-                    std::thread::sleep(std::time::Duration::from_millis(3000));
+                    std::thread::sleep(std::time::Duration::from_secs(5));
                     debug!("server>> mqtt loop...");
                 }
                 crossbeam::channel::TryRecvError::Disconnected => {
@@ -220,7 +237,7 @@ fn synch_entry(
         // blocking call
         match synch_rx.recv() {
             Err(e) => {
-                error!("server:synch_rx: {}", e);
+                error!("server:synch_rx>> {}", e);
             }
             Ok(payload) => {
                 // let mut num = cycle.lock().unwrap();
