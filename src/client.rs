@@ -111,8 +111,8 @@ fn watch_entry(
             break;
         }
 
+        // blocking call
         match notify_rx.try_recv() {
-            // blocking call
             Ok(event) => match event {
                 DebouncedEvent::Create(path)
                 | DebouncedEvent::Write(path)
@@ -229,8 +229,8 @@ fn process(
 ) -> Outcome<()> {
     match status {
         ipc::Status::NotReady(reason) => match reason {
-            ipc::Reason::Sinking => {
-                info!("client:process>> server sinking... wait 5 secs");
+            ipc::Reason::Busy => {
+                info!("client:process>> server busy... wait 5 secs");
                 std::thread::sleep(Duration::from_secs(5)); // should be config driven
                 Ok(())
             }
@@ -240,7 +240,7 @@ fn process(
                     .status(ipc::Status::NotReady(ipc::Reason::Behind))
                     .src_paths(inode_map.keys().cloned().collect());
 
-                ipc::rsync(&payload);
+                ipc::push(&payload);
                 mqtt_client.publish(&mut payload)
             }
 

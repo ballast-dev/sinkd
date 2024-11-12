@@ -148,7 +148,7 @@ fn status_entry(
                 if let Ok(mut state) = state.lock() {
                     match *state {
                         ipc::Status::NotReady(reason) => match reason {
-                            ipc::Reason::Sinking => todo!(),
+                            ipc::Reason::Busy => todo!(),
                             ipc::Reason::Behind => todo!(),
                             ipc::Reason::Other => todo!(),
                         },
@@ -166,13 +166,9 @@ fn status_entry(
                                 Err(_e) => {
                                     fatal_flag.load(Ordering::SeqCst);
                                     error!("cycle lock busted");
-                                    -1
+                                    return bad!("server>> cycle lock busted");
                                 }
                             };
-
-                            if this_cycle == -1 {
-                                return bad!("server>> cycle lock busted");
-                            }
 
                             //let payload = match ipc::decode(msg.unwrap().payload()) {
                             if let Some(msg) = msg {
@@ -244,7 +240,7 @@ fn synch_entry(
                 // *num += 1;
                 if let Ok(state_mutex) = state.lock() {
                     match *state_mutex {
-                        ipc::Status::Ready => ipc::rsync(&payload),
+                        ipc::Status::Ready => ipc::push(&payload),
                         ipc::Status::NotReady(_) => {
                             info!("not ready... wait 2 secs");
                             std::thread::sleep(Duration::from_secs(2)); // should be config driven

@@ -3,8 +3,9 @@ use nix::unistd::Pid;
 use paho_mqtt as mqtt;
 use serde::{Deserialize, Serialize};
 use std::{
+    ffi::OsStr,
     fmt,
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::{Duration, Instant},
 };
 
@@ -19,7 +20,7 @@ pub type Rx = mqtt::Receiver<Option<mqtt::Message>>;
 
 #[derive(PartialEq, Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum Reason {
-    Sinking,
+    Busy,
     Behind,
     Other,
 }
@@ -37,7 +38,7 @@ impl fmt::Display for Status {
             Status::NotReady(reason) => {
                 write!(f, "NotReady(").unwrap();
                 match reason {
-                    Reason::Sinking => write!(f, "Sinking").unwrap(),
+                    Reason::Busy => write!(f, "Sinking").unwrap(),
                     Reason::Behind => write!(f, "Behind").unwrap(),
                     Reason::Other => write!(f, "Other").unwrap(),
                 };
@@ -54,10 +55,10 @@ pub struct Payload {
     pub hostname: String,
     pub username: String,
     pub src_paths: Vec<PathBuf>,
+    pub dest_path: PathBuf,
     pub date: String,
     pub cycle: u32,
     pub status: Status,
-    pub dest_path: String,
 }
 
 #[allow(dead_code)]
@@ -71,7 +72,7 @@ impl Payload {
             date: String::from("2022Jan4"),
             cycle: 0,
             status: Status::Ready,
-            dest_path: String::from("server"),
+            dest_path: PathBuf::from("server"),
         })
     }
 
@@ -79,7 +80,7 @@ impl Payload {
         hostname: String,
         username: String,
         src_paths: Vec<PathBuf>,
-        dest_path: String,
+        dest_path: PathBuf,
         date: String,
         cycle: u32,
         status: Status,
@@ -126,8 +127,8 @@ impl Payload {
         self
     }
 
-    pub fn dest_path<S: Into<String>>(mut self, dest_path: S) -> Self {
-        self.dest_path = dest_path.into();
+    pub fn dest_path<P: AsRef<Path>>(mut self, dest_path: P) -> Self {
+        self.dest_path = PathBuf::from(dest_path.as_ref());
         self
     }
 }
@@ -136,7 +137,7 @@ impl fmt::Display for Payload {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "hostname: {}, username: {}, paths: [",
+            "hostname: {}, username: {}, src_paths: [",
             self.hostname, self.username,
         )
         .unwrap();
@@ -145,8 +146,11 @@ impl fmt::Display for Payload {
         }
         write!(
             f,
-            "], date: {}, cycle: {}, status: {}",
-            self.date, self.cycle, self.status
+            "], dest_path: {}, date: {}, cycle: {}, status: {}",
+            self.dest_path.display(),
+            self.date,
+            self.cycle,
+            self.status
         )
     }
 }
@@ -181,8 +185,8 @@ impl MqttClient {
         subscriptions: &[&str],
         publish_topic: &str,
     ) -> Result<(Self, mqtt::Receiver<Option<mqtt::Message>>), mqtt::Error> {
-        let hostname = config::get_hostname()
-            .map_err(|_| mqtt::Error::GeneralString(String::from("unable to get hostname")))?;
+        //let hostname = config::get_hostname()
+        //    .map_err(|_| mqtt::Error::GeneralString(String::from("unable to get hostname")))?;
         let opts = mqtt::CreateOptionsBuilder::new()
             .server_uri(resolve_host(host)?)
             // TODO: should pass params
@@ -372,36 +376,47 @@ pub fn end_process(params: &Parameters) -> Outcome<()> {
     }
 }
 
-pub fn rsync(payload: &ipc::Payload) {
-    // Agnostic pathing allows sinkd not to care about user folder structure
-
-    debug!("{}", payload);
-
-    // FIXME:
-    // TODO:
-    // NOTE:
-    // HACK:
-    // WARNING:
-
-    let pull = payload.status == ipc::Status::NotReady(ipc::Reason::Behind);
-
-    let src: Vec<PathBuf> = if pull {
+pub fn push(payload: &Payload) {
+    let dest = PathBuf::from(format!(
+        "{}:{}",
+        payload.hostname,
+        payload.dest_path.display()
+    ));
+    debug!(
+        "pulling srcs:[{}] dest:{}",
         payload
             .src_paths
             .iter()
-            .map(|p| PathBuf::from(format!("{}:{}", payload.hostname, p.display())))
-            .collect()
-    } else {
-        payload.src_paths.clone()
-    };
+            .map(|p| p.display().to_string())
+            .collect::<Vec<_>>()
+            .join(", "),
+        dest.display()
+    );
+    rsync(&payload.src_paths, &dest);
+}
 
-    // NOTE: this is assuming that dest will always be a single point
-    let dest: String = if pull {
-        payload.dest_path.clone()
-    } else {
-        format!("{}:{}", payload.hostname, payload.dest_path)
-    };
+pub fn pull(payload: &Payload) {
+    let srcs: Vec<PathBuf> = payload
+        .src_paths
+        .iter()
+        .map(|p| PathBuf::from(format!("{}:{}", payload.hostname, p.display())))
+        .collect();
 
+    debug!(
+        "pulling srcs:[{}] dest:{}",
+        srcs.iter()
+            .map(|p| p.display().to_string())
+            .collect::<Vec<_>>()
+            .join(", "),
+        payload.dest_path.display()
+    );
+
+    rsync(&srcs, &payload.dest_path);
+}
+
+/// The synchronizing engine behind sinkd
+/// Payload has src_paths and dest_path
+fn rsync<P: AsRef<OsStr>>(srcs: &Vec<P>, dest: &P) {
     // need to account for shared folders
     // and local sync? maybe useful for testing
     let mut cmd = std::process::Command::new("rsync"); // have to bind at .new()
@@ -411,16 +426,13 @@ pub fn rsync(payload: &ipc::Payload) {
         // .arg("--delete-excluded")
         // .arg("--max-size=SIZE") // (limit size of transfers)
         // .arg("--exclude=PATTERN") // loop through to all all paths
-        .args(&src)
-        .arg(&dest);
+        .args(srcs)
+        .arg(dest);
 
+    debug!("### calling rsync ###");
     match cmd.spawn() {
-        Err(x) => {
-            error!("{:?}", x);
-        }
-        Ok(_) => {
-            debug!("called rsync! src_paths: {:?}  dest_path: {}", src, dest);
-        }
+        Err(x) => error!("{:#?}", x),
+        Ok(o) => debug!("called rsync! {:#?}", o),
     }
 }
 

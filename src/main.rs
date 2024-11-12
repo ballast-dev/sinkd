@@ -63,6 +63,12 @@ fn egress<T>(outcome: Outcome<T>) -> ExitCode {
     }
 }
 
+// FIXME:
+// TODO:
+// NOTE:
+// HACK:
+// WARNING:
+
 #[allow(dead_code)]
 fn main() -> ExitCode {
     println!("timestamp {}", shiplog::get_timestamp("%T"));
