@@ -8,7 +8,7 @@ use std::{
                      //time::{Duration, Instant},
 };
 
-use crate::{config, outcome::Outcome, parameters::Parameters, shiplog};
+use crate::{config, outcome::Outcome, parameters::Parameters};
 
 //const TEN_MEGABYTES: u64 = (1024 ^ 2) * 10;
 
@@ -36,6 +36,7 @@ pub fn get_timestamp(fmt_str: &str) -> String {
 
 pub struct ShipLog {
     file: std::fs::File,
+    debug_level: u8,
 }
 
 impl ShipLog {
@@ -46,6 +47,7 @@ impl ShipLog {
                 .create(true)
                 .open(&params.log_path)
                 .expect("couldn't create log file"),
+            debug_level: params.debug,
         }
     }
 
@@ -82,24 +84,38 @@ impl log::Log for ShipLog {
 
     fn log(&self, record: &Record) {
         if self.enabled(record.metadata()) {
-            // let file_size = self.file.metadata().unwrap().len();
-            // if file_size < TEN_MEGABYTES {
-            // }
+            let target = record.target();
+            if target.starts_with("paho") {
+                if self.debug_level == 2 {
+                    writeln!(
+                        &self.file,
+                        "{}[MQTT][{}]-{}",
+                        get_timestamp("%T"),
+                        record.level(),
+                        record.args()
+                    )
+                    .expect("couldn't write to log file");
+                }
+            } else {
+                // let file_size = self.file.metadata().unwrap().len();
+                // if file_size < TEN_MEGABYTES {
+                // }
 
-            writeln!(
-                &self.file,
-                "{}[{}]-{}",
-                shiplog::get_timestamp("%T"),
-                record.level(),
-                record.args()
-            )
-            .expect("couldn't write to log file");
+                writeln!(
+                    &self.file,
+                    "{}[{}]-{}",
+                    get_timestamp("%T"),
+                    record.level(),
+                    record.args()
+                )
+                .expect("couldn't write to log file");
 
-            // writeln!(&self.file, "{}[{}]FILESIZE OVER TEN-MEGABYTES({}): {}",
-            //         config::get_timestamp("%T"),
-            //         record.level(),
-            //         &self.file.metadata().unwrap().len(),
-            //         record.args()).expect("couldn't write to log file");
+                // writeln!(&self.file, "{}[{}]FILESIZE OVER TEN-MEGABYTES({}): {}",
+                //         config::get_timestamp("%T"),
+                //         record.level(),
+                //         &self.file.metadata().unwrap().len(),
+                //         record.args()).expect("couldn't write to log file");
+            }
         }
     }
 
@@ -107,7 +123,7 @@ impl log::Log for ShipLog {
 }
 
 fn create_pid_file(params: &Parameters) -> Outcome<()> {
-    if !params.debug && !config::have_permissions() {
+    if params.debug == 0 && !config::have_permissions() {
         return bad!("need to be root");
     }
     if !params.pid_path.exists() {
@@ -136,11 +152,11 @@ fn create_pid_file(params: &Parameters) -> Outcome<()> {
 }
 
 fn create_log_file(params: &Parameters) -> Outcome<()> {
-    if !params.debug && !config::have_permissions() {
+    if params.debug == 0 && !config::have_permissions() {
         return bad!("Need to be root to create log file");
     }
 
-    if !params.log_path.exists() || params.clear_logs {
+    if !params.log_path.exists() && params.debug >= 1 {
         if let Err(why) = std::fs::File::create(&params.log_path) {
             // truncates file if exists
             return bad!(
@@ -197,7 +213,7 @@ pub fn set_pid(params: &Parameters, pid: u32) -> Outcome<()> {
 }
 
 pub fn rm_pid(params: &Parameters) -> Outcome<()> {
-    if !params.debug && !config::have_permissions() {
+    if params.debug == 0 && !config::have_permissions() {
         return bad!("Need to be root to create pid file");
     }
     if params.pid_path.exists() {

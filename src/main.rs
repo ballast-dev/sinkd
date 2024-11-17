@@ -93,7 +93,7 @@ fn main() -> ExitCode {
     let params = match Parameters::new(
         daemon_type,
         matches.get_count("verbose"),
-        matches.get_flag("debug"),
+        matches.get_count("debug"),
         system_config,
         user_configs,
     ) {
@@ -101,7 +101,7 @@ fn main() -> ExitCode {
         Err(e) => return egress::<String>(bad!(e)),
     };
 
-    if params.debug {
+    if params.debug > 0 {
         println!("{}", &params);
     }
 

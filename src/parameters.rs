@@ -17,8 +17,7 @@ pub enum DaemonType {
 pub struct Parameters {
     pub daemon_type: DaemonType,
     pub verbosity: u8,
-    pub clear_logs: bool,
-    pub debug: bool,
+    pub debug: u8,
     pub log_path: PathBuf,
     pub pid_path: PathBuf,
     pub system_config: Arc<PathBuf>,
@@ -32,7 +31,6 @@ impl std::fmt::Display for Parameters {
                 r#"🎨 Parameters 🔍
 daemon_type:{}
 verbosity:{}
-clear_logs:{}
 debug:{}
 log_path:{}
 pid_path:{}
@@ -45,7 +43,6 @@ user configs: [{}]
                     "server"
                 },
                 self.verbosity,
-                self.clear_logs,
                 self.debug,
                 self.log_path.display(),
                 self.pid_path.display(),
@@ -66,7 +63,7 @@ impl Parameters {
     pub fn new(
         daemon_type: DaemonType,
         verbosity: u8,
-        debug: bool,
+        debug: u8,
         system_config: Option<&String>,
         user_configs: Option<ValuesRef<String>>,
     ) -> Outcome<Self> {
@@ -74,12 +71,18 @@ impl Parameters {
         Ok(Parameters {
             daemon_type: daemon_type.clone(),
             verbosity: match (debug, verbosity) {
-                (true, _) => 4,
-                (false, 0) => 2, // default to warn log level
+                (d, _) if d > 0 => 4, // if debugging -> full verbosity
+                (_, 0) => 2,          // default to warn log level  TODO: make this obsolete
                 (_, v) => v,
             },
-            clear_logs: debug,
-            debug,
+            debug: match debug {
+                1 | 2 => debug,
+                d if d > 2 => {
+                    println!("debug only has two levels");
+                    2
+                }
+                _ => 0,
+            },
             log_path: Self::get_log_path(debug, &daemon_type),
             pid_path: Self::get_pid_path(debug, &daemon_type),
             system_config: match daemon_type {
@@ -93,16 +96,16 @@ impl Parameters {
         })
     }
 
-    fn create_log_dir(debug: bool) -> Outcome<()> {
-        let path = if debug {
+    fn create_log_dir(debug: u8) -> Outcome<()> {
+        let path = if debug >= 1 {
             Path::new("/tmp/sinkd")
         } else {
             Path::new("/var/log/sinkd")
         };
 
         if !path.exists() {
-            if !debug && !config::have_permissions() {
-                return bad!("Need elevated permissions to create /var/sinkd/");
+            if debug == 0 && !config::have_permissions() {
+                return bad!("Need elevated permissions to create {}", path.display());
             }
             match fs::create_dir_all(path) {
                 Ok(()) => Ok(()),
@@ -113,21 +116,29 @@ impl Parameters {
         }
     }
 
-    fn get_log_path(debug: bool, daemon_type: &DaemonType) -> PathBuf {
-        match (debug, daemon_type) {
-            (true, DaemonType::Client) => PathBuf::from("/tmp/sinkd/client.log"),
-            (true, DaemonType::Server) => PathBuf::from("/tmp/sinkd/server.log"),
-            (false, DaemonType::Client) => PathBuf::from("/var/log/sinkd/client.log"),
-            (false, DaemonType::Server) => PathBuf::from("/var/log/sinkd/server.log"),
+    fn get_log_path(debug: u8, daemon_type: &DaemonType) -> PathBuf {
+        let base_dir = if debug > 0 {
+            "/tmp/sinkd"
+        } else {
+            "/var/log/sinkd"
+        };
+
+        match daemon_type {
+            DaemonType::Client => PathBuf::from(format!("{}/client.log", base_dir)),
+            DaemonType::Server => PathBuf::from(format!("{}/server.log", base_dir)),
         }
     }
 
-    fn get_pid_path(debug: bool, daemon_type: &DaemonType) -> PathBuf {
-        match (debug, daemon_type) {
-            (true, DaemonType::Client) => PathBuf::from("/tmp/sinkd/client.pid"),
-            (true, DaemonType::Server) => PathBuf::from("/tmp/sinkd/server.pid"),
-            (false, DaemonType::Client) => PathBuf::from("/var/log/sinkd/client.pid"),
-            (false, DaemonType::Server) => PathBuf::from("/var/log/sinkd/server.pid"),
+    fn get_pid_path(debug: u8, daemon_type: &DaemonType) -> PathBuf {
+        let base_dir = if debug > 0 {
+            "/tmp/sinkd"
+        } else {
+            "/var/log/sinkd"
+        };
+
+        match daemon_type {
+            DaemonType::Client => PathBuf::from(format!("{}/client.pid", base_dir)),
+            DaemonType::Server => PathBuf::from(format!("{}/server.pid", base_dir)),
         }
     }
 

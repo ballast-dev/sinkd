@@ -161,7 +161,7 @@ fn mqtt_entry(
         };
 
     // assume we are behind
-    let mut server_status = ipc::Status::NotReady(ipc::Reason::Behind);
+    let mut _status = ipc::Status::NotReady(ipc::Reason::Behind);
 
     // The server will send status updates to it's clients every 5 seconds
     loop {
@@ -176,8 +176,8 @@ fn mqtt_entry(
                     debug!("client>> got message!: {}", msg);
                     if let Ok(decoded_payload) = ipc::decode(msg.payload()) {
                         // process mqtt traffic from server
-                        server_status = decoded_payload.status;
-                        if let Err(e) = process(&event_rx, &mqtt_client, inode_map, server_status) {
+                        _status = decoded_payload.status;
+                        if let Err(e) = process(&event_rx, &mqtt_client, inode_map, _status) {
                             error!("client:mqtt_entry>> process: {}", e);
                         }
                     } else {

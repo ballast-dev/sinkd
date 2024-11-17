@@ -39,8 +39,8 @@ pub fn restart(params: &Parameters) -> Outcome<()> {
     }
 }
 
-fn create_srv_dir(debug: bool) -> Outcome<()> {
-    let path = if debug {
+fn create_srv_dir(debug: u8) -> Outcome<()> {
+    let path = if debug > 0 {
         Path::new("/tmp/sinkd/srv")
     } else if cfg!(target_os = "windows") {
         Path::new("/Program Files/sinkd/srv")
@@ -53,7 +53,7 @@ fn create_srv_dir(debug: bool) -> Outcome<()> {
     };
 
     if !path.exists() {
-        if !debug && !config::have_permissions() {
+        if debug == 0 && !config::have_permissions() {
             return bad!("Need elevated permissions to create {}", path.display());
         }
         match fs::create_dir_all(path) {
@@ -145,7 +145,7 @@ fn status_entry(
             Ok(msg) => {
                 // ! process mqtt messages
                 // need to figure out state of server before synchronizing
-                if let Ok(mut state) = state.lock() {
+                if let Ok(state) = state.lock() {
                     match *state {
                         ipc::Status::NotReady(reason) => match reason {
                             ipc::Reason::Busy => todo!(),

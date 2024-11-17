@@ -52,9 +52,11 @@ def spawn_server():
 
 
 def spawn_client():
-    # sys_cfg = CLIENT_PATH.joinpath("etc_sinkd.conf")
-    # usr_cfg = CLIENT_PATH.joinpath("sinkd.conf")
-    client = run("./target/debug/sinkd client start -d")
+    sys_cfg = CLIENT_PATH.joinpath("etc_sinkd.conf")
+    usr_cfg = CLIENT_PATH.joinpath("sinkd.conf")
+    client = run(
+        f"./target/debug/sinkd -d client start --sys-cfg {sys_cfg} --usr-cfg {usr_cfg}"
+    )
     if client.returncode != 0:
         print("test_sinkd>> ", client.stderr, client.stdout)
         exit(-1)
@@ -75,6 +77,7 @@ def run_situation():
 
 
 if __name__ == "__main__":
+    run("cargo build")
     setup_env()
     spawn_server()
     spawn_client()

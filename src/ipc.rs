@@ -10,7 +10,7 @@ use std::{
 };
 
 use crate::{
-    bad, config, ipc,
+    bad, config,
     outcome::Outcome,
     parameters::{DaemonType, Parameters},
     shiplog,
@@ -334,7 +334,7 @@ pub fn daemon(
 }
 
 pub fn end_process(params: &Parameters) -> Outcome<()> {
-    if !params.debug && !config::have_permissions() {
+    if params.debug == 0 && !config::have_permissions() {
         return bad!("Need to be root");
     }
 
@@ -395,6 +395,7 @@ pub fn push(payload: &Payload) {
     rsync(&payload.src_paths, &dest);
 }
 
+#[allow(dead_code)]
 pub fn pull(payload: &Payload) {
     let srcs: Vec<PathBuf> = payload
         .src_paths
