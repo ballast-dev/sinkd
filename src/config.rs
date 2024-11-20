@@ -204,10 +204,9 @@ pub fn get_username() -> Outcome<String> {
         .ok()
         .or(std::env::var("USERNAME").ok())
     {
-        debug!("got username: {username}");
         return Ok(username);
     }
-    bad!("Username not found")
+    bad!("USER not found")
 }
 
 // this will resolve all known paths, converts relative to absolute

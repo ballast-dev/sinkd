@@ -160,8 +160,9 @@ fn mqtt_entry(
             }
         };
 
-    // assume we are behind
-    let mut _status = ipc::Status::NotReady(ipc::Reason::Behind);
+    //// assume we are behind
+    //let mut server_status = ipc::Status::NotReady(ipc::Reason::Behind);
+    let mut cycle: u32 = 0; // WARN: maybe this should be read from disk
 
     // The server will send status updates to it's clients every 5 seconds
     loop {
@@ -171,13 +172,17 @@ fn mqtt_entry(
 
         match mqtt_rx.try_recv() {
             Ok(message) => {
-                debug!("{:?}", message);
                 if let Some(msg) = message {
-                    debug!("client>> got message!: {}", msg);
                     if let Ok(decoded_payload) = ipc::decode(msg.payload()) {
                         // process mqtt traffic from server
-                        _status = decoded_payload.status;
-                        if let Err(e) = process(&event_rx, &mqtt_client, inode_map, _status) {
+                        debug!("client>> 👍 recv: {}", decoded_payload);
+                        if let Err(e) = process(
+                            &event_rx,
+                            &mqtt_client,
+                            inode_map,
+                            decoded_payload.status,
+                            &mut cycle,
+                        ) {
                             error!("client:mqtt_entry>> process: {}", e);
                         }
                     } else {
@@ -201,20 +206,16 @@ fn mqtt_entry(
             },
         }
 
-        //if let Err(e) = process(&event_rx, &mqtt_client, inode_map, server_status) {
-        //    debug!("client:mqtt_entry>> unable to process... {e}");
-        //}
-
         // test from client to server
-        match ipc::Payload::new() {
-            Ok(mut p) => {
-                p = p.src_paths(vec![PathBuf::from("debug/path")]);
-                if let Err(e) = mqtt_client.publish(&mut p) {
-                    debug!("client:mqtt_entry>> can't publish?  {e}");
-                }
-            }
-            Err(e) => debug!("client:mqtt_entry>> unable to create payload {e}"),
-        };
+        //match ipc::Payload::new() {
+        //    Ok(mut p) => {
+        //        p = p.src_paths(vec![PathBuf::from("debug/path")]);
+        //        if let Err(e) = mqtt_client.publish(&mut p) {
+        //            debug!("client:mqtt_entry>> can't publish?  {e}");
+        //        }
+        //    }
+        //    Err(e) => debug!("client:mqtt_entry>> unable to create payload {e}"),
+        //};
 
         // TODO: add 'system_interval' to config
         std::thread::sleep(Duration::from_secs(5));
@@ -226,6 +227,7 @@ fn process(
     mqtt_client: &ipc::MqttClient,
     inode_map: &config::InodeMap,
     status: ipc::Status,
+    cycle: &mut u32,
 ) -> Outcome<()> {
     match status {
         ipc::Status::NotReady(reason) => match reason {
@@ -235,12 +237,13 @@ fn process(
                 Ok(())
             }
             ipc::Reason::Behind => {
+                debug!("client:process>> Behind synch up");
                 // let's sync up
                 let mut payload = ipc::Payload::new()?
                     .status(ipc::Status::NotReady(ipc::Reason::Behind))
                     .src_paths(inode_map.keys().cloned().collect());
 
-                ipc::push(&payload);
+                ipc::pull(&payload);
                 mqtt_client.publish(&mut payload)
             }
 
@@ -248,18 +251,25 @@ fn process(
         },
         ipc::Status::Ready => {
             debug!("client:process>> ipc::Status::Ready");
-            let mut payload = ipc::Payload::new()?;
             match filter_file_events(event_rx) {
-                Ok(filtered_paths) => payload.src_paths = filtered_paths,
-                Err(e) => return bad!("{}", e),
-            };
-            payload.cycle += 1;
-            if let Err(e) = mqtt_client.publish(&mut payload) {
-                error!("unable to publish {}", e);
-                bad!("unable to publish {}", e)
-            } else {
-                info!("published payload: {}", payload);
-                Ok(())
+                Ok(filtered_paths) => {
+                    if filtered_paths.len() > 0 {
+                        *cycle += 1;
+                        let mut payload =
+                            ipc::Payload::new()?.src_paths(filtered_paths).cycle(*cycle);
+                        if let Err(e) = mqtt_client.publish(&mut payload) {
+                            error!("unable to publish {}", e);
+                        } else {
+                            info!("published payload: {}", payload);
+                        }
+                    } else {
+                        debug!("client:process>> nothing to send");
+                    }
+                    Ok(())
+                }
+                Err(e) => {
+                    return bad!("unable to filter_paths: {}", e);
+                }
             }
         }
     }

@@ -134,7 +134,9 @@ fn status_entry(
             return bad!("server>> synch thread exited, aborting mqtt thread");
         }
 
-        let mut status_payload = ipc::Payload::new()?.status(ipc::Status::Ready);
+        let mut status_payload = ipc::Payload::new()?
+            .status(ipc::Status::Ready)
+            .dest_path("sinkd_status");
         if let Err(e) = mqtt_client.publish(&mut status_payload) {
             debug!("server:status_entry>> couldn't publish status? '{}'", e);
         }
@@ -143,7 +145,6 @@ fn status_entry(
         // and queue up rsync calls
         match mqtt_rx.try_recv() {
             Ok(msg) => {
-                // ! process mqtt messages
                 // need to figure out state of server before synchronizing
                 if let Ok(state) = state.lock() {
                     match *state {
