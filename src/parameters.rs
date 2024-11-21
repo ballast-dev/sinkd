@@ -153,12 +153,10 @@ impl Parameters {
     // else default path will be read
     fn resolve_system_config(system_config: Option<&String>) -> Outcome<Arc<PathBuf>> {
         // FIXME: need to setup "server_config" which is separate from system/user
-
         let cfg_path: PathBuf;
-
-        if system_config.is_some() {
-            println!("DEBUG>> {}", system_config.unwrap());
-            match config::resolve(system_config.unwrap()) {
+        if let Some(sys_cfg) = system_config {
+            debug!("resolve_system_config>> passed in: {}", sys_cfg);
+            match config::resolve(sys_cfg) {
                 Ok(normalized) => {
                     if normalized.is_dir() {
                         return bad!(

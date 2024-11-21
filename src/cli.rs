@@ -23,21 +23,20 @@ pub fn build_sinkd() -> Command {
 
     let system_config_arg = Arg::new("system-config")
         .help("system configuration file to use")
-        //? long help is '--help' versus '-h'
         .long_help("providing this flag will override default")
         .short('s')
         .long("sys-cfg")
-        .num_args(1);
+        .num_args(1)
+        .global(true);
 
     let user_configs_arg = Arg::new("user-configs")
         .help("user configuration file(s) to use")
-        //? long help is '--help' versus '-h'
         .long_help("providing this flag will override default")
         .short('u')
         .long("usr-cfg")
-        .num_args(1..)  // might need to reconsider this 
-        .value_delimiter(',')
-        .action(ArgAction::Append);
+        .num_args(1)
+        .action(ArgAction::Append)
+        .global(true);
 
     // composable commands
 
@@ -58,8 +57,6 @@ pub fn build_sinkd() -> Command {
         .about("Removes PATH(s) from watch list")
         .arg(&user_arg);
 
-
-    // app 
     Command::new("sinkd")
         .about("deployable cloud")
         .version(env!("CARGO_PKG_VERSION"))
@@ -79,6 +76,7 @@ pub fn build_sinkd() -> Command {
         .subcommand(Command::new("server")
             .about("manage sinkd server")
             .visible_alias("s")
+            // TODO: add 'server_config'
             .subcommand(Command::new("start")
                 .about("start the server daemon")
             )
@@ -96,11 +94,9 @@ pub fn build_sinkd() -> Command {
             .args([&system_config_arg, &user_configs_arg])
             .subcommand(Command::new("start")
                 .about("start the client daemon")
-                .args([&system_config_arg, &user_configs_arg])
             )
             .subcommand(Command::new("restart")
                 .about("restart the client daemon")
-                .args([&system_config_arg, &user_configs_arg])
             )
             .subcommand(Command::new("stop")
                 .about("stop the client daemon")
@@ -115,6 +111,7 @@ pub fn build_sinkd() -> Command {
                 .help("show tracked files on server")
                 .conflicts_with("path")
             )
+            .args([&system_config_arg, &user_configs_arg])
         )
         .subcommand(Command::new("log")
             .about("show logs")

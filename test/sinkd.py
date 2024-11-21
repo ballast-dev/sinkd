@@ -52,10 +52,10 @@ def spawn_server():
 
 
 def spawn_client():
-    sys_cfg = CLIENT_PATH.joinpath("etc_sinkd.conf")
-    usr_cfg = CLIENT_PATH.joinpath("sinkd.conf")
+    sys_cfg = TLD.joinpath("test", "etc_sinkd.conf")
+    usr_cfg = TLD.joinpath("test", "sinkd.conf")
     client = run(
-        f"./target/debug/sinkd -d client start --sys-cfg {sys_cfg} --usr-cfg {usr_cfg}"
+        f"./target/debug/sinkd -d client --sys-cfg {sys_cfg} --usr-cfg {usr_cfg} start"
     )
     if client.returncode != 0:
         print("test_sinkd>> ", client.stderr, client.stdout)

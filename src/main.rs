@@ -110,13 +110,6 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    if params.verbosity >= 3 && params.daemon_type == DaemonType::Client {
-        fancy_debug!("system config: {}", params.system_config.display());
-        for user_cfg in params.user_configs.iter() {
-            fancy_debug!("user config: {}", user_cfg.display());
-        }
-    }
-
     match matches.subcommand() {
         Some(("server", submatches)) => match submatches.subcommand() {
             Some(("start", _)) => egress(server::start(&params)),

@@ -62,7 +62,7 @@ impl ShipLog {
             // _ => LevelFilter::Trace,
         });
         println!("Logging to: '{}'", params.log_path.display());
-        info!("log initialized");
+        info!("======== ⚓ log initialized ⚓ ========");
         Ok(())
     }
 
