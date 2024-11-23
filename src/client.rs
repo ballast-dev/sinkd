@@ -243,7 +243,7 @@ fn process(
                     .status(ipc::Status::NotReady(ipc::Reason::Behind))
                     .src_paths(inode_map.keys().cloned().collect());
 
-                ipc::pull(&payload);
+                pull(&payload);
                 mqtt_client.publish(&mut payload)
             }
 
@@ -333,4 +333,42 @@ fn filter_file_events(event_rx: &mpsc::Receiver<PathBuf>) -> Outcome<Vec<PathBuf
         }
     }
     Ok(event_paths)
+}
+
+fn push(payload: &ipc::Payload) {
+    let dest = PathBuf::from(format!(
+        "{}:{}",
+        payload.hostname,
+        payload.dest_path.display()
+    ));
+    debug!(
+        "pulling srcs:[{}] dest:{}",
+        payload
+            .src_paths
+            .iter()
+            .map(|p| p.display().to_string())
+            .collect::<Vec<_>>()
+            .join(", "),
+        dest.display()
+    );
+    ipc::rsync(&payload.src_paths, &dest);
+}
+
+fn pull(payload: &ipc::Payload) {
+    let srcs: Vec<PathBuf> = payload
+        .src_paths
+        .iter()
+        .map(|p| PathBuf::from(format!("{}:{}", payload.hostname, p.display())))
+        .collect();
+
+    debug!(
+        "pulling srcs:[{}] dest:{}",
+        srcs.iter()
+            .map(|p| p.display().to_string())
+            .collect::<Vec<_>>()
+            .join(", "),
+        payload.dest_path.display()
+    );
+
+    ipc::rsync(&srcs, &payload.dest_path);
 }

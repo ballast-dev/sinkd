@@ -52,9 +52,17 @@ impl fmt::Display for Status {
 /// Only time a Payload is sent is to say "new edits"
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Payload {
+    // NOTE: unneeded - all hostnames are synchronizing to a single point
+    // this will remove a dependency as well 🏝️
     pub hostname: String,
     pub username: String,
+    // TODO: need to wrap a Path in a sinkd way
+    // to showcase if it is shared or not
     pub src_paths: Vec<PathBuf>,
+    // WARN: is this even needed?
+    // the difference between srv and client is the prepend of the path
+    // client:   /the/full/path
+    // server:   /srv_dir/the/full/path
     pub dest_path: PathBuf,
     pub date: String,
     pub cycle: u32,
@@ -376,48 +384,9 @@ pub fn end_process(params: &Parameters) -> Outcome<()> {
     }
 }
 
-pub fn push(payload: &Payload) {
-    let dest = PathBuf::from(format!(
-        "{}:{}",
-        payload.hostname,
-        payload.dest_path.display()
-    ));
-    debug!(
-        "pulling srcs:[{}] dest:{}",
-        payload
-            .src_paths
-            .iter()
-            .map(|p| p.display().to_string())
-            .collect::<Vec<_>>()
-            .join(", "),
-        dest.display()
-    );
-    rsync(&payload.src_paths, &dest);
-}
-
-#[allow(dead_code)]
-pub fn pull(payload: &Payload) {
-    let srcs: Vec<PathBuf> = payload
-        .src_paths
-        .iter()
-        .map(|p| PathBuf::from(format!("{}:{}", payload.hostname, p.display())))
-        .collect();
-
-    debug!(
-        "pulling srcs:[{}] dest:{}",
-        srcs.iter()
-            .map(|p| p.display().to_string())
-            .collect::<Vec<_>>()
-            .join(", "),
-        payload.dest_path.display()
-    );
-
-    rsync(&srcs, &payload.dest_path);
-}
-
 /// The synchronizing engine behind sinkd
 /// Payload has src_paths and dest_path
-fn rsync<P: AsRef<OsStr>>(srcs: &Vec<P>, dest: &P) {
+pub fn rsync<P: AsRef<OsStr>>(srcs: &Vec<P>, dest: &P) {
     // need to account for shared folders
     // and local sync? maybe useful for testing
     let mut cmd = std::process::Command::new("rsync"); // have to bind at .new()
@@ -436,40 +405,3 @@ fn rsync<P: AsRef<OsStr>>(srcs: &Vec<P>, dest: &P) {
         Ok(o) => debug!("called rsync! {:#?}", o),
     }
 }
-
-/*
-use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
-use nix::unistd::{fork, ForkResult};
-
-pub fn detach() {
-    // TODO: need packager to setup file with correct permisions
-
-    match unsafe { fork() } {
-        Ok(ForkResult::Parent { child, .. }) => {
-            let start_time = Instant::now();
-            let timeout = Duration::from_secs(2);
-
-            while start_time.elapsed() < timeout {
-                match waitpid(child, Some(WaitPidFlag::WNOHANG)) {
-                    Ok(status) => match status {
-                        WaitStatus::Exited(_, _) => return bad!("client encountered error"),
-                        _ => (),
-                    },
-                    Err(e) => eprintln!("Failed to wait on child?: {}", e),
-                }
-                std::thread::sleep(Duration::from_secs(1));
-            }
-            println!("spawned, logging to '{}'", params.log_path.display());
-            Ok(())
-        }
-        Ok(ForkResult::Child) => {
-            info!("about to start daemon...");
-            //TODO: pass in a function pointer
-            init(params)
-        }
-        Err(_) => {
-            bad!("Failed to fork process")
-        }
-    }
-}
-*/
