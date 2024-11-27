@@ -185,7 +185,9 @@ fn mqtt_entry(
                                 match ipc::decode(msg.payload()) {
                                     Ok(p) => {
                                         debug!("server:mqtt_entry>> ⛵ decoded ⛵");
-                                        synch_tx.send(p);
+                                        if let Err(e) = synch_tx.send(p) {
+                                            error!("server:synch_entry>> '{}'", e);
+                                        }
                                     }
                                     Err(e) => {
                                         debug!("server:mqtt_entry>> unable to decode 😦>> '{}'", e)
@@ -273,7 +275,6 @@ fn publish(mqtt_client: &mqtt::Client, msg: &str) {
 }
 
 fn synchronize(payload: &ipc::Payload, srv_dir: &PathBuf) {
-    // full_path/...  srv_dir/user/full_path/...
-    let dest = PathBuf::from(format!("{}/{}/", &srv_dir.display(), &payload.username,));
+    let dest = PathBuf::from(format!("{}/", &srv_dir.display()));
     ipc::rsync(&payload.src_paths, &dest);
 }

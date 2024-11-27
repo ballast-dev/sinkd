@@ -8,31 +8,31 @@ use std::{
                      //time::{Duration, Instant},
 };
 
-use crate::{config, outcome::Outcome, parameters::Parameters};
+use crate::{config, outcome::Outcome, parameters::Parameters, time};
 
 //const TEN_MEGABYTES: u64 = (1024 ^ 2) * 10;
 
-#[link(name = "timestamp", kind = "static")]
-extern "C" {
-    fn timestamp(ret_str: *mut c_char, size: c_uint, fmt_str: *const c_char);
-}
+// #[link(name = "timestamp", kind = "static")]
+// extern "C" {
+//     fn timestamp(ret_str: *mut c_char, size: c_uint, fmt_str: *const c_char);
+// }
 
-pub fn get_timestamp(fmt_str: &str) -> String {
-    const TIMESTAMP_LENGTH: usize = 25;
-    let mut buffer = vec![0u8; TIMESTAMP_LENGTH];
+// pub fn get_timestamp(fmt_str: &str) -> String {
+//     const TIMESTAMP_LENGTH: usize = 25;
+//     let mut buffer = vec![0u8; TIMESTAMP_LENGTH];
 
-    let ret_ptr = buffer.as_mut_ptr().cast::<c_char>();
-    let c_fmt_str = CString::new(fmt_str.as_bytes()).expect("failed to create CString");
+//     let ret_ptr = buffer.as_mut_ptr().cast::<c_char>();
+//     let c_fmt_str = CString::new(fmt_str.as_bytes()).expect("failed to create CString");
 
-    unsafe {
-        timestamp(ret_ptr, TIMESTAMP_LENGTH as c_uint, c_fmt_str.as_ptr());
-    }
+//     unsafe {
+//         timestamp(ret_ptr, TIMESTAMP_LENGTH as c_uint, c_fmt_str.as_ptr());
+//     }
 
-    // convert buffer to CStr
-    let c_str = unsafe { CStr::from_ptr(ret_ptr) };
-    // convert CStr to Rust String
-    c_str.to_string_lossy().into_owned()
-}
+//     // convert buffer to CStr
+//     let c_str = unsafe { CStr::from_ptr(ret_ptr) };
+//     // convert CStr to Rust String
+//     c_str.to_string_lossy().into_owned()
+// }
 
 pub struct ShipLog {
     file: std::fs::File,
@@ -90,7 +90,7 @@ impl log::Log for ShipLog {
                     writeln!(
                         &self.file,
                         "{}[MQTT][{}]-{}",
-                        get_timestamp("%T"),
+                        time::stamp(None),
                         record.level(),
                         record.args()
                     )
@@ -104,7 +104,7 @@ impl log::Log for ShipLog {
                 writeln!(
                     &self.file,
                     "{}[{}]-{}",
-                    get_timestamp("%T"),
+                    time::stamp(None),
                     record.level(),
                     record.args()
                 )

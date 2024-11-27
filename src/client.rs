@@ -335,6 +335,7 @@ fn filter_file_events(event_rx: &mpsc::Receiver<PathBuf>) -> Outcome<Vec<PathBuf
     Ok(event_paths)
 }
 
+#[allow(dead_code)]
 fn push(payload: &ipc::Payload) {
     let dest = PathBuf::from(format!(
         "{}:{}",

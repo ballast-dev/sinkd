@@ -13,7 +13,7 @@ use crate::{
     bad, config,
     outcome::Outcome,
     parameters::{DaemonType, Parameters},
-    shiplog,
+    shiplog, time,
 };
 
 pub type Rx = mqtt::Receiver<Option<mqtt::Message>>;
@@ -165,7 +165,7 @@ impl fmt::Display for Payload {
 
 /// Adds timestamp and serializes payload for transfer
 pub fn encode(payload: &mut Payload) -> Result<Vec<u8>, mqtt::Error> {
-    payload.date = shiplog::get_timestamp("%Y%m%d");
+    payload.date = time::stamp(Some("%Y%m%d"));
     match bincode::serialize(payload) {
         Err(e) => Err(mqtt::Error::GeneralString(format!(
             "FATAL, bincode::serialize >> {e}"
@@ -399,9 +399,8 @@ pub fn rsync<P: AsRef<OsStr>>(srcs: &Vec<P>, dest: &P) {
         .args(srcs)
         .arg(dest);
 
-    debug!("### calling rsync ###");
     match cmd.spawn() {
         Err(x) => error!("{:#?}", x),
-        Ok(o) => debug!("called rsync! {:#?}", o),
+        Ok(_) => debug!("rsync ok! 🤙🏼"),
     }
 }

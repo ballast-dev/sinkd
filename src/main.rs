@@ -23,6 +23,7 @@ mod server;
 mod shiplog;
 mod sinkd;
 mod test;
+mod time;
 
 use clap::parser::ValuesRef;
 use outcome::Outcome;
@@ -71,7 +72,7 @@ fn egress<T>(outcome: Outcome<T>) -> ExitCode {
 
 #[allow(dead_code)]
 fn main() -> ExitCode {
-    println!("timestamp {}", shiplog::get_timestamp("%T"));
+    println!("timestamp {}", time::stamp(None));
 
     let mut cli = crate::cli::build_sinkd();
     let matches = cli.get_matches_mut();
