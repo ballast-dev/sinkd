@@ -20,7 +20,7 @@ struct Anchor {
 struct SysConfig {
     server_addr: String,
     users: Vec<String>,
-    shares: Vec<Anchor>,
+    anchors: Vec<Anchor>,
 }
 
 impl SysConfig {
@@ -28,7 +28,7 @@ impl SysConfig {
         SysConfig {
             server_addr: String::new(),
             users: Vec::new(),
-            shares: Vec::new(),
+            anchors: Vec::new(),
         }
     }
 }
@@ -166,7 +166,8 @@ pub fn get(params: &Parameters) -> Outcome<(String, InodeMap)> {
 
     let mut inode_map: InodeMap = HashMap::new();
 
-    for anchor in &parser.sys.shares {
+    // TODO: can a path be a file?
+    for anchor in &parser.sys.anchors {
         inode_map.entry(anchor.path.clone()).or_insert(Inode {
             excludes: anchor.excludes.clone(),
             interval: Duration::from_secs(anchor.interval),

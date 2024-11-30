@@ -2,9 +2,6 @@ target/
 **/*.rs.bk
 **/*.DS_Store
 
-test/client/
-!test/client/*.conf
-test/server/
-!test/server/*.conf
+test/
 .venv/
 __pycache__/

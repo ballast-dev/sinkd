@@ -52,8 +52,8 @@ def spawn_server():
 
 
 def spawn_client():
-    sys_cfg = TLD.joinpath("test", "etc_sinkd.conf")
-    usr_cfg = TLD.joinpath("test", "sinkd.conf")
+    sys_cfg = TLD.joinpath("sinkd_test", "etc_sinkd.conf")
+    usr_cfg = TLD.joinpath("sinkd_test", "sinkd.conf")
     client = run(
         f"./target/debug/sinkd -d client --sys-cfg {sys_cfg} --usr-cfg {usr_cfg} start"
     )
