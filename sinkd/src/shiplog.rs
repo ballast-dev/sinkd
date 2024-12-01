@@ -42,7 +42,9 @@ impl ShipLog {
     fn new(params: &Parameters) -> Self {
         ShipLog {
             file: OpenOptions::new()
-                .append(true)
+                .write(true)
+                .append(params.debug == 0)
+                .truncate(params.debug > 0)
                 .create(true)
                 .open(&params.log_path)
                 .expect("couldn't create log file"),
@@ -155,9 +157,8 @@ fn create_log_file(params: &Parameters) -> Outcome<()> {
         return bad!("Need to be root to create log file");
     }
 
-    if !params.log_path.exists() && params.debug >= 1 {
+    if !params.log_path.exists() && params.debug > 0 {
         if let Err(why) = std::fs::File::create(&params.log_path) {
-            // truncates file if exists
             return bad!(
                 "cannot create '{}' {}",
                 params.log_path.display(),

@@ -286,5 +286,19 @@ fn publish(mqtt_client: &mqtt::Client, msg: &str) {
 
 fn synchronize(payload: &ipc::Payload, srv_dir: &PathBuf) {
     let dest = PathBuf::from(format!("{}/", &srv_dir.display()));
+    //let srcs: Vec<PathBuf> = payload
+    //    .src_paths
+    //    .iter()
+    //    .map(|p| PathBuf::from(format!("{}:{}", payload.hostname, p.display())))
+    //    .collect();
+
+    //debug!(
+    //    "pulling srcs:[{}] dest:{}",
+    //    srcs.iter()
+    //        .map(|p| p.display().to_string())
+    //        .collect::<Vec<_>>()
+    //        .join(", "),
+    //    payload.dest_path.display()
+    //);
     ipc::rsync(&payload.src_paths, &dest);
 }

@@ -393,7 +393,10 @@ pub fn end_process(params: &Parameters) -> Outcome<()> {
 
 /// The synchronizing engine behind sinkd
 /// Payload has src_paths and dest_path
-pub fn rsync<P: AsRef<OsStr>>(srcs: &Vec<P>, dest: &P) {
+pub fn rsync<P>(srcs: &Vec<P>, dest: &P)
+where
+    P: AsRef<OsStr> + AsRef<Path> + std::fmt::Debug,
+{
     // need to account for shared folders
     // and local sync? maybe useful for testing
     let mut cmd = std::process::Command::new("rsync"); // have to bind at .new()
@@ -408,6 +411,6 @@ pub fn rsync<P: AsRef<OsStr>>(srcs: &Vec<P>, dest: &P) {
 
     match cmd.spawn() {
         Err(x) => error!("{:#?}", x),
-        Ok(_) => debug!("rsync ok! 🤙🏼"),
+        Ok(_) => debug!("rsync {:#?} {:#?} 🤙", srcs, dest),
     }
 }
