@@ -1,6 +1,6 @@
 use nix::sys::signal::{kill, Signal};
 use nix::unistd::Pid;
-use paho_mqtt as mqtt;
+use paho_mqtt::{self as mqtt, MQTT_VERSION_3_1_1, MQTT_VERSION_5, MQTT_VERSION_DEFAULT};
 use serde::{Deserialize, Serialize};
 use std::{
     ffi::OsStr,
@@ -197,8 +197,10 @@ impl MqttClient {
         //    .map_err(|_| mqtt::Error::GeneralString(String::from("unable to get hostname")))?;
         let opts = mqtt::CreateOptionsBuilder::new()
             .server_uri(resolve_host(host)?)
+            .mqtt_version(MQTT_VERSION_3_1_1) // this is default
             // TODO: should pass params
             //.client_id(hostname)  // MUST BE UNIQUE
+            .persistence(None)
             .finalize();
         let cli = mqtt::Client::new(opts)?;
 
@@ -215,7 +217,7 @@ impl MqttClient {
             .will_message(lwt)
             .finalize();
 
-        let qos = vec![1; subscriptions.len()]; // Ensure QoS length matches subscriptions
+        let qos = vec![0; subscriptions.len()]; // Ensure QoS length matches subscriptions
 
         debug!(
             "Connecting to MQTT broker at host: {}, subscriptions: [{}], publish_topic: {}",
@@ -262,7 +264,7 @@ impl MqttClient {
         match self.client.publish(mqtt::Message::new(
             &self.publish_topic,
             encode(payload)?,
-            mqtt::QOS_1, // at least once
+            mqtt::QOS_0, // at least once
         )) {
             Ok(()) => {
                 info!("published payload: {}", payload);
@@ -273,6 +275,11 @@ impl MqttClient {
                 bad!("could not publish payload {}, {}", payload, e)
             }
         }
+    }
+
+    pub fn disconnect(&self) {
+        debug!("disconnecting from mqtt...");
+        self.client.disconnect(None).expect("cannot disconnect?");
     }
 }
 

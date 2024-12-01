@@ -33,8 +33,7 @@ pub fn start(params: &Parameters) -> Outcome<()> {
 }
 
 pub fn stop(params: &Parameters) -> Outcome<()> {
-    ipc::end_process(params)?;
-    Ok(())
+    ipc::end_process(params)
 }
 
 pub fn restart(params: &Parameters) -> Outcome<()> {
@@ -90,8 +89,11 @@ fn init(params: &Parameters) -> Outcome<()> {
     let state = Arc::new(Mutex::new(ipc::Status::Ready));
     let state2 = Arc::clone(&state);
 
+    let term_signal = Arc::new(AtomicBool::new(false));
+    signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&term_signal))?;
+
     let mqtt_thread = thread::spawn(move || {
-        if let Err(err) = mqtt_entry(synch_tx, &FATAL_FLAG, bcast_cycle, state) {
+        if let Err(err) = mqtt_entry(synch_tx, &FATAL_FLAG, bcast_cycle, state, term_signal) {
             error!("{}", err);
         }
     });
@@ -128,6 +130,7 @@ fn mqtt_entry(
     fatal_flag: &AtomicBool,
     cycle: Arc<Mutex<i32>>,
     state: Arc<Mutex<ipc::Status>>,
+    term_signal: Arc<AtomicBool>,
 ) -> Outcome<()> {
     let (mqtt_client, mqtt_rx): (ipc::MqttClient, ipc::Rx) =
         match ipc::MqttClient::new(Some("localhost"), &["sinkd/clients"], "sinkd/server") {
@@ -139,8 +142,14 @@ fn mqtt_entry(
         };
 
     loop {
+        if term_signal.load(Ordering::Relaxed) {
+            mqtt_client.disconnect();
+            info!("server:mqtt_entry>> terminated");
+            fatal_flag.store(true, Ordering::SeqCst);
+        }
+
         if fatal_flag.load(Ordering::SeqCst) {
-            return bad!("server>> synch thread exited, aborting mqtt thread");
+            return bad!("server:mqtt_entry>> fatal condition, aborting");
         }
 
         let mut status_payload = ipc::Payload::new()?
@@ -208,7 +217,7 @@ fn mqtt_entry(
                         }
                     }
                 } else {
-                    fatal_flag.load(Ordering::SeqCst);
+                    fatal_flag.store(true, Ordering::SeqCst);
                     error!("state lock busted");
                 }
             }
@@ -239,7 +248,7 @@ fn synch_entry(
 ) -> Outcome<()> {
     loop {
         if fatal_flag.load(Ordering::SeqCst) {
-            return bad!("server>> mqtt_thread exited, aborting synch thread");
+            return bad!("server:synch_entry>> fatal condition, aborting");
         }
         // blocking call
         match synch_rx.recv() {

@@ -12,15 +12,15 @@ use crate::{bad, outcome::Outcome, parameters::Parameters};
 #[derive(Debug, Serialize, Deserialize)]
 struct Anchor {
     path: PathBuf,
-    interval: u64,
-    excludes: Vec<String>,
+    interval: Option<u64>,
+    excludes: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 struct SysConfig {
     server_addr: String,
     users: Vec<String>,
-    anchors: Vec<Anchor>,
+    anchors: Option<Vec<Anchor>>,
 }
 
 impl SysConfig {
@@ -28,7 +28,7 @@ impl SysConfig {
         SysConfig {
             server_addr: String::new(),
             users: Vec::new(),
-            anchors: Vec::new(),
+            anchors: Some(Vec::new()),
         }
     }
 }
@@ -166,20 +166,23 @@ pub fn get(params: &Parameters) -> Outcome<(String, InodeMap)> {
 
     let mut inode_map: InodeMap = HashMap::new();
 
-    // TODO: can a path be a file?
-    for anchor in &parser.sys.anchors {
-        inode_map.entry(anchor.path.clone()).or_insert(Inode {
-            excludes: anchor.excludes.clone(),
-            interval: Duration::from_secs(anchor.interval),
-            last_event: Instant::now(),
-            event: false,
-        });
-    }
     for cfg in parser.users.values() {
         for anchor in &cfg.anchors {
+            // let excludes = anchor.excludes.is_some().or()
             inode_map.entry(anchor.path.clone()).or_insert(Inode {
-                excludes: anchor.excludes.clone(),
-                interval: Duration::from_secs(anchor.interval),
+                excludes: anchor.excludes.clone().unwrap_or(vec![]),
+                interval: Duration::from_secs(anchor.interval.unwrap_or(5)),
+                last_event: Instant::now(),
+                event: false,
+            });
+        }
+    }
+
+    if let Some(anchors) = &parser.sys.anchors {
+        for anchor in anchors {
+            inode_map.entry(anchor.path.clone()).or_insert(Inode {
+                excludes: anchor.excludes.clone().unwrap_or(vec![]),
+                interval: Duration::from_secs(anchor.interval.unwrap_or(5)),
                 last_event: Instant::now(),
                 event: false,
             });

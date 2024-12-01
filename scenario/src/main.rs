@@ -2,6 +2,8 @@ mod env;
 mod event;
 
 use log::{error, info};
+use std::{fs, thread};
+use std::io::Write;
 use std::process::{Child, Command, Stdio};
 use std::thread::sleep;
 use std::time::Duration;
@@ -39,12 +41,20 @@ fn build_sinkd() -> Result<(), String> {
 /// Runs the testing scenario by manipulating files.
 fn run_scenario(env: &Environment) -> Result<(), String> {
     info!("Running test situation...");
+    let single_file_path = env.repo_root.join("test").join("single_file");
+    let mut single_file =  fs::File::create(&single_file_path).expect(
+            &format!("Failed to create file {:?}", &single_file_path.display())
+        );
+
     let folder1 = env.client_path.join("folder1");
     env::remove_subfiles(&folder1)?;
     event::create_files(&folder1, 3, 0.5).expect("Failed to create files in folder1");
+
     let folder2 = env.client_path.join("folder2");
     env::remove_subfiles(&folder2)?;
     event::create_files(&folder2, 10, 1.0).expect("Failed to create files in folder2");
+    
+    fs::File::write(&mut single_file, b"thingy").expect("cannot write to file");
 
     info!("==>> Finished client situation <<==");
     Ok(())
@@ -101,6 +111,8 @@ fn stop_sinkd() -> Result<(), String> {
             client_status
         ));
     }
+    
+    thread::sleep(Duration::from_secs(3));
 
     let server_status = Command::new("../sinkd/target/debug/sinkd")
         .arg("-d")

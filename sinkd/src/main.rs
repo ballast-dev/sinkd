@@ -1,14 +1,12 @@
 extern crate clap;
 extern crate crossbeam;
 extern crate notify;
-extern crate regex;
 extern crate serde;
 extern crate toml;
 #[macro_use(debug, info, warn, error)]
 extern crate log;
 extern crate libc;
 extern crate nix;
-extern crate rpassword;
 
 #[macro_use]
 mod cli;

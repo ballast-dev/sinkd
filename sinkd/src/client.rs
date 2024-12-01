@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
-        mpsc,
+        mpsc, Arc,
     },
     thread,
     time::{Duration, Instant},
@@ -51,27 +51,23 @@ fn init(params: &Parameters) -> Outcome<()> {
         Err(e) => return bad!("{}", e),
     };
 
-    // watch file events
+    let term_signal = Arc::new(AtomicBool::new(false));
+    signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&term_signal))?;
+
     let watch_thread =
         thread::spawn(move || watch_entry(&mut inode_map, notify_rx, event_tx, &FATAL_FLAG));
 
-    // listen to messages from server
-    let mqtt_thread =
-        thread::spawn(
-            move || match mqtt_entry(&srv_addr, &inode_map2, event_rx, &FATAL_FLAG) {
-                Ok(()) => Ok(()),
-                Err(e) => {
-                    error!("client>> FATAL condition in mqtt_entry, {}", e);
-                    Err(e)
-                }
-            },
-        );
+    let mqtt_thread = thread::spawn(move || {
+        mqtt_entry(&srv_addr, &inode_map2, event_rx, &FATAL_FLAG, term_signal)
+    });
 
-    watch_thread.join().unwrap();
-    match mqtt_thread.join().unwrap() {
-        Err(e) => Err(e),
-        Ok(()) => Ok(()),
+    if let Err(e) = watch_thread.join().unwrap() {
+        error!("{}", e);
     }
+    if let Err(e) = mqtt_thread.join().unwrap() {
+        error!("{}", e);
+    }
+    Ok(())
 }
 
 // This will check the event path against the known paths passed at config time
@@ -105,10 +101,10 @@ fn watch_entry(
     notify_rx: mpsc::Receiver<DebouncedEvent>,
     event_tx: mpsc::Sender<PathBuf>,
     fatal_flag: &AtomicBool,
-) {
+) -> Outcome<()> {
     loop {
         if fatal_flag.load(Ordering::SeqCst) {
-            break;
+            return bad!("client:watch_entry>> fatal condition, aborting");
         }
 
         // blocking call
@@ -148,6 +144,7 @@ fn mqtt_entry(
     inode_map: &config::InodeMap,
     event_rx: mpsc::Receiver<PathBuf>,
     fatal_flag: &AtomicBool,
+    term_signal: Arc<AtomicBool>,
 ) -> Outcome<()> {
     let _payload = ipc::Payload::new();
 
@@ -166,6 +163,12 @@ fn mqtt_entry(
 
     // The server will send status updates to it's clients every 5 seconds
     loop {
+        if term_signal.load(Ordering::Relaxed) {
+            mqtt_client.disconnect();
+            info!("client:mqtt_entry>> terminated");
+            fatal_flag.store(true, Ordering::SeqCst);
+        }
+
         if fatal_flag.load(Ordering::SeqCst) {
             return bad!("client:mqtt_entry>> exit condition reached in watch thread");
         }
