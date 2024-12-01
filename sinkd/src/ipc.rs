@@ -1,6 +1,6 @@
 use nix::sys::signal::{kill, Signal};
 use nix::unistd::Pid;
-use paho_mqtt::{self as mqtt, MQTT_VERSION_3_1_1, MQTT_VERSION_5, MQTT_VERSION_DEFAULT};
+use paho_mqtt::{self as mqtt, MQTT_VERSION_3_1_1};
 use serde::{Deserialize, Serialize};
 use std::{
     ffi::OsStr,

@@ -5,7 +5,7 @@
 use paho_mqtt as mqtt;
 use std::{
     fs,
-    path::{Path, PathBuf},
+    path::PathBuf,
     process,
     sync::{
         atomic::{AtomicBool, Ordering},

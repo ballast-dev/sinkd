@@ -1,8 +1,7 @@
-use libc::{c_char, c_uint};
 use log::{Level, LevelFilter, Metadata, Record};
 use std::io::prelude::*;
 use std::{
-    ffi::{CStr, CString},
+    ffi::CString,
     fs::OpenOptions, // for writeln!
                      //path::PathBuf,
                      //time::{Duration, Instant},
