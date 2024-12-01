@@ -4,6 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+#[allow(dead_code)]
 pub struct Environment {
     pub repo_root: PathBuf,
     pub client_config: PathBuf,

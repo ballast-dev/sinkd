@@ -125,6 +125,7 @@ fn init(params: &Parameters) -> Outcome<()> {
 //}
 
 //? This thread is to ensure no lost messages from mqtt
+#[allow(unused_variables)]
 fn mqtt_entry(
     synch_tx: mpsc::Sender<ipc::Payload>,
     fatal_flag: &AtomicBool,

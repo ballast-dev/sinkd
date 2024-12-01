@@ -19,6 +19,7 @@ struct LastSync {
     cycle: u32,
 }
 
+#[allow(dead_code)]
 impl LastSync {
     pub fn new() -> Self {
         LastSync {
@@ -32,6 +33,7 @@ impl LastSync {
 }
 
 /// Function to read LastSync from a given file path
+#[allow(dead_code)]
 fn read_last_sync<S>(path: &S) -> Outcome<LastSync>
 where
     S: AsRef<std::ffi::OsStr> + AsRef<Path>,
@@ -56,6 +58,7 @@ where
 }
 
 /// Function to write LastSync to a given file path
+#[allow(dead_code)]
 fn write_last_sync<S>(path: &S, last_sync: &LastSync) -> Outcome<()>
 where
     S: AsRef<std::ffi::OsStr> + AsRef<Path>,
@@ -68,17 +71,16 @@ where
 }
 
 /// Function to read 'lastsync' or create it if it doesn't exist
+#[allow(dead_code)]
 fn last_sync<S>(path: &S) -> Outcome<LastSync>
 where
     S: AsRef<std::ffi::OsStr> + AsRef<Path> + ?Sized,
 {
     let path = PathBuf::from(path);
     if !path.exists() {
-        // Create the directory if it doesn't exist
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        // Create the LastSync instance with default values
         let last_sync = LastSync::new();
         write_last_sync(&path, &last_sync)?;
         return Ok(last_sync);
@@ -140,12 +142,8 @@ mod tests {
 
         let ls_updated = ls_updated.unwrap();
         println!("Updated Last Sync: {:?}", ls_updated);
-        // Assert that cycle is updated correctly
         assert_eq!(ls_updated.cycle, 5);
-        // Assert that the timestamp is as expected
         assert_eq!(ls_updated.timestamp, "2024-04-01 12:00:00");
-
-        // Clean up: remove the temporary file after the test
         fs::remove_file(&temp_path).expect("Failed to remove temporary lastsync file");
     }
 }
