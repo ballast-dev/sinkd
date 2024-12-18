@@ -2,11 +2,11 @@ mod env;
 mod event;
 
 use log::{error, info};
+use std::fs;
 use std::io::Write;
 use std::process::{Child, Command, Stdio};
 use std::thread::sleep;
 use std::time::Duration;
-use std::fs;
 
 use env::Environment;
 
@@ -14,7 +14,7 @@ fn main() -> Result<(), String> {
     env_logger::init();
     build_sinkd().expect("Failed to build sinkd");
     let env = Environment::setup();
-    let server = spawn_server().expect("Failed to spawn server");
+    let server = spawn_server();
     let client = spawn_client(&env);
     run_scenario(&env).expect("Failed to run the situation");
     sleep(Duration::from_secs(10)); // for the server to pick up the change
@@ -63,7 +63,7 @@ fn run_scenario(env: &Environment) -> Result<(), String> {
 }
 
 /// Spawns the sinkd server process.
-fn spawn_server() -> Result<Child, String> {
+fn spawn_server() -> Child {
     info!("Spawning sinkd server...");
     let child = Command::new("../sinkd/target/debug/sinkd") // Path to sinkd binary
         .arg("-d")
@@ -75,7 +75,7 @@ fn spawn_server() -> Result<Child, String> {
         .expect("Failed to spawn sinkd server");
     // Optional: Add a delay to ensure the server starts properly
     sleep(Duration::from_secs(2));
-    Ok(child)
+    child
 }
 
 /// Spawns the sinkd client process with specified configurations.

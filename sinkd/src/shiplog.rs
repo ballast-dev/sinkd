@@ -194,19 +194,19 @@ pub fn get_pid(params: &Parameters) -> Outcome<u32> {
     }
 }
 
-pub fn set_pid(params: &Parameters, pid: u32) -> Outcome<()> {
+pub fn set_pid(params: &Parameters, child_pid: u32) -> Outcome<()> {
     if !params.pid_path.exists() {
         create_pid_file(params)?;
     }
-    if pid == 0 {
-        // if Parent process
-        unsafe {
-            // pid_file is typically set so unwrap here is safe
-            let c_str = CString::new(params.pid_path.to_str().unwrap()).unwrap();
-            // delete a name and possibly the file it refers to
-            libc::unlink(c_str.into_raw());
-        }
-    } else if let Err(e) = std::fs::write(&params.pid_path, pid.to_string()) {
+
+    unsafe {
+        // pid_file is typically set so unwrap here is safe
+        let c_str = CString::new(params.pid_path.to_str().unwrap()).unwrap();
+        // delete a name and possibly the file it refers to
+        libc::unlink(c_str.into_raw());
+    }
+
+    if let Err(e) = std::fs::write(&params.pid_path, child_pid.to_string()) {
         return bad!("couldn't write to '{}' {}", &params.pid_path.display(), e);
     }
     Ok(())

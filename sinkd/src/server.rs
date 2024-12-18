@@ -261,7 +261,10 @@ fn synch_entry(
                 // *num += 1;
                 if let Ok(state_mutex) = state.lock() {
                     match *state_mutex {
-                        ipc::Status::Ready => synchronize(&payload, &srv_dir),
+                        ipc::Status::Ready => {
+                            let dest = PathBuf::from(format!("{}/", &srv_dir.display()));
+                            ipc::rsync(&payload.src_paths, &dest)
+                        }
                         ipc::Status::NotReady(_) => {
                             info!("not ready... wait 2 secs");
                             std::thread::sleep(Duration::from_secs(2)); // should be config driven
@@ -282,23 +285,4 @@ fn publish(mqtt_client: &mqtt::Client, msg: &str) {
     if let Err(e) = mqtt_client.publish(mqtt::Message::new("sinkd/status", msg, mqtt::QOS_0)) {
         error!("server:publish >> {}", e);
     }
-}
-
-fn synchronize(payload: &ipc::Payload, srv_dir: &PathBuf) {
-    let dest = PathBuf::from(format!("{}/", &srv_dir.display()));
-    //let srcs: Vec<PathBuf> = payload
-    //    .src_paths
-    //    .iter()
-    //    .map(|p| PathBuf::from(format!("{}:{}", payload.hostname, p.display())))
-    //    .collect();
-
-    //debug!(
-    //    "pulling srcs:[{}] dest:{}",
-    //    srcs.iter()
-    //        .map(|p| p.display().to_string())
-    //        .collect::<Vec<_>>()
-    //        .join(", "),
-    //    payload.dest_path.display()
-    //);
-    ipc::rsync(&payload.src_paths, &dest);
 }
