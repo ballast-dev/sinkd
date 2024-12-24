@@ -11,13 +11,14 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{bad, config, ipc, outcome::Outcome, parameters::Parameters};
+use crate::{bad, config, ipc, outcome::Outcome, parameters::Parameters, shiplog};
 
 static FATAL_FLAG: AtomicBool = AtomicBool::new(false);
 
 pub fn start(params: &Parameters) -> Outcome<()> {
     ipc::start_mosquitto()?;
-    ipc::daemon(init, "client", params)
+    println!("logging to: {}", params.log_path.display());
+    ipc::daemon(init, params)
 }
 
 pub fn stop(params: &Parameters) -> Outcome<()> {
@@ -34,7 +35,9 @@ pub fn restart(params: &Parameters) -> Outcome<()> {
     }
 }
 
+// Daemonized call, stdin/stdout/stderr are closed
 fn init(params: &Parameters) -> Outcome<()> {
+    shiplog::init(&params)?;
     let (srv_addr, mut inode_map) = config::get(params)?;
 
     let (notify_tx, notify_rx): (mpsc::Sender<DebouncedEvent>, mpsc::Receiver<DebouncedEvent>) =

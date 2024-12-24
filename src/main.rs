@@ -105,11 +105,6 @@ fn main() -> ExitCode {
         println!("{}", &params);
     }
 
-    if let Err(e) = ShipLog::init(&params) {
-        println!("shiplog error: {e}");
-        return ExitCode::FAILURE;
-    }
-
     match matches.subcommand() {
         Some(("server", submatches)) => match submatches.subcommand() {
             Some(("start", _)) => egress(server::start(&params)),

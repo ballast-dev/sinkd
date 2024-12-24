@@ -1,7 +1,12 @@
 use nix::sys::signal::{kill, Signal};
 use nix::unistd::Pid;
+use nix::unistd::{fork, setsid, ForkResult};
 use paho_mqtt::{self as mqtt, MQTT_VERSION_3_1_1};
 use serde::{Deserialize, Serialize};
+use std::fs::File;
+use std::os::fd::IntoRawFd;
+
+use std::process;
 use std::{
     ffi::OsStr,
     fmt,
@@ -310,41 +315,75 @@ pub fn start_mosquitto() -> Outcome<()> {
     Ok(())
 }
 
-pub fn daemon(
-    func: fn(&Parameters) -> Outcome<()>,
-    app_type: &str,
-    params: &Parameters,
-) -> Outcome<()> {
-    use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
-    use nix::unistd::{fork, ForkResult};
-
+// Double Forking:
+//   Ensures that the final daemon process is detached from the terminal and reparented to the init system.
+// Create a New Session (setsid):
+//   Detaches the process from the controlling terminal and prevents it from acquiring a new one.
+// Ignore SIGHUP:
+//   Prevents the daemon from being terminated if the terminal session that launched it is closed.
+// Change Working Directory to Root (/):
+//   Prevents the daemon from holding any directory in use, which might block unmounting or other operations.
+// Reset File Mode Creation Mask (umask):
+//   Ensures predictable file permissions (e.g., 0o022 ensures files are group- and world-readable).
+// Redirect Standard Streams to /dev/null:
+//   Ensures that stdin, stdout, and stderr are detached from the terminal and safely discarded.
+// Close All Open File Descriptors:
+//   Ensures the daemon does not accidentally hold onto any unnecessary file descriptors.
+//   The range 3..1024 covers typical file descriptors, assuming the daemon does not use a higher range.
+pub fn daemon(func: fn(&Parameters) -> Outcome<()>, params: &Parameters) -> Outcome<()> {
     match unsafe { fork() } {
-        Ok(ForkResult::Parent { child, .. }) => {
-            let start_time = Instant::now();
-            let timeout = Duration::from_secs(2);
-
-            while start_time.elapsed() < timeout {
-                match waitpid(child, Some(WaitPidFlag::WNOHANG)) {
-                    Ok(status) => match status {
-                        WaitStatus::Exited(_, _) => {
-                            return bad!(format!("{} encountered error", app_type))
-                        }
-                        _ => shiplog::set_pid(params, child.as_raw() as u32)?,
-                    },
-                    Err(e) => eprintln!("Failed to wait on child?: {e}"),
-                }
-                std::thread::sleep(Duration::from_secs(1));
-            }
-            println!("spawned, logging to '{}'", params.log_path.display());
-            Ok(())
+        Ok(ForkResult::Parent { .. }) => {
+            process::exit(0);
         }
         Ok(ForkResult::Child) => {
-            info!("about to start daemon...");
-            func(params)
+            if setsid().is_err() {
+                // to detach from controlling terminal
+                return bad!("ipc::daemon>> Failed to create a new session");
+            }
+
+            // Ignore SIGHUP (hangup signal) to ensure daemon is not terminated accidentally
+            unsafe {
+                libc::signal(libc::SIGHUP, libc::SIG_IGN);
+            }
+
+            // Second fork
+            match unsafe { fork() } {
+                Ok(ForkResult::Parent { .. }) => {
+                    // Intermediate parent exits immediately
+                    process::exit(0);
+                }
+                // Grandchild (true daemon)
+                Ok(ForkResult::Child) => {
+                    // Change working directory to root to avoid locking directories
+                    if let Err(e) = std::env::set_current_dir("/") {
+                        return bad!(format!("Failed to change working directory to root: {e}"));
+                    }
+
+                    // Reset file mode creation mask
+                    unsafe {
+                        libc::umask(0o022);
+                    }
+
+                    // Redirect stdin, stdout, and stderr to /dev/null
+                    let devnull = File::open("/dev/null").expect("Failed to open /dev/null");
+                    unsafe {
+                        let devnull_fd = devnull.into_raw_fd();
+                        libc::dup2(devnull_fd, libc::STDIN_FILENO);
+                        libc::dup2(devnull_fd, libc::STDOUT_FILENO);
+                        libc::dup2(devnull_fd, libc::STDERR_FILENO);
+                    }
+
+                    // Close all other file descriptors
+                    for fd in 3..1024 {
+                        let _ = unsafe { libc::close(fd) };
+                    }
+
+                    func(params) // daemonized 😈
+                }
+                Err(_) => bad!("Second fork failed"),
+            }
         }
-        Err(_) => {
-            bad!("Failed to fork process")
-        }
+        Err(_) => bad!("First fork failed"),
     }
 }
 

@@ -15,7 +15,7 @@ use std::{
     time::Duration,
 };
 
-use crate::{config, ipc, outcome::Outcome, parameters::Parameters};
+use crate::{config, ipc, outcome::Outcome, parameters::Parameters, shiplog};
 
 static FATAL_FLAG: AtomicBool = AtomicBool::new(false);
 //static SRV_PATH: &str = {
@@ -29,7 +29,8 @@ static FATAL_FLAG: AtomicBool = AtomicBool::new(false);
 
 pub fn start(params: &Parameters) -> Outcome<()> {
     ipc::start_mosquitto()?;
-    ipc::daemon(init, "server", params)
+    println!("logging to: {}", params.log_path.display());
+    ipc::daemon(init, params)
 }
 
 pub fn stop(params: &Parameters) -> Outcome<()> {
@@ -74,7 +75,9 @@ fn create_srv_dir(debug: u8, path: &PathBuf) -> Outcome<()> {
     }
 }
 
+// Daemonized call, stdin/stdout/stderr are closed
 fn init(params: &Parameters) -> Outcome<()> {
+    shiplog::init(&params)?;
     let srv_dir = get_srv_dir(params.debug);
     create_srv_dir(params.debug, &srv_dir)?;
 

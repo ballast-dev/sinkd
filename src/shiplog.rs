@@ -52,21 +52,6 @@ impl ShipLog {
         }
     }
 
-    pub fn init(params: &Parameters) -> Outcome<()> {
-        create_log_file(params)?;
-        log::set_boxed_logger(Box::new(Self::new(params))).expect("unable to create logger");
-        log::set_max_level(match params.verbosity {
-            1 => LevelFilter::Error,
-            2 => LevelFilter::Warn,
-            3 => LevelFilter::Info,
-            _ => LevelFilter::Debug,
-            // _ => LevelFilter::Trace,
-        });
-        println!("Logging to: '{}'", params.log_path.display());
-        info!("======== ⚓ log initialized ⚓ ========");
-        Ok(())
-    }
-
     //fn log_rotate(mut self, path: PathBuf) {
     //    self.file.flush().expect("unable to flush log file");
     //    drop(self.file); // drop closes the file
@@ -121,6 +106,21 @@ impl log::Log for ShipLog {
     }
 
     fn flush(&self) {}
+}
+
+pub fn init(params: &Parameters) -> Outcome<()> {
+    create_log_file(params)?;
+    log::set_boxed_logger(Box::new(ShipLog::new(params))).expect("unable to create logger");
+    log::set_max_level(match params.verbosity {
+        1 => LevelFilter::Error,
+        2 => LevelFilter::Warn,
+        3 => LevelFilter::Info,
+        _ => LevelFilter::Debug,
+        // _ => LevelFilter::Trace,
+    });
+    println!("Logging to: '{}'", params.log_path.display());
+    info!("======== ⚓ log initialized ⚓ ========");
+    Ok(())
 }
 
 fn create_pid_file(params: &Parameters) -> Outcome<()> {
