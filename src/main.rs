@@ -13,6 +13,7 @@ mod cli;
 mod client;
 mod config;
 mod fancy;
+mod flags;
 mod ipc;
 #[macro_use]
 mod outcome;

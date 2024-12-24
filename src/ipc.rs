@@ -400,6 +400,9 @@ where
     // need to account for shared folders
     // and local sync? maybe useful for testing
     let mut cmd = std::process::Command::new("rsync"); // have to bind at .new()
+
+    // TODO: needs to be config driven, to fully leverage rsync's options
+    // use table below to make flags explicit
     cmd.arg("-atR") // archive, timestamps, relative
         .arg("--delete") // delete on destination if not reflected in source
         //? RSYNC options to consider
