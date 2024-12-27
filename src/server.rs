@@ -17,24 +17,6 @@ use std::{
 
 use crate::{config, ipc, outcome::Outcome, parameters::Parameters, shiplog};
 
-struct Bearing {
-    pub fatal: AtomicBool,
-    // cycle numbers in additoin to timestamps
-    // provide a more robust way to check for 'out of synch'
-    pub cycle: Mutex<i32>,
-    pub state: Mutex<ipc::Status>,
-}
-
-impl Bearing {
-    pub fn new() -> Self {
-        Self {
-            fatal: AtomicBool::new(false),
-            cycle: Mutex::new(0),
-            state: Mutex::new(ipc::Status::Ready),
-        }
-    }
-}
-
 //static SRV_PATH: &str = {
 //    #[cfg(target_os = "windows")]
 //    { "/Program Files/sinkd/srv" }
@@ -52,11 +34,9 @@ pub fn start(params: &Parameters) -> Outcome<()> {
 
 pub fn stop(params: &Parameters) -> Outcome<()> {
     let terminal_topic = format!("sinkd/{}/terminate", config::get_hostname()?);
-    let (srv_addr, _) = config::get(&params)?;
-    //ipc::end_process(params)
     if let Err(e) = std::process::Command::new("mosquitto_pub")
         .arg("-h")
-        .arg(srv_addr)
+        .arg("localhost") // server stays local
         .arg("-t")
         .arg(terminal_topic)
         .arg("-m")
@@ -108,7 +88,6 @@ fn create_srv_dir(debug: u8, path: &PathBuf) -> Outcome<()> {
 
 // Daemonized call, stdin/stdout/stderr are closed
 fn init(params: &Parameters) -> Outcome<()> {
-    shiplog::init(&params)?;
     let srv_dir = get_srv_dir(params.debug);
     create_srv_dir(params.debug, &srv_dir)?;
 
@@ -165,7 +144,7 @@ fn init(params: &Parameters) -> Outcome<()> {
 fn mqtt_entry(
     synch_tx: mpsc::Sender<ipc::Payload>,
     fatal: Arc<AtomicBool>,
-    cycle: Arc<Mutex<i32>>,
+    cycle: Arc<Mutex<u32>>,
     state: Arc<Mutex<ipc::Status>>,
 ) -> Outcome<()> {
     let terminal_topic = format!("sinkd/{}/terminate", config::get_hostname()?);
@@ -199,63 +178,41 @@ fn mqtt_entry(
         // and queue up rsync calls
         match mqtt_rx.try_recv() {
             Ok(msg) => {
-                // need to figure out state of server before synchronizing
-                if let Ok(state) = state.lock() {
-                    match *state {
-                        ipc::Status::NotReady(reason) => match reason {
-                            ipc::Reason::Busy => todo!(),
-                            ipc::Reason::Behind => todo!(),
-                            ipc::Reason::Other => todo!(),
-                        },
-                        ipc::Status::Ready => {
+                if let Some(msg) = msg {
+                    if msg.topic() == terminal_topic {
+                        debug!("client:mqtt_entry>> received terminal_topic");
+                        fatal.store(true, Ordering::Relaxed);
+                        continue;
+                    }
+                    match ipc::decode(msg.payload()) {
+                        Ok(p) => {
+                            debug!("server:mqtt_entry>> ⛵ decoded ⛵");
+
                             // TODO
                             // 1. recieve msg from client
                             // 2. if in good state switch status to "synchronizing"
                             // 3. call rsync <client> <server> <opts>
                             // 4. once finished switch state to "ready"
-                            // TODO
-                            debug!("server:mqtt_entry>> State::Ready {:?}", msg);
 
-                            //let this_cycle = match cycle.lock() {
-                            //    Ok(l) => *l,
-                            //    Err(_e) => {
-                            //        fatal_flag.load(Ordering::Relaxed);
-                            //        error!("cycle lock busted");
-                            //        return bad!("server>> cycle lock busted");
+                            //process(&synch_tx, &p, &state) {
+                            //    Ok(queue_up) => {
+                            //        if let Err(e) = synch_tx.send(p) {
+                            //            error!("server:synch_entry>> '{}'", e);
+                            //        }
                             //    }
-                            //};
-
-                            //let payload = match ipc::decode(msg.unwrap().payload()) {
-                            if let Some(msg) = msg {
-                                match ipc::decode(msg.payload()) {
-                                    Ok(p) => {
-                                        debug!("server:mqtt_entry>> ⛵ decoded ⛵");
-                                        if let Err(e) = synch_tx.send(p) {
-                                            error!("server:synch_entry>> '{}'", e);
-                                        }
-                                    }
-                                    Err(e) => {
-                                        debug!("server:mqtt_entry>> unable to decode 😦>> '{}'", e)
-                                    }
-                                };
-                            } else {
-                                debug!("server:mqtt_entry>> recv empty msg")
-                            }
-
-                            //if payload.cycle as i32 >= this_cycle {
-                            //    *state = ipc::Status::NotReady(ipc::Reason::Sinking);
-                            //    todo!("call rsync");
-                            //    if mqtt_client.publish(&mut payload).is_err() {
-                            //        unimplemented!()
+                            //    Err(e) => {
+                            //        fatal.store(true, Ordering::Relaxed);
                             //    }
-                            //    synch_tx.send(payload).unwrap(); // value moves/consumed here
                             //}
                         }
-                    }
+                        Err(e) => {
+                            debug!("server:mqtt_entry>> unable to decode 😦>> '{}'", e)
+                        }
+                    };
                 } else {
-                    fatal.store(true, Ordering::Relaxed);
-                    error!("state lock busted");
+                    debug!("server:mqtt_entry>> recv empty msg")
                 }
+                // need to figure out state of server before synchronizing
             }
             Err(err) => match err {
                 crossbeam::channel::TryRecvError::Empty => {
@@ -271,6 +228,46 @@ fn mqtt_entry(
     }
 }
 
+fn process(
+    synch_tx: mpsc::Sender<ipc::Payload>,
+    payload: ipc::Payload,
+    cycle: Arc<Mutex<u32>>,
+    state: &Mutex<ipc::Status>,
+) -> Outcome<()> {
+    if let Ok(mut state) = state.lock() {
+        match *state {
+            ipc::Status::NotReady(reason) => match reason {
+                ipc::Reason::Busy => todo!(),
+                ipc::Reason::Behind => todo!(),
+                ipc::Reason::Other => todo!(),
+            },
+            ipc::Status::Ready => {
+                let this_cycle = match cycle.lock() {
+                    Ok(l) => *l,
+                    Err(_e) => return bad!("server>> cycle lock busted"),
+                };
+
+                if payload.cycle > this_cycle {
+                    *state = ipc::Status::NotReady(ipc::Reason::Busy);
+                    //todo!("call rsync");
+                    //if mqtt_client.publish(&mut payload).is_err() {
+                    //    unimplemented!()
+                    //}
+                    if let Err(e) = synch_tx.send(payload) {
+                        bad!("server:process>> unable to send on synch_tx {}", e)
+                    } else {
+                        Ok(())
+                    }
+                } else {
+                    todo!()
+                }
+            }
+        }
+    } else {
+        bad!("state lock busted")
+    }
+}
+
 // The engine behind sinkd is rsync
 // With mqtt messages that are relevant invoke this and mirror current client
 // to this server
@@ -278,7 +275,7 @@ fn mqtt_entry(
 fn synch_entry(
     synch_rx: mpsc::Receiver<ipc::Payload>,
     fatal: Arc<AtomicBool>,
-    cycle: Arc<Mutex<i32>>,
+    cycle: Arc<Mutex<u32>>,
     state: Arc<Mutex<ipc::Status>>,
     srv_dir: PathBuf,
 ) -> Outcome<()> {

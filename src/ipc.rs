@@ -399,49 +399,6 @@ pub fn daemon(func: fn(&Parameters) -> Outcome<()>, params: &Parameters) -> Outc
     }
 }
 
-pub fn end_process(params: &Parameters) -> Outcome<()> {
-    if params.debug == 0 && !config::have_permissions() {
-        return bad!("Need to be root");
-    }
-
-    // TODO: return PID_NOT_FOUND
-    if !params.pid_path.exists() {
-        println!(
-            "sinkd {} is not running",
-            if params.daemon_type == DaemonType::Client {
-                "client"
-            } else {
-                "server"
-            }
-        );
-        return Ok(());
-    }
-
-    let pid = shiplog::get_pid(params)?;
-    let nix_pid = Pid::from_raw(pid as i32);
-
-    match kill(nix_pid, Some(Signal::SIGTERM)) {
-        Ok(()) => {
-            // Process exists and can be signaled
-            if let Err(e) = std::process::Command::new("kill")
-                .arg("-15") // SIGTERM
-                .arg(format!("{pid}"))
-                .output()
-            {
-                return bad!("Couldn't kill process {} {}", pid, e);
-            }
-            shiplog::rm_pid(params)?;
-            Ok(())
-        }
-        Err(_) => {
-            bad!(
-                "Process with PID {} does not exist or cannot be signaled",
-                pid
-            )
-        }
-    }
-}
-
 /// The synchronizing engine behind sinkd
 /// Payload has src_paths and dest_path
 pub fn rsync<P>(srcs: &Vec<P>, dest: &P)

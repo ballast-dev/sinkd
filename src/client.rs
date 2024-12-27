@@ -20,7 +20,20 @@ pub fn start(params: &Parameters) -> Outcome<()> {
 }
 
 pub fn stop(params: &Parameters) -> Outcome<()> {
-    ipc::end_process(params)
+    let terminal_topic = format!("sinkd/{}/terminate", config::get_hostname()?);
+    let (srv_addr, _) = config::get(params)?;
+    if let Err(e) = std::process::Command::new("mosquitto_pub")
+        .arg("-h")
+        .arg(srv_addr)
+        .arg("-t")
+        .arg(terminal_topic)
+        .arg("-m")
+        .arg("end")
+        .output()
+    {
+        println!("{:#?}", e);
+    }
+    Ok(())
 }
 
 pub fn restart(params: &Parameters) -> Outcome<()> {
