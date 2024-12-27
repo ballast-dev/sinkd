@@ -6,11 +6,11 @@ use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::os::fd::IntoRawFd;
 
-use std::process;
 use std::{
     ffi::OsStr,
     fmt,
     path::{Path, PathBuf},
+    //sync::{atomic::AtomicBool, Arc, Mutex},
     time::{Duration, Instant},
 };
 
@@ -53,6 +53,22 @@ impl fmt::Display for Status {
         }
     }
 }
+
+//struct Bearing {
+//    pub fatal: Arc<AtomicBool>,
+//    pub cycle: Arc<Mutex<i32>>,
+//    pub state: Arc<Mutex<Status>>,
+//}
+//
+//impl Bearing {
+//    pub fn new() -> Self {
+//        Self {
+//            fatal: Arc::new(AtomicBool::new(false)),
+//            cycle: Arc::new(Mutex::new(0)),
+//            state: Arc::new(Mutex::new(Status::Ready)),
+//        }
+//    }
+//}
 
 /// Only time a Payload is sent is to say "new edits"
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -332,9 +348,7 @@ pub fn start_mosquitto() -> Outcome<()> {
 //   The range 3..1024 covers typical file descriptors, assuming the daemon does not use a higher range.
 pub fn daemon(func: fn(&Parameters) -> Outcome<()>, params: &Parameters) -> Outcome<()> {
     match unsafe { fork() } {
-        Ok(ForkResult::Parent { .. }) => {
-            process::exit(0);
-        }
+        Ok(ForkResult::Parent { .. }) => Ok(()),
         Ok(ForkResult::Child) => {
             if setsid().is_err() {
                 // to detach from controlling terminal
@@ -348,10 +362,7 @@ pub fn daemon(func: fn(&Parameters) -> Outcome<()>, params: &Parameters) -> Outc
 
             // Second fork
             match unsafe { fork() } {
-                Ok(ForkResult::Parent { .. }) => {
-                    // Intermediate parent exits immediately
-                    process::exit(0);
-                }
+                Ok(ForkResult::Parent { .. }) => Ok(()),
                 // Grandchild (true daemon)
                 Ok(ForkResult::Child) => {
                     // Change working directory to root to avoid locking directories
@@ -378,6 +389,7 @@ pub fn daemon(func: fn(&Parameters) -> Outcome<()>, params: &Parameters) -> Outc
                         let _ = unsafe { libc::close(fd) };
                     }
 
+                    shiplog::init(&params)?;
                     func(params) // daemonized 😈
                 }
                 Err(_) => bad!("Second fork failed"),

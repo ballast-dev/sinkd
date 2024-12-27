@@ -17,7 +17,24 @@ use std::{
 
 use crate::{config, ipc, outcome::Outcome, parameters::Parameters, shiplog};
 
-static FATAL_FLAG: AtomicBool = AtomicBool::new(false);
+struct Bearing {
+    pub fatal: AtomicBool,
+    // cycle numbers in additoin to timestamps
+    // provide a more robust way to check for 'out of synch'
+    pub cycle: Mutex<i32>,
+    pub state: Mutex<ipc::Status>,
+}
+
+impl Bearing {
+    pub fn new() -> Self {
+        Self {
+            fatal: AtomicBool::new(false),
+            cycle: Mutex::new(0),
+            state: Mutex::new(ipc::Status::Ready),
+        }
+    }
+}
+
 //static SRV_PATH: &str = {
 //    #[cfg(target_os = "windows")]
 //    { "/Program Files/sinkd/srv" }
@@ -34,7 +51,21 @@ pub fn start(params: &Parameters) -> Outcome<()> {
 }
 
 pub fn stop(params: &Parameters) -> Outcome<()> {
-    ipc::end_process(params)
+    let terminal_topic = format!("sinkd/{}/terminate", config::get_hostname()?);
+    let (srv_addr, _) = config::get(&params)?;
+    //ipc::end_process(params)
+    if let Err(e) = std::process::Command::new("mosquitto_pub")
+        .arg("-h")
+        .arg(srv_addr)
+        .arg("-t")
+        .arg(terminal_topic)
+        .arg("-m")
+        .arg("end")
+        .output()
+    {
+        println!("{:#?}", e);
+    }
+    Ok(())
 }
 
 pub fn restart(params: &Parameters) -> Outcome<()> {
@@ -84,25 +115,27 @@ fn init(params: &Parameters) -> Outcome<()> {
     let (synch_tx, synch_rx): (mpsc::Sender<ipc::Payload>, mpsc::Receiver<ipc::Payload>) =
         mpsc::channel();
 
-    // cycle numbers in additoin to timestamps
-    // provide a more robust way to check for 'out of synch'
-    let bcast_cycle = Arc::new(Mutex::new(0));
-    let incr_cycle = Arc::clone(&bcast_cycle);
-
+    let fatal = Arc::new(AtomicBool::new(false));
+    signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&fatal))?;
+    let cycle = Arc::new(Mutex::new(0));
     let state = Arc::new(Mutex::new(ipc::Status::Ready));
-    let state2 = Arc::clone(&state);
 
-    let term_signal = Arc::new(AtomicBool::new(false));
-    signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&term_signal))?;
-
-    let mqtt_thread = thread::spawn(move || {
-        if let Err(err) = mqtt_entry(synch_tx, &FATAL_FLAG, bcast_cycle, state, term_signal) {
-            error!("{}", err);
+    let mqtt_thread = thread::spawn({
+        let fatal = Arc::clone(&fatal);
+        let cycle = Arc::clone(&cycle);
+        let state = Arc::clone(&state);
+        move || {
+            if let Err(err) = mqtt_entry(synch_tx, fatal, cycle, state) {
+                error!("{}", err);
+            }
         }
     });
-    let synch_thread = thread::spawn(move || {
-        if let Err(err) = synch_entry(synch_rx, &FATAL_FLAG, incr_cycle, state2, srv_dir) {
-            error!("{}", err);
+
+    let synch_thread = thread::spawn({
+        move || {
+            if let Err(err) = synch_entry(synch_rx, fatal, cycle, state, srv_dir) {
+                error!("{}", err);
+            }
         }
     });
 
@@ -131,29 +164,28 @@ fn init(params: &Parameters) -> Outcome<()> {
 #[allow(unused_variables)]
 fn mqtt_entry(
     synch_tx: mpsc::Sender<ipc::Payload>,
-    fatal_flag: &AtomicBool,
+    fatal: Arc<AtomicBool>,
     cycle: Arc<Mutex<i32>>,
     state: Arc<Mutex<ipc::Status>>,
-    term_signal: Arc<AtomicBool>,
 ) -> Outcome<()> {
-    let (mqtt_client, mqtt_rx): (ipc::MqttClient, ipc::Rx) =
-        match ipc::MqttClient::new(Some("localhost"), &["sinkd/clients"], "sinkd/server") {
-            Ok((client, rx)) => (client, rx),
-            Err(e) => {
-                fatal_flag.store(true, Ordering::SeqCst);
-                return bad!("Unable to create mqtt client, {}", e);
-            }
-        };
+    let terminal_topic = format!("sinkd/{}/terminate", config::get_hostname()?);
+    let (mqtt_client, mqtt_rx): (ipc::MqttClient, ipc::Rx) = match ipc::MqttClient::new(
+        Some("localhost"), // server always spawn on current machine
+        &["sinkd/clients", &terminal_topic],
+        "sinkd/server",
+    ) {
+        Ok((client, rx)) => (client, rx),
+        Err(e) => {
+            fatal.store(true, Ordering::Relaxed);
+            return bad!("Unable to create mqtt client, {}", e);
+        }
+    };
 
     loop {
-        if term_signal.load(Ordering::Relaxed) {
+        if fatal.load(Ordering::Relaxed) {
             mqtt_client.disconnect();
-            info!("server:mqtt_entry>> terminated");
-            fatal_flag.store(true, Ordering::SeqCst);
-        }
-
-        if fatal_flag.load(Ordering::SeqCst) {
-            return bad!("server:mqtt_entry>> fatal condition, aborting");
+            info!("server:mqtt_entry>> aborting");
+            return Ok(());
         }
 
         let mut status_payload = ipc::Payload::new()?
@@ -187,7 +219,7 @@ fn mqtt_entry(
                             //let this_cycle = match cycle.lock() {
                             //    Ok(l) => *l,
                             //    Err(_e) => {
-                            //        fatal_flag.load(Ordering::SeqCst);
+                            //        fatal_flag.load(Ordering::Relaxed);
                             //        error!("cycle lock busted");
                             //        return bad!("server>> cycle lock busted");
                             //    }
@@ -221,7 +253,7 @@ fn mqtt_entry(
                         }
                     }
                 } else {
-                    fatal_flag.store(true, Ordering::SeqCst);
+                    fatal.store(true, Ordering::Relaxed);
                     error!("state lock busted");
                 }
             }
@@ -231,7 +263,7 @@ fn mqtt_entry(
                     debug!("server>> mqtt loop...");
                 }
                 crossbeam::channel::TryRecvError::Disconnected => {
-                    fatal_flag.store(true, Ordering::SeqCst);
+                    fatal.store(true, Ordering::Relaxed);
                     return bad!("server>> mqtt_rx channel disconnected");
                 }
             },
@@ -245,15 +277,17 @@ fn mqtt_entry(
 #[allow(unused_variables)]
 fn synch_entry(
     synch_rx: mpsc::Receiver<ipc::Payload>,
-    fatal_flag: &AtomicBool,
+    fatal: Arc<AtomicBool>,
     cycle: Arc<Mutex<i32>>,
     state: Arc<Mutex<ipc::Status>>,
     srv_dir: PathBuf,
 ) -> Outcome<()> {
     loop {
-        if fatal_flag.load(Ordering::SeqCst) {
-            return bad!("server:synch_entry>> fatal condition, aborting");
+        if fatal.load(Ordering::Relaxed) {
+            info!("server:sync_entry>> aborting");
+            return Ok(());
         }
+
         // blocking call
         match synch_rx.recv() {
             Err(e) => {
@@ -274,7 +308,7 @@ fn synch_entry(
                         }
                     }
                 } else {
-                    fatal_flag.store(true, Ordering::SeqCst);
+                    fatal.store(true, Ordering::Relaxed);
                     return bad!("state mutex poisoned");
                 }
             }

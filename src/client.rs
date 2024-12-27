@@ -5,15 +5,13 @@ use std::{
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
-        mpsc, Arc,
+        mpsc, Arc, RwLock,
     },
     thread,
     time::{Duration, Instant},
 };
 
 use crate::{bad, config, ipc, outcome::Outcome, parameters::Parameters, shiplog};
-
-static FATAL_FLAG: AtomicBool = AtomicBool::new(false);
 
 pub fn start(params: &Parameters) -> Outcome<()> {
     ipc::start_mosquitto()?;
@@ -37,16 +35,11 @@ pub fn restart(params: &Parameters) -> Outcome<()> {
 
 // Daemonized call, stdin/stdout/stderr are closed
 fn init(params: &Parameters) -> Outcome<()> {
-    shiplog::init(&params)?;
-    let (srv_addr, mut inode_map) = config::get(params)?;
+    let (srv_addr, inode_map) = config::get(params)?;
 
     let (notify_tx, notify_rx): (mpsc::Sender<DebouncedEvent>, mpsc::Receiver<DebouncedEvent>) =
         mpsc::channel();
     let (event_tx, event_rx): (mpsc::Sender<PathBuf>, mpsc::Receiver<PathBuf>) = mpsc::channel();
-
-    // watch_thread needs a mutable map to assign "last event" to inode
-    // after config loads up the inode map it is treated as Read Only
-    let inode_map2 = inode_map.clone();
 
     // keep the watchers alive!
     let _watchers = match get_watchers(&inode_map, notify_tx) {
@@ -54,14 +47,22 @@ fn init(params: &Parameters) -> Outcome<()> {
         Err(e) => return bad!("{}", e),
     };
 
-    let term_signal = Arc::new(AtomicBool::new(false));
-    signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&term_signal))?;
+    let fatal = Arc::new(AtomicBool::new(false));
+    signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&fatal))?;
 
-    let watch_thread =
-        thread::spawn(move || watch_entry(&mut inode_map, notify_rx, event_tx, &FATAL_FLAG));
+    let inodes = Arc::new(RwLock::new(inode_map));
 
-    let mqtt_thread = thread::spawn(move || {
-        mqtt_entry(&srv_addr, &inode_map2, event_rx, &FATAL_FLAG, term_signal)
+    let watch_thread = thread::spawn({
+        let fatal = Arc::clone(&fatal);
+        let inode_map = Arc::clone(&inodes);
+        // watch_thread needs a mutable map to assign "last event" to inode
+        move || watch_entry(inode_map, notify_rx, event_tx, fatal)
+    });
+
+    let mqtt_thread = thread::spawn({
+        let fatal = Arc::clone(&fatal);
+        let inode_map = Arc::clone(&inodes);
+        move || mqtt_entry(&srv_addr, inode_map, event_rx, fatal)
     });
 
     if let Err(e) = watch_thread.join().unwrap() {
@@ -79,45 +80,49 @@ fn init(params: &Parameters) -> Outcome<()> {
 // to the synch queue.
 fn check_interval(
     event_path: &Path,
-    inode_map: &mut config::InodeMap,
+    inode_map: &Arc<RwLock<config::InodeMap>>,
     event_tx: &mpsc::Sender<PathBuf>,
-) {
+) -> Outcome<()> {
     // need to dynamically lookup keys and compare path names
     debug!("checking interval, event:{}", event_path.display());
-    for (inode_path, inode) in inode_map {
-        if event_path.starts_with(inode_path) {
-            let now = Instant::now();
-            let elapse = now.duration_since(inode.last_event);
-            if elapse >= inode.interval {
-                debug!("EVENT>> elapse: {}", elapse.as_secs());
-                inode.last_event = now;
-                event_tx.send(inode_path.clone()).unwrap(); // to kick off synch thread
+    if let Ok(mut inode_map) = inode_map.write() {
+        for (inode_path, inode) in inode_map.iter_mut() {
+            if event_path.starts_with(inode_path) {
+                let now = Instant::now();
+                let elapse = now.duration_since(inode.last_event);
+                if elapse >= inode.interval {
+                    debug!("EVENT>> elapse: {}", elapse.as_secs());
+                    inode.last_event = now;
+                    event_tx.send(inode_path.clone()).unwrap(); // to kick off sync thread
+                }
+                break;
             }
-            // find parent folder and let rsync delta algorithm handle the rest
-            break;
         }
+        Ok(())
+    } else {
+        return bad!("Unable to acquire RwLock for inode_map");
     }
 }
 
 fn watch_entry(
-    inode_map: &mut config::InodeMap,
+    inode_map: Arc<RwLock<config::InodeMap>>,
     notify_rx: mpsc::Receiver<DebouncedEvent>,
     event_tx: mpsc::Sender<PathBuf>,
-    fatal_flag: &AtomicBool,
+    fatal: Arc<AtomicBool>,
 ) -> Outcome<()> {
     loop {
-        if fatal_flag.load(Ordering::SeqCst) {
-            return bad!("client:watch_entry>> fatal condition, aborting");
+        if fatal.load(Ordering::Relaxed) {
+            info!("client:watch_entry>> aborting");
+            return Ok(());
         }
 
-        // blocking call
         match notify_rx.try_recv() {
             Ok(event) => match event {
                 DebouncedEvent::Create(path)
                 | DebouncedEvent::Write(path)
                 | DebouncedEvent::Chmod(path)
                 | DebouncedEvent::Remove(path)
-                | DebouncedEvent::Rename(path, _) => check_interval(&path, inode_map, &event_tx),
+                | DebouncedEvent::Rename(path, _) => check_interval(&path, &inode_map, &event_tx)?,
                 DebouncedEvent::Rescan
                 | DebouncedEvent::NoticeWrite(_)
                 | DebouncedEvent::NoticeRemove(_) => {}
@@ -135,7 +140,7 @@ fn watch_entry(
                 }
                 mpsc::TryRecvError::Disconnected => {
                     error!("FATAL: notify_rx hung up in watch_entry");
-                    fatal_flag.store(true, Ordering::SeqCst);
+                    fatal.store(true, Ordering::Relaxed);
                 }
             },
         }
@@ -144,21 +149,24 @@ fn watch_entry(
 
 fn mqtt_entry(
     server_addr: &str,
-    inode_map: &config::InodeMap,
+    inode_map: Arc<RwLock<config::InodeMap>>,
     event_rx: mpsc::Receiver<PathBuf>,
-    fatal_flag: &AtomicBool,
-    term_signal: Arc<AtomicBool>,
+    fatal: Arc<AtomicBool>,
 ) -> Outcome<()> {
     let _payload = ipc::Payload::new();
 
-    let (mqtt_client, mqtt_rx): (ipc::MqttClient, ipc::Rx) =
-        match ipc::MqttClient::new(Some(server_addr), &["sinkd/server"], "sinkd/clients") {
-            Ok((client, rx)) => (client, rx),
-            Err(e) => {
-                fatal_flag.store(true, Ordering::SeqCst);
-                return bad!("Unable to create mqtt client, {}", e);
-            }
-        };
+    let terminal_topic = format!("sinkd/{}/terminate", config::get_hostname()?);
+    let (mqtt_client, mqtt_rx): (ipc::MqttClient, ipc::Rx) = match ipc::MqttClient::new(
+        Some(server_addr),
+        &["sinkd/server", &terminal_topic],
+        "sinkd/clients",
+    ) {
+        Ok((client, rx)) => (client, rx),
+        Err(e) => {
+            fatal.store(true, Ordering::Relaxed);
+            return bad!("Unable to create mqtt client, {}", e);
+        }
+    };
 
     //// assume we are behind
     //let mut server_status = ipc::Status::NotReady(ipc::Reason::Behind);
@@ -166,26 +174,26 @@ fn mqtt_entry(
 
     // The server will send status updates to it's clients every 5 seconds
     loop {
-        if term_signal.load(Ordering::Relaxed) {
+        if fatal.load(Ordering::Relaxed) {
             mqtt_client.disconnect();
-            info!("client:mqtt_entry>> terminated");
-            fatal_flag.store(true, Ordering::SeqCst);
-        }
-
-        if fatal_flag.load(Ordering::SeqCst) {
-            return bad!("client:mqtt_entry>> exit condition reached in watch thread");
+            info!("client:mqtt_entry>> aborting");
+            return Ok(());
         }
 
         match mqtt_rx.try_recv() {
             Ok(message) => {
                 if let Some(msg) = message {
+                    if msg.topic() == terminal_topic {
+                        debug!("client:mqtt_entry>> received terminal_topic");
+                        fatal.store(true, Ordering::Relaxed);
+                    }
                     if let Ok(decoded_payload) = ipc::decode(msg.payload()) {
                         // process mqtt traffic from server
                         debug!("client>> 👍 recv: {}", decoded_payload);
                         if let Err(e) = process(
                             &event_rx,
                             &mqtt_client,
-                            inode_map,
+                            &inode_map,
                             decoded_payload.status,
                             &mut cycle,
                         ) {
@@ -203,7 +211,7 @@ fn mqtt_entry(
             }
             Err(e) => match e {
                 TryRecvError::Disconnected => {
-                    fatal_flag.store(true, Ordering::SeqCst);
+                    fatal.store(true, Ordering::Relaxed);
                     return bad!("client:mqtt_entry>> mqtt_rx hung up?");
                 }
                 TryRecvError::Empty => {
@@ -231,7 +239,7 @@ fn mqtt_entry(
 fn process(
     event_rx: &mpsc::Receiver<PathBuf>,
     mqtt_client: &ipc::MqttClient,
-    inode_map: &config::InodeMap,
+    inode_map: &Arc<RwLock<config::InodeMap>>,
     status: ipc::Status,
     cycle: &mut u32,
 ) -> Outcome<()> {
@@ -245,12 +253,16 @@ fn process(
             ipc::Reason::Behind => {
                 debug!("client:process>> Behind synch up");
                 // let's sync up
-                let mut payload = ipc::Payload::new()?
-                    .status(ipc::Status::NotReady(ipc::Reason::Behind))
-                    .src_paths(inode_map.keys().cloned().collect());
-
-                pull(&payload);
-                mqtt_client.publish(&mut payload)
+                if let Ok(map_read) = inode_map.read() {
+                    let src_paths = map_read.keys().cloned().collect();
+                    let mut payload = ipc::Payload::new()?
+                        .status(ipc::Status::NotReady(ipc::Reason::Behind))
+                        .src_paths(src_paths);
+                    pull(&payload);
+                    mqtt_client.publish(&mut payload)
+                } else {
+                    return bad!("unable to acquire inode_map read lock");
+                }
             }
 
             ipc::Reason::Other => todo!(),
