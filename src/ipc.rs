@@ -151,8 +151,8 @@ impl Payload {
         self
     }
 
-    pub fn status(mut self, status: Status) -> Self {
-        self.status = status;
+    pub fn status(mut self, status: &Status) -> Self {
+        self.status = status.clone();
         self
     }
 
@@ -422,6 +422,6 @@ where
 
     match cmd.spawn() {
         Err(x) => error!("{:#?}", x),
-        Ok(_) => debug!("rsync {:#?} {:#?} 🤙", srcs, dest),
+        Ok(_) => debug!("🚰 rsync {:#?} {:#?} 🤙", srcs, dest),
     }
 }

@@ -199,8 +199,7 @@ fn mqtt_entry(
                     if msg.topic() == terminal_topic {
                         debug!("client:mqtt_entry>> received terminal_topic");
                         fatal.store(true, Ordering::Relaxed);
-                    }
-                    if let Ok(decoded_payload) = ipc::decode(msg.payload()) {
+                    } else if let Ok(decoded_payload) = ipc::decode(msg.payload()) {
                         // process mqtt traffic from server
                         debug!("client>> 👍 recv: {}", decoded_payload);
                         if let Err(e) = process(
@@ -269,7 +268,7 @@ fn process(
                 if let Ok(map_read) = inode_map.read() {
                     let src_paths = map_read.keys().cloned().collect();
                     let mut payload = ipc::Payload::new()?
-                        .status(ipc::Status::NotReady(ipc::Reason::Behind))
+                        .status(&ipc::Status::NotReady(ipc::Reason::Behind))
                         .src_paths(src_paths);
                     pull(&payload);
                     mqtt_client.publish(&mut payload)
