@@ -1,5 +1,3 @@
-use nix::sys::signal::{kill, Signal};
-use nix::unistd::Pid;
 use nix::unistd::{fork, setsid, ForkResult};
 use paho_mqtt::{self as mqtt, MQTT_VERSION_3_1_1};
 use serde::{Deserialize, Serialize};
@@ -11,13 +9,13 @@ use std::{
     fmt,
     path::{Path, PathBuf},
     //sync::{atomic::AtomicBool, Arc, Mutex},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use crate::{
     bad, config,
     outcome::Outcome,
-    parameters::{DaemonType, Parameters},
+    parameters::Parameters,
     shiplog, time,
 };
 
@@ -136,7 +134,7 @@ impl Payload {
     }
 
     pub fn status(mut self, status: &Status) -> Self {
-        self.status = status.clone();
+        self.status = *status;
         self
     }
 
@@ -373,7 +371,7 @@ pub fn daemon(func: fn(&Parameters) -> Outcome<()>, params: &Parameters) -> Outc
                         let _ = unsafe { libc::close(fd) };
                     }
 
-                    shiplog::init(&params)?;
+                    shiplog::init(params)?;
                     func(params) // daemonized 😈
                 }
                 Err(_) => bad!("Second fork failed"),

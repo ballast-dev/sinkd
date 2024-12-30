@@ -11,7 +11,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{bad, config, ipc, outcome::Outcome, parameters::Parameters, shiplog};
+use crate::{bad, config, ipc, outcome::Outcome, parameters::Parameters};
 
 pub fn start(params: &Parameters) -> Outcome<()> {
     ipc::start_mosquitto()?;
@@ -113,7 +113,7 @@ fn check_interval(
         }
         Ok(())
     } else {
-        return bad!("Unable to acquire RwLock for inode_map");
+        bad!("Unable to acquire RwLock for inode_map")
     }
 }
 
@@ -273,7 +273,7 @@ fn process(
                     pull(&payload);
                     mqtt_client.publish(&mut payload)
                 } else {
-                    return bad!("unable to acquire inode_map read lock");
+                    bad!("unable to acquire inode_map read lock")
                 }
             }
 
@@ -283,7 +283,7 @@ fn process(
             debug!("client:process>> ipc::Status::Ready");
             match filter_file_events(event_rx) {
                 Ok(filtered_paths) => {
-                    if filtered_paths.len() > 0 {
+                    if !filtered_paths.is_empty() {
                         *cycle += 1;
                         let mut payload =
                             ipc::Payload::new()?.src_paths(filtered_paths).cycle(*cycle);
@@ -298,7 +298,7 @@ fn process(
                     Ok(())
                 }
                 Err(e) => {
-                    return bad!("unable to filter_paths: {}", e);
+                    bad!("unable to filter_paths: {}", e)
                 }
             }
         }

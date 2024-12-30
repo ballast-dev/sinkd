@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use crate::{bad, Outcome};
 
-const DEFAULT_FORMAT: &'static str = "%T";
+const DEFAULT_FORMAT: &str = "%T";
 
 /// Function to get the current timestamp as a formatted string
 pub fn stamp(fmt: Option<&str>) -> String {

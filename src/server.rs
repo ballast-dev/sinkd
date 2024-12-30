@@ -2,9 +2,7 @@
 //   / __/__ _____  _____ ____
 //  _\ \/ -_) __/ |/ / -_) __/
 // /___/\__/_/  |___/\__/_/
-use paho_mqtt as mqtt;
 use std::{
-    borrow::BorrowMut,
     fs,
     path::PathBuf,
     process,
@@ -16,7 +14,7 @@ use std::{
     time::Duration,
 };
 
-use crate::{config, ipc, outcome::Outcome, parameters::Parameters, shiplog};
+use crate::{config, ipc, outcome::Outcome, parameters::Parameters};
 
 //static SRV_PATH: &str = {
 //    #[cfg(target_os = "windows")]
@@ -218,24 +216,28 @@ fn queue(
     match status.lock() {
         Ok(state) => {
             if *state == ipc::Status::Ready {
-                if payload.cycle > *cycle {
-                    debug!("queuing payload: {payload:#?}");
-                    *cycle += 1;
-                    if let Err(e) = synch_tx.send(payload) {
-                        bad!("server:process>> unable to send on synch_tx {}", e)
-                    } else {
+                match payload.cycle.cmp(cycle) {
+                    std::cmp::Ordering::Greater => {
+                        debug!("queuing payload: {payload:#?}");
+                        *cycle += 1;
+                        if let Err(e) = synch_tx.send(payload) {
+                            bad!("server:process>> unable to send on synch_tx {}", e)
+                        } else {
+                            Ok(())
+                        }
+                    }
+                    std::cmp::Ordering::Equal => {
+                        info!("server:queue>> same payload cycle? no-op");
                         Ok(())
                     }
-                } else if payload.cycle == *cycle {
-                    info!("server:queue>> same payload cycle? no-op");
-                    Ok(())
-                } else {
-                    let mut response =
-                        ipc::Payload::new()?.status(&ipc::Status::NotReady(ipc::Reason::Busy));
-                    if let Err(e) = mqtt_client.publish(&mut response) {
-                        error!("server:queue>> unable to publish response {e}");
+                    std::cmp::Ordering::Less => {
+                        let mut response =
+                            ipc::Payload::new()?.status(&ipc::Status::NotReady(ipc::Reason::Busy));
+                        if let Err(e) = mqtt_client.publish(&mut response) {
+                            error!("server:queue>> unable to publish response {e}");
+                        }
+                        Ok(())
                     }
-                    Ok(())
                 }
             } else {
                 // TODO: if the client is behind this repsonse tells the client to update
@@ -246,7 +248,7 @@ fn queue(
                 Ok(())
             }
         }
-        Err(e) => return bad!("server:queue>> status lock poisoned {}", e),
+        Err(e) => bad!("server:queue>> status lock poisoned {}", e),
     }
 }
 
