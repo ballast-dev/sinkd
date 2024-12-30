@@ -4,6 +4,7 @@
 // /___/\__/_/  |___/\__/_/
 use paho_mqtt as mqtt;
 use std::{
+    borrow::BorrowMut,
     fs,
     path::PathBuf,
     process,
@@ -28,11 +29,12 @@ use crate::{config, ipc, outcome::Outcome, parameters::Parameters, shiplog};
 
 pub fn start(params: &Parameters) -> Outcome<()> {
     ipc::start_mosquitto()?;
+    thread::sleep(Duration::from_millis(500));
     println!("logging to: {}", params.log_path.display());
     ipc::daemon(init, params)
 }
 
-pub fn stop(params: &Parameters) -> Outcome<()> {
+pub fn stop() -> Outcome<()> {
     let terminal_topic = format!("sinkd/{}/terminate", config::get_hostname()?);
     if let Err(e) = std::process::Command::new("mosquitto_pub")
         .arg("-h")
@@ -49,11 +51,8 @@ pub fn stop(params: &Parameters) -> Outcome<()> {
 }
 
 pub fn restart(params: &Parameters) -> Outcome<()> {
-    match stop(params) {
-        Ok(()) => {
-            start(params)?;
-            Ok(())
-        }
+    match stop() {
+        Ok(()) => start(params),
         Err(e) => bad!(e),
     }
 }
@@ -96,11 +95,14 @@ fn init(params: &Parameters) -> Outcome<()> {
 
     let fatal = Arc::new(AtomicBool::new(false));
     signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&fatal))?;
+    // TODO: this needs to be read from file, status + cycle number
+    let status = Arc::new(Mutex::new(ipc::Status::Ready));
 
     let mqtt_thread = thread::spawn({
         let fatal = Arc::clone(&fatal);
+        let status = Arc::clone(&status);
         move || {
-            if let Err(err) = mqtt_entry(synch_tx, fatal) {
+            if let Err(err) = mqtt_entry(synch_tx, fatal, status) {
                 error!("{}", err);
             }
         }
@@ -108,7 +110,7 @@ fn init(params: &Parameters) -> Outcome<()> {
 
     let synch_thread = thread::spawn({
         move || {
-            if let Err(err) = synch_entry(synch_rx, fatal, srv_dir) {
+            if let Err(err) = synch_entry(synch_rx, fatal, status, srv_dir) {
                 error!("{}", err);
             }
         }
@@ -125,19 +127,12 @@ fn init(params: &Parameters) -> Outcome<()> {
     Ok(())
 }
 
-//fn dispatch(msg: &Option<mqtt::Message>) {
-//    if let Some(msg) = msg {
-//        let payload = std::str::from_utf8(msg.payload()).unwrap();
-//        debug!("topic: {}\tpayload: {}", msg.topic(), payload);
-//        todo!();
-//    } else {
-//        error!("malformed mqtt message");
-//    }
-//}
-
-//? This thread is to ensure no lost messages from mqtt
 #[allow(unused_variables)]
-fn mqtt_entry(synch_tx: mpsc::Sender<ipc::Payload>, fatal: Arc<AtomicBool>) -> Outcome<()> {
+fn mqtt_entry(
+    synch_tx: mpsc::Sender<ipc::Payload>,
+    fatal: Arc<AtomicBool>,
+    status: Arc<Mutex<ipc::Status>>,
+) -> Outcome<()> {
     let terminal_topic = format!("sinkd/{}/terminate", config::get_hostname()?);
     let (mqtt_client, mqtt_rx): (ipc::MqttClient, ipc::Rx) = match ipc::MqttClient::new(
         Some("localhost"), // server always spawn on current machine
@@ -154,7 +149,6 @@ fn mqtt_entry(synch_tx: mpsc::Sender<ipc::Payload>, fatal: Arc<AtomicBool>) -> O
     // TODO: pervious cycle should be read from file
     // WARN: this needs to be config driven
     let mut cycle: u32 = 0;
-    let mut state = ipc::Status::Ready;
 
     loop {
         if fatal.load(Ordering::Relaxed) {
@@ -163,7 +157,7 @@ fn mqtt_entry(synch_tx: mpsc::Sender<ipc::Payload>, fatal: Arc<AtomicBool>) -> O
             return Ok(());
         }
 
-        if let Err(e) = broadcast_status(&mqtt_client, &state) {
+        if let Err(e) = broadcast_status(&mqtt_client, &status) {
             error!("{e}");
         }
 
@@ -185,9 +179,7 @@ fn mqtt_entry(synch_tx: mpsc::Sender<ipc::Payload>, fatal: Arc<AtomicBool>) -> O
                             // 3. call rsync <client> <server> <opts>
                             // 4. once finished switch state to "ready"
 
-                            if let Err(e) =
-                                queue(&synch_tx, &mqtt_client, p, &mut cycle, &mut state)
-                            {
+                            if let Err(e) = queue(&synch_tx, &mqtt_client, p, &mut cycle, &status) {
                                 error!("{e}");
                             }
                         }
@@ -221,43 +213,40 @@ fn queue(
     mqtt_client: &ipc::MqttClient,
     payload: ipc::Payload,
     cycle: &mut u32,
-    state: &mut ipc::Status,
+    status: &Arc<Mutex<ipc::Status>>,
 ) -> Outcome<()> {
-    match state {
-        ipc::Status::NotReady(reason) => match reason {
-            // TODO: respond with mqtt message to client?
-            ipc::Reason::Busy => todo!(),
-            ipc::Reason::Behind => todo!(),
-            ipc::Reason::Other => todo!(),
-        },
-        ipc::Status::Ready => {
-            if let Err(e) = synch_tx.send(payload) {
-                bad!("server:process>> unable to send on synch_tx {}", e)
+    match status.lock() {
+        Ok(state) => {
+            if *state == ipc::Status::Ready {
+                if payload.cycle > *cycle {
+                    debug!("queuing payload: {payload:#?}");
+                    *cycle += 1;
+                    if let Err(e) = synch_tx.send(payload) {
+                        bad!("server:process>> unable to send on synch_tx {}", e)
+                    } else {
+                        Ok(())
+                    }
+                } else if payload.cycle == *cycle {
+                    info!("server:queue>> same payload cycle? no-op");
+                    Ok(())
+                } else {
+                    let mut response =
+                        ipc::Payload::new()?.status(&ipc::Status::NotReady(ipc::Reason::Busy));
+                    if let Err(e) = mqtt_client.publish(&mut response) {
+                        error!("server:queue>> unable to publish response {e}");
+                    }
+                    Ok(())
+                }
             } else {
+                // TODO: if the client is behind this repsonse tells the client to update
+                let mut response = ipc::Payload::new()?.status(&state);
+                if let Err(e) = mqtt_client.publish(&mut response) {
+                    error!("server:queue>> unable to publish response {e}");
+                }
                 Ok(())
             }
-            //if payload.cycle > *cycle {
-            //    *state = ipc::Status::NotReady(ipc::Reason::Busy);
-            //    let mut response = ipc::Payload::new()?.status(state);
-            //
-            //    if let Err(e) = mqtt_client.publish(&mut response) {
-            //        error!("server:queue>> unable to publish response {e}");
-            //        return bad!("server:queue>> unable to publish response {}", e);
-            //    }
-            //    Ok(())
-            //} else if payload.cycle == *cycle {
-            //    info!("server:queue>> same payload cycle? no-op");
-            //    Ok(())
-            //} else {
-            //    debug!("queuing payload: {payload:#?}");
-            //    *cycle += 1;
-            //    if let Err(e) = synch_tx.send(payload) {
-            //        bad!("server:process>> unable to send on synch_tx {}", e)
-            //    } else {
-            //        Ok(())
-            //    }
-            //}
         }
+        Err(e) => return bad!("server:queue>> status lock poisoned {}", e),
     }
 }
 
@@ -268,6 +257,7 @@ fn queue(
 fn synch_entry(
     synch_rx: mpsc::Receiver<ipc::Payload>,
     fatal: Arc<AtomicBool>,
+    status: Arc<Mutex<ipc::Status>>,
     srv_dir: PathBuf,
 ) -> Outcome<()> {
     loop {
@@ -288,22 +278,44 @@ fn synch_entry(
                 }
             },
             Ok(payload) => {
+                // set busy let of lock as soon as possible
                 let dest = PathBuf::from(format!("{}/", &srv_dir.display()));
-                ipc::rsync(&payload.src_paths, &dest)
+
+                if let Ok(mut state) = status.lock() {
+                    *state = ipc::Status::NotReady(ipc::Reason::Busy);
+                } else {
+                    error!("server:synch_entry>> unable to acquire status lock");
+                    continue; // FIXME: fatal?
+                }
+                // this call could take a while
+                ipc::rsync(&payload.src_paths, &dest);
+
+                if let Ok(mut state) = status.lock() {
+                    *state = ipc::Status::Ready;
+                } else {
+                    error!("server:synch_entry>> unable to acquire status lock");
+                    continue;
+                }
             }
         }
     }
 }
 
-fn broadcast_status(mqtt_client: &ipc::MqttClient, state: &ipc::Status) -> Outcome<()> {
-    let mut status_payload = ipc::Payload::new()?
-        .dest_path("sinkd_status")
-        .status(&state);
-
-    if let Err(e) = mqtt_client.publish(&mut status_payload) {
-        bad!("server:broadcast_status>> couldn't publish status? '{}'", e)
+fn broadcast_status(
+    mqtt_client: &ipc::MqttClient,
+    status: &Arc<Mutex<ipc::Status>>,
+) -> Outcome<()> {
+    if let Ok(state) = status.lock() {
+        let mut status_payload = ipc::Payload::new()?
+            .dest_path("sinkd_status")
+            .status(&state);
+        if let Err(e) = mqtt_client.publish(&mut status_payload) {
+            bad!("server:broadcast_status>> couldn't publish status? '{}'", e)
+        } else {
+            Ok(())
+        }
     } else {
-        Ok(())
+        bad!("status lock poisoned")
     }
 }
 

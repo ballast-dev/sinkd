@@ -25,8 +25,8 @@ pub type Rx = mqtt::Receiver<Option<mqtt::Message>>;
 
 #[derive(PartialEq, Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum Reason {
-    Busy,
-    Behind,
+    Busy,   // server will enter this state
+    Behind, // response to client, never enters state
     Other,
 }
 
@@ -53,22 +53,6 @@ impl fmt::Display for Status {
         }
     }
 }
-
-//struct Bearing {
-//    pub fatal: Arc<AtomicBool>,
-//    pub cycle: Arc<Mutex<i32>>,
-//    pub state: Arc<Mutex<Status>>,
-//}
-//
-//impl Bearing {
-//    pub fn new() -> Self {
-//        Self {
-//            fatal: Arc::new(AtomicBool::new(false)),
-//            cycle: Arc::new(Mutex::new(0)),
-//            state: Arc::new(Mutex::new(Status::Ready)),
-//        }
-//    }
-//}
 
 /// Only time a Payload is sent is to say "new edits"
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]

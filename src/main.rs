@@ -26,7 +26,6 @@ mod time;
 
 use clap::parser::ValuesRef;
 use outcome::Outcome;
-use shiplog::ShipLog;
 use std::{path::Path, process::ExitCode};
 
 use crate::parameters::{DaemonType, Parameters};
@@ -109,7 +108,7 @@ fn main() -> ExitCode {
         Some(("server", submatches)) => match submatches.subcommand() {
             Some(("start", _)) => egress(server::start(&params)),
             Some(("restart", _)) => egress(server::restart(&params)),
-            Some(("stop", _)) => egress(server::stop(&params)),
+            Some(("stop", _)) => egress(server::stop()),
             _ => {
                 cli.print_help().expect("sinkd usage: .... ");
                 ExitCode::SUCCESS

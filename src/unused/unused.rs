@@ -162,3 +162,25 @@ pub fn setup_keys(_verbosity: u8, host: &str) {
     //     }
     // }
 }
+
+// #[link(name = "timestamp", kind = "static")]
+// extern "C" {
+//     fn timestamp(ret_str: *mut c_char, size: c_uint, fmt_str: *const c_char);
+// }
+
+// pub fn get_timestamp(fmt_str: &str) -> String {
+//     const TIMESTAMP_LENGTH: usize = 25;
+//     let mut buffer = vec![0u8; TIMESTAMP_LENGTH];
+
+//     let ret_ptr = buffer.as_mut_ptr().cast::<c_char>();
+//     let c_fmt_str = CString::new(fmt_str.as_bytes()).expect("failed to create CString");
+
+//     unsafe {
+//         timestamp(ret_ptr, TIMESTAMP_LENGTH as c_uint, c_fmt_str.as_ptr());
+//     }
+
+//     // convert buffer to CStr
+//     let c_str = unsafe { CStr::from_ptr(ret_ptr) };
+//     // convert CStr to Rust String
+//     c_str.to_string_lossy().into_owned()
+// }

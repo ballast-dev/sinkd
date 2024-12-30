@@ -19,7 +19,6 @@ pub struct Parameters {
     pub verbosity: u8,
     pub debug: u8,
     pub log_path: PathBuf,
-    pub pid_path: PathBuf,
     pub system_config: Arc<PathBuf>,
     pub user_configs: Arc<Vec<PathBuf>>,
 }
@@ -33,7 +32,6 @@ daemon_type:{}
 verbosity:{}
 debug:{}
 log_path:{}
-pid_path:{}
 system_config:{}
 user configs: [{}]
 "#,
@@ -45,7 +43,6 @@ user configs: [{}]
                 self.verbosity,
                 self.debug,
                 self.log_path.display(),
-                self.pid_path.display(),
                 self.system_config.display(),
                 self.user_configs
                     .iter()
@@ -84,7 +81,6 @@ impl Parameters {
                 _ => 0,
             },
             log_path: Self::get_log_path(debug, &daemon_type),
-            pid_path: Self::get_pid_path(debug, &daemon_type),
             system_config: match daemon_type {
                 DaemonType::Client => Self::resolve_system_config(system_config)?,
                 DaemonType::Server => Arc::new(PathBuf::new()),
@@ -126,19 +122,6 @@ impl Parameters {
         match daemon_type {
             DaemonType::Client => PathBuf::from(format!("{}/client.log", base_dir)),
             DaemonType::Server => PathBuf::from(format!("{}/server.log", base_dir)),
-        }
-    }
-
-    fn get_pid_path(debug: u8, daemon_type: &DaemonType) -> PathBuf {
-        let base_dir = if debug > 0 {
-            "/tmp/sinkd"
-        } else {
-            "/var/log/sinkd"
-        };
-
-        match daemon_type {
-            DaemonType::Client => PathBuf::from(format!("{}/client.pid", base_dir)),
-            DaemonType::Server => PathBuf::from(format!("{}/server.pid", base_dir)),
         }
     }
 

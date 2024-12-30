@@ -1,37 +1,10 @@
 use log::{Level, LevelFilter, Metadata, Record};
+use std::fs::OpenOptions;
 use std::io::prelude::*;
-use std::{
-    ffi::CString,
-    fs::OpenOptions, // for writeln!
-                     //path::PathBuf,
-                     //time::{Duration, Instant},
-};
 
 use crate::{config, outcome::Outcome, parameters::Parameters, time};
 
 //const TEN_MEGABYTES: u64 = (1024 ^ 2) * 10;
-
-// #[link(name = "timestamp", kind = "static")]
-// extern "C" {
-//     fn timestamp(ret_str: *mut c_char, size: c_uint, fmt_str: *const c_char);
-// }
-
-// pub fn get_timestamp(fmt_str: &str) -> String {
-//     const TIMESTAMP_LENGTH: usize = 25;
-//     let mut buffer = vec![0u8; TIMESTAMP_LENGTH];
-
-//     let ret_ptr = buffer.as_mut_ptr().cast::<c_char>();
-//     let c_fmt_str = CString::new(fmt_str.as_bytes()).expect("failed to create CString");
-
-//     unsafe {
-//         timestamp(ret_ptr, TIMESTAMP_LENGTH as c_uint, c_fmt_str.as_ptr());
-//     }
-
-//     // convert buffer to CStr
-//     let c_str = unsafe { CStr::from_ptr(ret_ptr) };
-//     // convert CStr to Rust String
-//     c_str.to_string_lossy().into_owned()
-// }
 
 pub struct ShipLog {
     file: std::fs::File,
@@ -123,35 +96,6 @@ pub fn init(params: &Parameters) -> Outcome<()> {
     Ok(())
 }
 
-fn create_pid_file(params: &Parameters) -> Outcome<()> {
-    if params.debug == 0 && !config::have_permissions() {
-        return bad!("need to be root");
-    }
-    if !params.pid_path.exists() {
-        // match std::fs::create_dir_all(&pid_file) {
-        info!("creating pid file: {}", params.pid_path.display());
-        if let Err(why) = std::fs::File::create(&params.pid_path) {
-            error!(
-                "cannot create '{}' {}",
-                params.pid_path.display(),
-                why.kind()
-            );
-            return bad!(
-                "cannot create '{}' {}",
-                params.pid_path.display(),
-                why.kind()
-            );
-        }
-    }
-    Ok(())
-    // already created
-    // fs::File::create(PID_FILE).expect("unable to create pid file, permissions?");
-    // let metadata = pid_file.metadata().unwrap();
-    // let mut permissions = metadata.permissions();
-    // permissions.set_readonly(false);
-    // fs::set_permissions(&pid_path, permissions).expect("cannot set permission");
-}
-
 fn create_log_file(params: &Parameters) -> Outcome<()> {
     if params.debug == 0 && !config::have_permissions() {
         return bad!("Need to be root to create log file");
@@ -167,57 +111,4 @@ fn create_log_file(params: &Parameters) -> Outcome<()> {
         }
     }
     Ok(()) // already created
-}
-
-pub fn get_pid(params: &Parameters) -> Outcome<u32> {
-    if !params.pid_path.exists() {
-        bad!("pid file not found")
-    } else {
-        match std::fs::read(&params.pid_path) {
-            Err(err) => {
-                bad!(format!(
-                    "Cannot read {}: {}",
-                    params.pid_path.display(),
-                    err
-                ))
-            }
-            Ok(contents) => {
-                let pid_str = String::from_utf8_lossy(&contents);
-                match pid_str.parse::<u32>() {
-                    Err(e) => {
-                        bad!("Couldn't parse pid: {}", e)
-                    }
-                    Ok(pid) => Ok(pid),
-                }
-            }
-        }
-    }
-}
-
-pub fn set_pid(params: &Parameters, child_pid: u32) -> Outcome<()> {
-    if !params.pid_path.exists() {
-        create_pid_file(params)?;
-    }
-
-    unsafe {
-        // pid_file is typically set so unwrap here is safe
-        let c_str = CString::new(params.pid_path.to_str().unwrap()).unwrap();
-        // delete a name and possibly the file it refers to
-        libc::unlink(c_str.into_raw());
-    }
-
-    if let Err(e) = std::fs::write(&params.pid_path, child_pid.to_string()) {
-        return bad!("couldn't write to '{}' {}", &params.pid_path.display(), e);
-    }
-    Ok(())
-}
-
-pub fn rm_pid(params: &Parameters) -> Outcome<()> {
-    if params.debug == 0 && !config::have_permissions() {
-        return bad!("Need to be root to create pid file");
-    }
-    if params.pid_path.exists() {
-        std::fs::remove_file(&params.pid_path)?;
-    }
-    Ok(())
 }
