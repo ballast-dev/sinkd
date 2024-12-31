@@ -193,7 +193,7 @@ fn mqtt_entry(
             Err(err) => match err {
                 // NOTE: mqtt uses crossbeam
                 crossbeam::channel::TryRecvError::Empty => {
-                    std::thread::sleep(std::time::Duration::from_secs(5));
+                    std::thread::sleep(std::time::Duration::from_secs(1));
                     debug!("server:mqtt_entry>> waiting...");
                 }
                 crossbeam::channel::TryRecvError::Disconnected => {

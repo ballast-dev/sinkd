@@ -244,7 +244,7 @@ fn mqtt_entry(
         //};
 
         // TODO: add 'system_interval' to config
-        std::thread::sleep(Duration::from_secs(5));
+        std::thread::sleep(Duration::from_secs(1));
     }
 }
 
