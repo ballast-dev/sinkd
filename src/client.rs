@@ -1,5 +1,5 @@
 use crossbeam::channel::TryRecvError;
-use notify::{DebouncedEvent, Watcher};
+use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use std::{
     collections::HashSet,
     path::{Path, PathBuf},
@@ -50,12 +50,12 @@ pub fn restart(params: &Parameters) -> Outcome<()> {
 fn init(params: &Parameters) -> Outcome<()> {
     let (srv_addr, inode_map) = config::get(params)?;
 
-    let (notify_tx, notify_rx): (mpsc::Sender<DebouncedEvent>, mpsc::Receiver<DebouncedEvent>) =
+    let (notify_tx, notify_rx): (mpsc::Sender<notify::Event>, mpsc::Receiver<notify::Event>) =
         mpsc::channel();
     let (event_tx, event_rx): (mpsc::Sender<PathBuf>, mpsc::Receiver<PathBuf>) = mpsc::channel();
 
     // keep the watchers alive!
-    let _watchers = match get_watchers(&inode_map, notify_tx) {
+    let _watchers = match setup_watchers(&inode_map, notify_tx) {
         Ok(w) => w,
         Err(e) => return bad!("{}", e),
     };
@@ -119,7 +119,7 @@ fn check_interval(
 
 fn watch_entry(
     inode_map: Arc<RwLock<config::InodeMap>>,
-    notify_rx: mpsc::Receiver<DebouncedEvent>,
+    notify_rx: mpsc::Receiver<notify::Event>,
     event_tx: mpsc::Sender<PathBuf>,
     fatal: Arc<AtomicBool>,
 ) -> Outcome<()> {
@@ -130,23 +130,18 @@ fn watch_entry(
         }
 
         match notify_rx.try_recv() {
-            Ok(event) => match event {
-                DebouncedEvent::Create(path)
-                | DebouncedEvent::Write(path)
-                | DebouncedEvent::Chmod(path)
-                | DebouncedEvent::Remove(path)
-                | DebouncedEvent::Rename(path, _) => check_interval(&path, &inode_map, &event_tx)?,
-                DebouncedEvent::Rescan
-                | DebouncedEvent::NoticeWrite(_)
-                | DebouncedEvent::NoticeRemove(_) => {}
-                DebouncedEvent::Error(error, option_path) => {
-                    info!(
-                        "What was the error? {:?}\n the path should be: {:?}",
-                        error.to_string(),
-                        option_path.unwrap()
-                    );
+            Ok(event) => {
+                if matches!(
+                    event.kind,
+                    notify::EventKind::Create(_)
+                        | notify::EventKind::Modify(_)
+                        | notify::EventKind::Remove(_)
+                ) {
+                    for path in &event.paths {
+                        check_interval(path, &inode_map, &event_tx)?;
+                    }
                 }
-            },
+            }
             Err(err) => match err {
                 mpsc::TryRecvError::Empty => {
                     std::thread::sleep(std::time::Duration::from_millis(200));
@@ -305,21 +300,31 @@ fn process(
     }
 }
 
-fn get_watchers(
+fn setup_watchers(
     inode_map: &config::InodeMap,
-    tx: mpsc::Sender<notify::DebouncedEvent>,
-) -> Outcome<Vec<notify::RecommendedWatcher>> {
-    let mut watchers: Vec<notify::RecommendedWatcher> = Vec::new();
+    tx: mpsc::Sender<Event>,
+) -> Outcome<Vec<RecommendedWatcher>> {
+    let mut watchers: Vec<RecommendedWatcher> = Vec::new();
 
     for pathbuf in inode_map.keys() {
-        //TODO: use 'system_interval' to setup notification events
-        let mut watcher =
-            notify::watcher(tx.clone(), Duration::from_secs(1)).expect("couldn't create watch");
+        // Clone tx for use in this iteration
+        let tx_clone = tx.clone();
 
-        if watcher
-            .watch(pathbuf, notify::RecursiveMode::Recursive)
-            .is_err()
-        {
+        // Create a watcher with initial configuration
+        let mut watcher = RecommendedWatcher::new(
+            move |res| match res {
+                Ok(event) => {
+                    if tx_clone.send(event).is_err() {
+                        error!("failed to send notify event");
+                    }
+                }
+                Err(err) => error!("watch error: {:?}", err),
+            },
+            notify::Config::default().with_poll_interval(std::time::Duration::from_secs(1)), // Set polling interval
+        )
+        .expect("couldn't create watcher");
+
+        if watcher.watch(pathbuf, RecursiveMode::Recursive).is_err() {
             warn!("unable to set watcher for: '{}'", pathbuf.display());
             continue;
         }
