@@ -1,10 +1,10 @@
-# [env]
-# # Static linking to musl prevents dynamic linking to openssl
-# # OPENSSL_STATIC = true
-# OPENSSL_LIB_DIR = "/usr/lib"
-# OPENSSL_INCLUDE_DIR = "/usr/include/openssl"
-# # LLVM_CONFIG_PATH = "/usr/bin/llvm-config"
-# # LIBCLANG_STATIC_PATH = "/usr/lib/"
-#
-# [target.x86_64-unknown-linux-musl]
-# rustflags = ["-C", "link-arg=-lc"]
+# On Windows MSVC, statically link the C runtime so that the resulting EXE does
+# not depend on the vcruntime DLL.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[target.x86_64-unknown-linux-musl]
+rustflags = [
+  "-C", "target-feature=+crt-static",
+  "-C", "link-self-contained=yes",
+]

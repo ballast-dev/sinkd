@@ -40,3 +40,9 @@ Dependencies:
 - add encryption to files watched by sinkd
 - access from outside the LAN firewall
 - use `git-lfs` to enable data restore (manual tagging)
+
+##  Development
+1. Windows install openssl
+
+        winget install ShiningLight.OpenSSL.Dev
+        winget install EclipseFoundation.Mosquitto
