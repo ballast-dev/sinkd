@@ -7,6 +7,7 @@ extern crate toml;
 extern crate log;
 extern crate libc;
 extern crate nix;
+extern crate windows;
 
 #[macro_use]
 mod cli;

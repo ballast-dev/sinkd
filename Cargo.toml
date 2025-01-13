@@ -24,3 +24,11 @@ paho-mqtt = { version = "0.12", features = ["ssl"] }  # use openssl on host mach
 serde = { version = "1.0", features = ["derive"] }
 signal-hook = "0.3"
 toml = "0.8"
+windows = { version = "0.59.0", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Threading",
+    "Win32_System_Console",
+    "Win32_System_SystemInformation",
+    "Win32_System_WindowsProgramming",
+] }
