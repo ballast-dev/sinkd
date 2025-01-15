@@ -1,6 +1,6 @@
 arch_var := arch()
 
-set windows-shell = ["powershell.exe", "-NoLogo", "-Command"]
+set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
 
 export OPENSSL_DIR = if os_family() == "windows" {
   if arch_var == "x86_64" {
