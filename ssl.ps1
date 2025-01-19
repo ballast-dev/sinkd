@@ -6,23 +6,18 @@
   Checks the system's processor architecture. If x64, sets the Win64 paths;
   otherwise, sets the Win64-ARM paths. Variables are persisted at the User
   scope.
+
+Microsoft security is annoying, run this to set env vars. 
+This is needed for rust-analyzer to build and work again sinkd
+
+  powershell.exe -ExecutionPolicy Bypass -File .\windows_env.ps1
+
 #>
 
-# Microsoft security is annoying, run this to set env vars. 
-# This is needed for rust-analyzer to build and work again sinkd
-#
-#     powershell.exe -ExecutionPolicy Bypass -File .\windows_env.ps1
-#
-
-# if ((Get-ExecutionPolicy) -eq "Restricted") {
-#     Write-Host "Execution Policy is Restricted. Bypassing for this session."
-#     powershell.exe -ExecutionPolicy Bypass -File $MyInvocation.MyCommand.Path
-#     exit
-# }
-
-# Grab the architecture from PROCESSOR_ARCHITECTURE (e.g. "AMD64", "ARM64", "x86")
 $arch = $env:PROCESSOR_ARCHITECTURE
-
+Write-Host "INFO: Ensure to download OpenSSL via winget"
+Write-Host "INFO: winget install ShiningLight.OpenSSL.Dev"
+Write-Hose ""
 Write-Host "Detected architecture: $arch"
 
 switch ($arch) {

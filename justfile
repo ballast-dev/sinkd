@@ -1,8 +1,38 @@
+arch_var := arch()
+
 set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
-export OPENSSL_DIR := if os_family() == "windows" { "C:\\Program Files\\OpenSSL-Win64" } else { "" }
-export OPENSSL_LIB_DIR := if os_family() == "windows" { "C:\\Program Files\\OpenSSL-Win64\\lib\\VC\\x64\\MT" } else { "" }
-export OPENSSL_INCLUDE_DIR := if os_family() == "windows" { "C:\\Program Files\\OpenSSL-Win64\\include" } else { "" }
-export OPENSSL_STATIC := if os_family() == "windows" { "1" } else { "" }
+
+export OPENSSL_DIR = if os_family() == "windows" {
+  if arch_var == "x86_64" {
+    "C:\\Program Files\\OpenSSL-Win64"
+  } else {
+    "C:\\Program Files\\OpenSSL-Win64-ARM"
+  }
+} else {
+  ""
+}
+
+export OPENSSL_LIB_DIR = if os_family() == "windows" {
+  if arch_var == "x86_64" {
+    "C:\\Program Files\\OpenSSL-Win64\\lib\\VC\\x64\\MT"
+  } else {
+    "C:\\Program Files\\OpenSSL-Win64-ARM\\lib\\VC\\arm64\\MT"
+  }
+} else {
+  ""
+}
+
+export OPENSSL_INCLUDE_DIR = if os_family() == "windows" {
+  if arch_var == "x86_64" {
+    "C:\\Program Files\\OpenSSL-Win64\\include"
+  } else {
+    "C:\\Program Files\\OpenSSL-Win64-ARM\\include"
+  }
+} else {
+  ""
+}
+
+export OPENSSL_STATIC = if os_family() == "windows" { "1" } else { "" }
 
 clippy:
     cargo clippy --fix --allow-dirty --allow-staged \

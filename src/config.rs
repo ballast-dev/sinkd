@@ -192,17 +192,19 @@ pub fn get(params: &Parameters) -> Outcome<(String, InodeMap)> {
 }
 
 pub fn have_permissions() -> bool {
-    #[cfg(unix)] {
+    #[cfg(unix)]
+    {
         // get effective user ID
         unsafe { libc::geteuid() == 0 }
     }
-    #[cfg(windows)] {
+    #[cfg(windows)]
+    {
         use windows::Win32::Foundation::HANDLE;
         use windows::Win32::Security::{
             CheckTokenMembership, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY,
         };
-        use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
         use windows::Win32::Security::{GetTokenInformation, SECURITY_NT_AUTHORITY};
+        use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 
         unsafe {
             let process_handle = GetCurrentProcess();
@@ -232,40 +234,40 @@ pub fn have_permissions() -> bool {
     }
 }
 
-
 #[cfg(unix)]
 pub fn get_hostname() -> Outcome<String> {
-    use std::ffi::CStr;
     use libc::{c_char, sysconf, _SC_HOST_NAME_MAX};
+    use std::ffi::CStr;
     use std::ptr;
 
     unsafe {
         // Get the maximum hostname length
         let max_len = sysconf(_SC_HOST_NAME_MAX);
         if max_len == -1 {
-            return Err("Failed to determine maximum hostname length".to_string());
+            return bad!("Failed to determine maximum hostname length");
         }
 
         let mut buffer = vec![0u8; max_len as usize];
         let ptr = buffer.as_mut_ptr() as *mut c_char;
 
         if libc::gethostname(ptr, max_len as usize) != 0 {
-            return Err("Failed to retrieve hostname".to_string());
+            return bad!("Failed to retrieve hostname");
         }
 
         // Convert the hostname from C string to Rust string
         let cstr = CStr::from_ptr(ptr);
-        cstr.to_str()
-            .map(|s| s.to_owned())
-            .map_err(|e| format!("Failed to convert hostname to UTF-8: {}", e))
+        match cstr.to_str() {
+            Ok(s) => Ok(s.to_owned()),
+            Err(e) => bad!("Failed to convert hostname to UTF-8: {}", e),
+        }
     }
 }
 
 #[cfg(windows)]
 pub fn get_hostname() -> Outcome<String> {
-    use windows::Win32::System::WindowsProgramming::{GetComputerNameW, MAX_COMPUTERNAME_LENGTH};
     use std::ffi::OsString;
     use std::os::windows::ffi::OsStringExt;
+    use windows::Win32::System::WindowsProgramming::{GetComputerNameW, MAX_COMPUTERNAME_LENGTH};
 
     let mut buffer = [0u16; MAX_COMPUTERNAME_LENGTH as usize + 1];
     let mut size = buffer.len() as u32;
@@ -280,7 +282,6 @@ pub fn get_hostname() -> Outcome<String> {
         }
     }
 }
-
 
 pub fn get_username() -> Outcome<String> {
     if let Some(username) = std::env::var("USER")
