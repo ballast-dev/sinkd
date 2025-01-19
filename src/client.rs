@@ -14,7 +14,7 @@ use std::{
 use crate::{bad, config, ipc, outcome::Outcome, parameters::Parameters};
 
 pub fn start(params: &Parameters) -> Outcome<()> {
-    ipc::start_mosquitto()?;
+    // ipc::start_mosquitto()?;
     println!("logging to: {}", params.log_path.display());
     ipc::daemon(init, params)
 }
@@ -47,7 +47,7 @@ pub fn restart(params: &Parameters) -> Outcome<()> {
 }
 
 // Daemonized call, stdin/stdout/stderr are closed
-fn init(params: &Parameters) -> Outcome<()> {
+pub fn init(params: &Parameters) -> Outcome<()> {
     let (srv_addr, inode_map) = config::get(params)?;
 
     let (notify_tx, notify_rx): (mpsc::Sender<notify::Event>, mpsc::Receiver<notify::Event>) =

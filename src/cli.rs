@@ -38,6 +38,11 @@ pub fn build_sinkd() -> Command {
         .action(ArgAction::Append)
         .global(true);
 
+    let windows_daemon = Arg::new("windows-daemon")
+        .long("windows-daemon")
+        .action(ArgAction::SetTrue)
+        .hide(true);
+
     // composable commands
 
     let add_cmd = Command::new("add")
@@ -60,6 +65,7 @@ pub fn build_sinkd() -> Command {
     Command::new("sinkd")
         .about("deployable cloud")
         .version(env!("CARGO_PKG_VERSION"))
+        .arg(windows_daemon)
         .arg(Arg::new("verbose")
             .short('v')
             .action(ArgAction::Count)

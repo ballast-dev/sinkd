@@ -7,10 +7,12 @@ use std::{
 
 use crate::{config, fancy, outcome::Outcome};
 
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Clone, Debug)]
 pub enum DaemonType {
-    Client,
-    Server,
+    UnixClient,
+    UnixServer,
+    WindowsClient,
+    WindowsServer,
 }
 
 // TODO: move this into section of /etc/sinkd.conf
@@ -28,18 +30,14 @@ impl std::fmt::Display for Parameters {
         f.write_str(&fancy::format(
             &format!(
                 r#"🎨 Parameters 🔍
-daemon_type:{}
+daemon_type:{:?}
 verbosity:{}
 debug:{}
 log_path:{}
 system_config:{}
 user configs: [{}]
 "#,
-                if self.daemon_type == DaemonType::Client {
-                    "client"
-                } else {
-                    "server"
-                },
+                self.daemon_type,
                 self.verbosity,
                 self.debug,
                 self.log_path.display(),
@@ -48,7 +46,7 @@ user configs: [{}]
                     .iter()
                     .map(|p| p.display().to_string())
                     .collect::<Vec<_>>()
-                    .join(", ")
+                    .join(", "),
             ),
             fancy::Attrs::Bold,
             fancy::Colors::Yellow,
@@ -57,7 +55,17 @@ user configs: [{}]
 }
 
 impl Parameters {
-    pub fn new(
+    pub fn new() -> Self {
+        Parameters {
+            daemon_type: DaemonType::UnixClient,
+            verbosity: 0,
+            debug: 0,
+            log_path: PathBuf::new(),
+            system_config: Arc::new(PathBuf::new()),
+            user_configs: Arc::new(Vec::new()),
+        }
+    }
+    pub fn from(
         daemon_type: DaemonType,
         verbosity: u8,
         debug: u8,
@@ -82,12 +90,16 @@ impl Parameters {
             },
             log_path: Self::get_log_path(debug, &daemon_type),
             system_config: match daemon_type {
-                DaemonType::Client => Self::resolve_system_config(system_config)?,
-                DaemonType::Server => Arc::new(PathBuf::new()),
+                DaemonType::UnixClient => Self::resolve_system_config(system_config)?,
+                DaemonType::UnixServer => Arc::new(PathBuf::new()),
+                DaemonType::WindowsClient => Self::resolve_system_config(system_config)?,
+                DaemonType::WindowsServer => Arc::new(PathBuf::new()),
             },
             user_configs: match daemon_type {
-                DaemonType::Client => Self::resolve_user_configs(user_configs)?,
-                DaemonType::Server => Arc::new(vec![]),
+                DaemonType::UnixClient => Self::resolve_user_configs(user_configs)?,
+                DaemonType::UnixServer => Arc::new(vec![]),
+                DaemonType::WindowsClient => Self::resolve_user_configs(user_configs)?,
+                DaemonType::WindowsServer => Arc::new(vec![]),
             },
         })
     }
@@ -120,8 +132,10 @@ impl Parameters {
         };
 
         match daemon_type {
-            DaemonType::Client => PathBuf::from(format!("{}/client.log", base_dir)),
-            DaemonType::Server => PathBuf::from(format!("{}/server.log", base_dir)),
+            DaemonType::UnixClient => PathBuf::from(format!("{}/client.log", base_dir)),
+            DaemonType::UnixServer => PathBuf::from(format!("{}/server.log", base_dir)),
+            DaemonType::WindowsClient => PathBuf::from(format!("{}/client.log", base_dir)),
+            DaemonType::WindowsServer => PathBuf::from(format!("{}/server.log", base_dir)),
         }
     }
 

@@ -10,6 +10,7 @@ use std::{
     process::{Command, Stdio},
 };
 
+use crate::parameters::DaemonType;
 use crate::{
     bad, config,
     outcome::Outcome,
@@ -19,13 +20,19 @@ use crate::{
 
 #[cfg(unix)]
 mod unix;
-#[cfg(unix)]
-pub use unix::daemon;
 
-#[cfg(windows)]
-mod windows;
-#[cfg(windows)]
-pub use windows::daemon;
+pub fn daemon(func: fn(&Parameters) -> Outcome<()>, params: &Parameters) -> Outcome<()> {
+    #[cfg(unix)] { unix::daemon(func, &params) }
+    #[cfg(windows)] {
+        // match params.daemon_type {
+        //     DaemonType::WindowsClient => crate::client::init(params),
+        //     DaemonType::WindowsServer => crate::server::init(params),
+        //     // not daemonized yet
+        //     _ => windows::daemon()
+        // }
+        Ok(())
+    }
+}
 
 
 pub type Rx = mqtt::Receiver<Option<mqtt::Message>>;

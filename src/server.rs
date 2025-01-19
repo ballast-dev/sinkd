@@ -26,8 +26,8 @@ use crate::{config, ipc, outcome::Outcome, parameters::Parameters};
 //};
 
 pub fn start(params: &Parameters) -> Outcome<()> {
-    ipc::start_mosquitto()?;
-    thread::sleep(Duration::from_millis(500));
+    // ipc::start_mosquitto()?;
+    // thread::sleep(Duration::from_millis(500));
     println!("logging to: {}", params.log_path.display());
     ipc::daemon(init, params)
 }
@@ -84,7 +84,7 @@ fn create_srv_dir(debug: u8, path: &PathBuf) -> Outcome<()> {
 }
 
 // Daemonized call, stdin/stdout/stderr are closed
-fn init(params: &Parameters) -> Outcome<()> {
+pub fn init(params: &Parameters) -> Outcome<()> {
     let srv_dir = get_srv_dir(params.debug);
     create_srv_dir(params.debug, &srv_dir)?;
 

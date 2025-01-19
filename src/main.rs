@@ -7,7 +7,6 @@ extern crate toml;
 extern crate log;
 extern crate libc;
 extern crate nix;
-extern crate windows;
 
 #[macro_use]
 mod cli;
@@ -27,7 +26,7 @@ mod time;
 
 use clap::parser::ValuesRef;
 use outcome::Outcome;
-use std::{path::Path, process::ExitCode};
+use std::{io::Write, path::Path, process::ExitCode};
 
 use crate::parameters::{DaemonType, Parameters};
 
@@ -63,6 +62,22 @@ fn egress<T>(outcome: Outcome<T>) -> ExitCode {
     }
 }
 
+// fn args_to_command_line() -> String {
+//     let args: Vec<String> = std::env::args().skip(1).collect(); // Skip the first argument (exe path)
+//     args.iter()
+//         .map(|arg| {
+//             // Escape arguments with quotes if they contain spaces or special characters
+//             if arg.contains(' ') || arg.contains('"') || arg.contains('\\') {
+//                 let escaped = arg.replace('\\', "\\\\").replace('"', "\\\"");
+//                 format!("\"{}\"", escaped)
+//             } else {
+//                 arg.clone()
+//             }
+//         })
+//         .collect::<Vec<String>>()
+//         .join(" ") // Join all args with spaces
+// }
+
 // FIXME:
 // TODO:
 // NOTE:
@@ -77,20 +92,32 @@ fn main() -> ExitCode {
     let matches = cli.get_matches_mut();
 
     // println!("{:?}", matches);
-    let mut system_config: Option<&String> = None;
-    let mut user_configs: Option<ValuesRef<String>> = None;
-    let daemon_type = if let Some(("client", _)) = matches.subcommand() {
-        if let Some(("client", submatches)) = matches.subcommand() {
-            system_config = submatches.get_one("system-config");
-            user_configs = submatches.get_many("user-configs");
+    let (system_config, user_configs, daemon_type) = match matches.subcommand() {
+        // NOTE: a bit of a mismatch as first run will always be UnixClient
+        
+        Some(("client", submatches)) => {
+            let system_config = submatches.get_one("system-config");
+            let user_configs = submatches.get_many("user-configs");
+            let daemon_type = if matches.get_flag("windows-daemon") {
+                // let mut f = std::fs::File::create("windows_daemon.txt").unwrap();
+                // f.write(b"yay!?")?;
+                DaemonType::WindowsClient
+            } else {
+                DaemonType::UnixClient
+            };
+            (system_config, user_configs, daemon_type)
         }
-        DaemonType::Client
-    } else {
-        // default to server for params
-        DaemonType::Server
+        _ => {
+            let daemon_type = if matches.get_flag("windows-daemon") {
+                DaemonType::WindowsServer
+            } else {
+                DaemonType::UnixServer
+            };
+            (None, None, daemon_type)
+        }
     };
 
-    let params = match Parameters::new(
+    let params = match Parameters::from(
         daemon_type,
         matches.get_count("verbose"),
         matches.get_count("debug"),
