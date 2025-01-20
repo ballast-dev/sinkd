@@ -8,6 +8,8 @@ exclude = [ "src/main.rs" ]
 [dependencies]
 windows = { version = "0.59.0", features = [
     "Win32_Foundation",
+    "Win32_Security",
     "Win32_System_Console",
     "Win32_System_SystemInformation",
+    "Win32_System_Threading",
 ] }
