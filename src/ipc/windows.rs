@@ -11,21 +11,21 @@ use windows::Win32::System::Threading::{
     PROCESS_INFORMATION, STARTUPINFOW,
 };
 
-/// A convenience type for results in this crate.
-pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+use crate::Outcome;
 
+/// Windows daemonizing is re-entrant meaning the entry point 
+/// of the executable is started afresh with no context from 
+/// the parent. Passing a hidden flag into the original executable
+/// seems to be the idiomatic approach on windows. Thus the main
+/// of this program checks for the "hidden flag" at the start.
+/// 
 /// Attempts to daemonize the current process on Windows 
-/// by spawning a new detached child process 
-/// flag: defaults to `--windows-daemon`.
-pub fn daemon(flag: Option<&str>) -> Result<u32> {
+/// by spawning a new detached child process with added flag
+///  `--windows-daemon`
+pub fn daemon() -> Outcome<u32> {
     let exe = std::env::current_exe()?;
     let mut args: Vec<String> = std::env::args().skip(1).collect();
-
-    if let Some(flag_str) = flag {
-        args.push(flag_str.to_string());
-    } else {
-        args.push("--windows-daemon".to_string());
-    }
+    args.push("--windows-daemon".to_string());
 
     // Convert the executable and arguments to wide strings
     let exe_wide: Vec<u16> = OsStr::new(&exe).encode_wide().chain(Some(0)).collect();
@@ -61,7 +61,7 @@ pub fn daemon(flag: Option<&str>) -> Result<u32> {
 }
 
 /// Redirects stdin, stdout, stderr to NUL (basically /dev/null on Windows).
-pub fn redirect_stdio_to_null() -> Result<()> {
+pub fn redirect_stdio_to_null() -> Outcome<()> {
     let devnull = File::open("NUL")?;
     let devnull_handle: HANDLE = HANDLE(devnull.into_raw_handle() as *mut _);
 

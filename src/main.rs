@@ -86,6 +86,16 @@ fn egress<T>(outcome: Outcome<T>) -> ExitCode {
 
 #[allow(dead_code)]
 fn main() -> ExitCode {
+    if std::env::args().any(|arg| arg == "--windows-daemon") {
+        std::fs::write("windows_daemon.txt", "to hell and back");
+        let params = Parameters::from(DaemonType::WindowsClient, 4, 1, None, None).unwrap();
+        if let Err(e) = shiplog::init(&params) {
+            std::fs::write("windows_daemon.txt", format!("{e:?}"));
+        }
+        info!("logging?");
+        return ExitCode::SUCCESS;
+    }
+
     println!("timestamp {}", time::stamp(None));
 
     let mut cli = crate::cli::build_sinkd();
@@ -99,8 +109,6 @@ fn main() -> ExitCode {
             let system_config = submatches.get_one("system-config");
             let user_configs = submatches.get_many("user-configs");
             let daemon_type = if matches.get_flag("windows-daemon") {
-                // let mut f = std::fs::File::create("windows_daemon.txt").unwrap();
-                // f.write(b"yay!?")?;
                 DaemonType::WindowsClient
             } else {
                 DaemonType::UnixClient

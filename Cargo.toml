@@ -6,10 +6,7 @@ edition = "2021"
 
 [workspace]
 resolver = "2"
-members = [
-    "scenario",
-    "daemon"
-]
+members = [ "scenario" ]
 
 [dependencies]
 bincode = "1"
@@ -20,12 +17,15 @@ libc = "0.2"
 log = { version = "0.4", features = ["std"] }
 nix = { version = "0.29", features = ["process", "signal"] }
 notify = "8"
-paho-mqtt = { version = "0.12", features = ["ssl"] }  # use openssl on host machine
+paho-mqtt = { version = "0.12", features = ["bundled", "ssl"] }
 serde = { version = "1.0", features = ["derive"] }
 signal-hook = "0.3"
 toml = "0.8"
 windows = { version = "0.59.0", features = [
+    "Win32_Foundation",
     "Win32_Security",
+    "Win32_System_Console",
+    "Win32_System_SystemInformation",
     "Win32_System_Threading",
     "Win32_System_WindowsProgramming",
 ] }

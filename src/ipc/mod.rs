@@ -20,17 +20,24 @@ use crate::{
 
 #[cfg(unix)]
 mod unix;
+#[cfg(windows)]
+mod windows;
 
 pub fn daemon(func: fn(&Parameters) -> Outcome<()>, params: &Parameters) -> Outcome<()> {
     #[cfg(unix)] { unix::daemon(func, &params) }
     #[cfg(windows)] {
-        // match params.daemon_type {
-        //     DaemonType::WindowsClient => crate::client::init(params),
-        //     DaemonType::WindowsServer => crate::server::init(params),
-        //     // not daemonized yet
-        //     _ => windows::daemon()
-        // }
-        Ok(())
+        match params.daemon_type {
+            DaemonType::WindowsClient => {
+                windows::redirect_stdio_to_null()?;
+                crate::client::init(params)
+            },
+            DaemonType::WindowsServer => {
+                windows::redirect_stdio_to_null()?;
+                crate::server::init(params)
+            }
+            // not daemonized yet
+            _ => windows::daemon().map(|_pid| ())
+        }
     }
 }
 
