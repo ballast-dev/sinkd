@@ -62,22 +62,6 @@ fn egress<T>(outcome: Outcome<T>) -> ExitCode {
     }
 }
 
-// fn args_to_command_line() -> String {
-//     let args: Vec<String> = std::env::args().skip(1).collect(); // Skip the first argument (exe path)
-//     args.iter()
-//         .map(|arg| {
-//             // Escape arguments with quotes if they contain spaces or special characters
-//             if arg.contains(' ') || arg.contains('"') || arg.contains('\\') {
-//                 let escaped = arg.replace('\\', "\\\\").replace('"', "\\\"");
-//                 format!("\"{}\"", escaped)
-//             } else {
-//                 arg.clone()
-//             }
-//         })
-//         .collect::<Vec<String>>()
-//         .join(" ") // Join all args with spaces
-// }
-
 // FIXME:
 // TODO:
 // NOTE:
@@ -92,7 +76,13 @@ fn main() -> ExitCode {
             let _ = std::fs::write("windows_daemon.txt", format!("{e:?}"));
         }
         info!("logging?");
-        debug!("args {:?}", std::env::args());
+        let cli = crate::cli::build_sinkd().no_binary_name(true);
+        let matches = cli.get_matches();
+        match matches.subcommand() {
+            Some(("client", _submatches)) => debug!("windows client!"),
+            Some(("server", _submatches)) => debug!("windows server!"),
+            _ => debug!("uh oh... matches>> {:?}", matches),
+        }
         return ExitCode::SUCCESS;
     }
 
@@ -104,7 +94,6 @@ fn main() -> ExitCode {
     // println!("{:?}", matches);
     let (system_config, user_configs, daemon_type) = match matches.subcommand() {
         // NOTE: a bit of a mismatch as first run will always be UnixClient
-        
         Some(("client", submatches)) => {
             let system_config = submatches.get_one("system-config");
             let user_configs = submatches.get_many("user-configs");

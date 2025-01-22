@@ -41,7 +41,8 @@ pub fn build_sinkd() -> Command {
     let windows_daemon = Arg::new("windows-daemon")
         .long("windows-daemon")
         .action(ArgAction::SetTrue)
-        .hide(true);
+        .hide(true)
+        .global(true);
 
     // composable commands
 
