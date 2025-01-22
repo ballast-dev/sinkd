@@ -38,4 +38,3 @@ fn redirect_stdio_to_null() {
         libc::dup2(devnull_fd, libc::STDERR_FILENO);
     }
 }
-

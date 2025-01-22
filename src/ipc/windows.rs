@@ -13,13 +13,13 @@ use windows::Win32::System::Threading::{
 
 use crate::Outcome;
 
-/// Windows daemonizing is re-entrant meaning the entry point 
-/// of the executable is started afresh with no context from 
+/// Windows daemonizing is re-entrant meaning the entry point
+/// of the executable is started afresh with no context from
 /// the parent. Passing a hidden flag into the original executable
 /// seems to be the idiomatic approach on windows. Thus the main
 /// of this program checks for the "hidden flag" at the start.
-/// 
-/// Attempts to daemonize the current process on Windows 
+///
+/// Attempts to daemonize the current process on Windows
 /// by spawning a new detached child process with added flag
 ///  `--windows-daemon`
 pub fn daemon() -> Outcome<u32> {
@@ -29,7 +29,10 @@ pub fn daemon() -> Outcome<u32> {
 
     // Convert the executable and arguments to wide strings
     let exe_wide: Vec<u16> = OsStr::new(&exe).encode_wide().chain(Some(0)).collect();
-    let args_wide: Vec<u16> = OsStr::new(&args.join(" ")).encode_wide().chain(Some(0)).collect();
+    let args_wide: Vec<u16> = OsStr::new(&args.join(" "))
+        .encode_wide()
+        .chain(Some(0))
+        .collect();
 
     unsafe {
         let mut startup_info = STARTUPINFOW::default();
@@ -43,8 +46,8 @@ pub fn daemon() -> Outcome<u32> {
             None,  // Thread security attributes
             false, // Inherit handles
             creation_flags,
-            None,  // Environment block
-            None,  // Current directory
+            None, // Environment block
+            None, // Current directory
             &mut startup_info,
             &mut process_info,
         )
@@ -53,8 +56,7 @@ pub fn daemon() -> Outcome<u32> {
         // Clean up process handles
         CloseHandle(process_info.hProcess)
             .map_err(|e| format!("Failed to close hProcess: {e:?}"))?;
-        CloseHandle(process_info.hThread)
-            .map_err(|e| format!("Failed to close hThread: {e:?}"))?;
+        CloseHandle(process_info.hThread).map_err(|e| format!("Failed to close hThread: {e:?}"))?;
 
         Ok(process_info.dwProcessId)
     }

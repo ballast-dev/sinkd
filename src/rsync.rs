@@ -1,8 +1,4 @@
-use std::{
-    ffi::OsStr,
-    path::Path,
-    process::Command,
-};
+use std::{ffi::OsStr, path::Path, process::Command};
 
 pub fn rsync<P>(srcs: &Vec<P>, dest: &P)
 where
@@ -10,10 +6,7 @@ where
 {
     let mut cmd = Command::new("rsync");
 
-    cmd.arg("-atR")
-        .arg("--delete")
-        .args(srcs)
-        .arg(dest);
+    cmd.arg("-atR").arg("--delete").args(srcs).arg(dest);
 
     match cmd.spawn() {
         Err(x) => error!("{:#?}", x),

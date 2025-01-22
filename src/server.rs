@@ -11,6 +11,7 @@ use std::{
         mpsc, Arc, Mutex,
     },
     thread,
+    time::Duration
 };
 
 use crate::{config, ipc, outcome::Outcome, parameters::Parameters, rsync::rsync};
@@ -25,8 +26,8 @@ use crate::{config, ipc, outcome::Outcome, parameters::Parameters, rsync::rsync}
 //};
 
 pub fn start(params: &Parameters) -> Outcome<()> {
-    // ipc::start_mosquitto()?;
-    // thread::sleep(Duration::from_millis(500));
+    ipc::start_mosquitto()?;
+    thread::sleep(Duration::from_millis(500));
     println!("logging to: {}", params.log_path.display());
     ipc::daemon(init, params)
 }

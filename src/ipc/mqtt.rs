@@ -1,7 +1,6 @@
 use std::time::Duration;
-use paho_mqtt;
 
-use crate::{ bad, outcome::Outcome };
+use crate::{bad, outcome::Outcome};
 
 pub struct MqttClient {
     pub client: paho_mqtt::Client,

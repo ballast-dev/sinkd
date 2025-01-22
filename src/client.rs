@@ -14,7 +14,6 @@ use std::{
 use crate::{bad, config, ipc, outcome::Outcome, parameters::Parameters, rsync::rsync};
 
 pub fn start(params: &Parameters) -> Outcome<()> {
-    // ipc::start_mosquitto()?;
     println!("logging to: {}", params.log_path.display());
     ipc::daemon(init, params)
 }

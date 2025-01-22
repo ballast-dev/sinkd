@@ -13,14 +13,14 @@ mod cli;
 mod client;
 mod config;
 mod fancy;
-mod rsync;
 mod ipc;
+mod rsync;
 #[macro_use]
 mod outcome;
+mod ops;
 mod parameters;
 mod server;
 mod shiplog;
-mod ops;
 mod time;
 
 use outcome::Outcome;
@@ -73,7 +73,7 @@ fn windoze() -> ExitCode {
         Some(("server", _submatches)) => debug!("windows server!"),
         _ => debug!("uh oh... matches>> {:?}", matches),
     }
-    return ExitCode::SUCCESS;
+    ExitCode::SUCCESS
 }
 
 // FIXME:

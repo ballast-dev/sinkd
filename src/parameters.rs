@@ -55,7 +55,6 @@ user configs: [{}]
 }
 
 impl Parameters {
-
     pub fn from(matches: &ArgMatches) -> Outcome<Self> {
         let (system_config, user_configs, daemon_type) = match matches.subcommand() {
             Some(("client", submatches)) => {
