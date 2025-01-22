@@ -13,22 +13,20 @@ mod cli;
 mod client;
 mod config;
 mod fancy;
-mod flags;
+mod rsync;
 mod ipc;
 #[macro_use]
 mod outcome;
 mod parameters;
 mod server;
 mod shiplog;
-mod sinkd;
-mod test;
+mod ops;
 mod time;
 
-use clap::parser::ValuesRef;
 use outcome::Outcome;
-use std::{io::Write, path::Path, process::ExitCode};
+use std::{path::Path, process::ExitCode};
 
-use crate::parameters::{DaemonType, Parameters};
+use crate::parameters::Parameters;
 
 fn check_path(p: &str) -> bool {
     let p = Path::new(p);
@@ -130,7 +128,7 @@ fn main() -> ExitCode {
                 user_paths = paths.filter(|p| check_path(p)).collect();
             }
 
-            egress(sinkd::add(share_paths, user_paths))
+            egress(ops::add(share_paths, user_paths))
         }
         Some(("rm", submatches)) => {
             let mut share_paths = Vec::<&String>::new();
@@ -142,26 +140,26 @@ fn main() -> ExitCode {
             if let Some(paths) = submatches.get_many::<String>("path") {
                 user_paths = paths.filter(|p| check_path(p)).collect();
             }
-            egress(sinkd::remove(share_paths, user_paths))
+            egress(ops::remove(share_paths, user_paths))
         }
         Some(("adduser", submatches)) => {
             let users = submatches.get_many::<String>("user");
-            egress(sinkd::adduser(users))
+            egress(ops::adduser(users))
         }
         Some(("rmuser", submatches)) => {
             let users = submatches.get_many::<String>("user");
-            egress(sinkd::rmuser(users))
+            egress(ops::rmuser(users))
         }
         Some(("ls", submatches)) => {
             // only list out tracking folders and files
             if let Some(paths) = submatches.get_many::<String>("path") {
                 let _paths = paths.filter(|p| check_path(p)).collect();
-                egress(sinkd::list(Some(_paths)))
+                egress(ops::list(Some(_paths)))
             } else {
-                egress(sinkd::list(None))
+                egress(ops::list(None))
             }
         }
-        Some(("log", _)) => egress(sinkd::log(&params)),
+        Some(("log", _)) => egress(ops::log(&params)),
         _ => {
             cli.print_help().expect("sinkd usage: .... ");
             ExitCode::SUCCESS

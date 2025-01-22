@@ -11,7 +11,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{bad, config, ipc, outcome::Outcome, parameters::Parameters};
+use crate::{bad, config, ipc, outcome::Outcome, parameters::Parameters, rsync::rsync};
 
 pub fn start(params: &Parameters) -> Outcome<()> {
     // ipc::start_mosquitto()?;
@@ -387,7 +387,7 @@ fn push(payload: &ipc::Payload) {
             .join(", "),
         dest.display()
     );
-    ipc::rsync(&payload.src_paths, &dest);
+    rsync(&payload.src_paths, &dest);
 }
 
 fn pull(payload: &ipc::Payload) {
@@ -406,5 +406,5 @@ fn pull(payload: &ipc::Payload) {
         payload.dest_path.display()
     );
 
-    ipc::rsync(&srcs, &payload.dest_path);
+    rsync(&srcs, &payload.dest_path);
 }

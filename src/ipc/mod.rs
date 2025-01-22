@@ -1,28 +1,28 @@
-use paho_mqtt::{self as mqtt, MQTT_VERSION_3_1_1};
-use serde::{Deserialize, Serialize};
-use std::fs::File;
-
 use std::{
-    ffi::OsStr,
     fmt,
     path::{Path, PathBuf},
-    time::Duration,
-    process::{Command, Stdio},
+    process::Command,
 };
+use paho_mqtt;
+use serde::{Deserialize, Serialize};
 
 use crate::parameters::DaemonType;
 use crate::{
     bad, config,
     outcome::Outcome,
     parameters::Parameters,
-    shiplog, time,
+    time,
 };
 
+mod mqtt;
 #[cfg(unix)]
 mod unix;
 #[cfg(windows)]
 mod windows;
 
+pub use mqtt::MqttClient;
+
+#[allow(unused_variables)]
 pub fn daemon(func: fn(&Parameters) -> Outcome<()>, params: &Parameters) -> Outcome<()> {
     #[cfg(unix)] { unix::daemon(func, &params) }
     #[cfg(windows)] {
@@ -42,7 +42,7 @@ pub fn daemon(func: fn(&Parameters) -> Outcome<()>, params: &Parameters) -> Outc
 }
 
 
-pub type Rx = mqtt::Receiver<Option<mqtt::Message>>;
+pub type Rx = paho_mqtt::Receiver<Option<paho_mqtt::Message>>;
 
 #[derive(PartialEq, Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum Reason {
@@ -178,123 +178,27 @@ impl fmt::Display for Payload {
     }
 }
 
-pub fn encode(payload: &mut Payload) -> Result<Vec<u8>, mqtt::Error> {
+pub fn encode(payload: &mut Payload) -> Result<Vec<u8>, paho_mqtt::Error> {
     payload.date = time::stamp(Some("%Y%m%d"));
     match bincode::serialize(payload) {
-        Err(e) => Err(mqtt::Error::GeneralString(format!(
+        Err(e) => Err(paho_mqtt::Error::GeneralString(format!(
             "FATAL, bincode::serialize >> {e}"
         ))),
         Ok(stream) => Ok(stream),
     }
 }
 
-pub fn decode(bytes: &[u8]) -> Result<Payload, mqtt::Error> {
+pub fn decode(bytes: &[u8]) -> Result<Payload, paho_mqtt::Error> {
     match bincode::deserialize(bytes) {
-        Err(_) => Err(mqtt::Error::General("FATAL, bincode could not deserialize")),
+        Err(_) => Err(paho_mqtt::Error::General("FATAL, bincode could not deserialize")),
         Ok(payload) => Ok(payload),
     }
 }
 
-pub struct MqttClient {
-    pub client: mqtt::Client,
-    publish_topic: String,
-}
 
-impl MqttClient {
-    pub fn new(
-        host: Option<&str>,
-        subscriptions: &[&str],
-        publish_topic: &str,
-    ) -> Result<(Self, mqtt::Receiver<Option<mqtt::Message>>), mqtt::Error> {
-        let opts = mqtt::CreateOptionsBuilder::new()
-            .server_uri(resolve_host(host)?)
-            .mqtt_version(MQTT_VERSION_3_1_1)
-            .persistence(None)
-            .finalize();
-        let cli = mqtt::Client::new(opts)?;
-
-        let rx = cli.start_consuming();
-
-        let lwt = mqtt::MessageBuilder::new()
-            .topic("sinkd/server")
-            .payload("Sync consumer lost connection")
-            .finalize();
-
-        let conn_opts = mqtt::ConnectOptionsBuilder::new_v3()
-            .keep_alive_interval(Duration::from_secs(20))
-            .clean_session(true)
-            .will_message(lwt)
-            .finalize();
-
-        let qos = vec![0; subscriptions.len()];
-
-        debug!(
-            "Connecting to MQTT broker at host: {}, subscriptions: [{}], publish_topic: {}",
-            host.unwrap_or("unknown"),
-            subscriptions.to_vec().join(", "),
-            publish_topic
-        );
-
-        match cli.connect(conn_opts) {
-            Ok(rsp) => {
-                if let Some(con_rsp) = rsp.connect_response() {
-                    debug!(
-                        "Connected to: '{}' with MQTT version {}",
-                        con_rsp.server_uri, con_rsp.mqtt_version
-                    );
-                    if con_rsp.session_present {
-                        return Err(mqtt::Error::General("Client session already present on broker"));
-                    }
-
-                    debug!("Subscribing to topics: {:?} with QoS {:?}", subscriptions, qos);
-                    cli.subscribe_many(subscriptions, &qos)
-                        .map_err(|_| mqtt::Error::General("Failed to subscribe to topics"))?;
-
-                    Ok((
-                        MqttClient {
-                            client: cli,
-                            publish_topic: publish_topic.to_owned(),
-                        },
-                        rx,
-                    ))
-                } else {
-                    Err(mqtt::Error::General("No connection response from broker"))
-                }
-            }
-            Err(e) => Err(mqtt::Error::GeneralString(format!(
-                "Could not connect to broker '{}': {:?}. Ensure the broker is running and reachable.",
-                host.unwrap_or("unknown"),
-                e
-            ))),
-        }
-    }
-
-    pub fn publish(&self, payload: &mut Payload) -> Outcome<()> {
-        match self.client.publish(mqtt::Message::new(
-            &self.publish_topic,
-            encode(payload)?,
-            mqtt::QOS_0,
-        )) {
-            Ok(()) => {
-                info!("published payload: {}", payload);
-                Ok(())
-            }
-            Err(e) => {
-                error!("could not publish payload {}, {}", payload, e);
-                bad!("could not publish payload {}, {}", payload, e)
-            }
-        }
-    }
-
-    pub fn disconnect(&self) {
-        debug!("disconnecting from mqtt...");
-        self.client.disconnect(None).expect("cannot disconnect?");
-    }
-}
-
-fn resolve_host(host: Option<&str>) -> Result<String, mqtt::Error> {
+fn resolve_host(host: Option<&str>) -> Result<String, paho_mqtt::Error> {
     match host {
-        Some(h) if h.starts_with('/') => Err(mqtt::Error::General(
+        Some(h) if h.starts_with('/') => Err(paho_mqtt::Error::General(
             "Invalid hostname: it looks like a path. Did you mean 'localhost'?",
         )),
         Some(h) => {
@@ -302,7 +206,7 @@ fn resolve_host(host: Option<&str>) -> Result<String, mqtt::Error> {
             debug!("Fully qualified host: {}", fq_host);
             Ok(fq_host)
         }
-        None => Err(mqtt::Error::General("Host string is required but missing")),
+        None => Err(paho_mqtt::Error::General("Host string is required but missing")),
     }
 }
 
@@ -317,20 +221,3 @@ pub fn start_mosquitto() -> Outcome<()> {
     Ok(())
 }
 
-
-pub fn rsync<P>(srcs: &Vec<P>, dest: &P)
-where
-    P: AsRef<OsStr> + AsRef<Path> + std::fmt::Debug,
-{
-    let mut cmd = Command::new("rsync");
-
-    cmd.arg("-atR")
-        .arg("--delete")
-        .args(srcs)
-        .arg(dest);
-
-    match cmd.spawn() {
-        Err(x) => error!("{:#?}", x),
-        Ok(_) => debug!("\u{1f6b0} rsync {:#?} {:#?} \u{1f919}", srcs, dest),
-    }
-}

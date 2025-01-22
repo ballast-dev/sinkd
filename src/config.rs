@@ -201,9 +201,9 @@ pub fn have_permissions() -> bool {
     {
         use windows::Win32::Foundation::HANDLE;
         use windows::Win32::Security::{
-            CheckTokenMembership, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY,
+            TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY,
         };
-        use windows::Win32::Security::{GetTokenInformation, SECURITY_NT_AUTHORITY};
+        use windows::Win32::Security::GetTokenInformation;
         use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 
         unsafe {

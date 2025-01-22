@@ -55,16 +55,6 @@ user configs: [{}]
 }
 
 impl Parameters {
-    pub fn new() -> Self {
-        Parameters {
-            daemon_type: DaemonType::UnixClient,
-            verbosity: 0,
-            debug: 0,
-            log_path: PathBuf::new(),
-            system_config: Arc::new(PathBuf::new()),
-            user_configs: Arc::new(Vec::new()),
-        }
-    }
 
     pub fn from(matches: &ArgMatches) -> Outcome<Self> {
         let (system_config, user_configs, daemon_type) = match matches.subcommand() {
@@ -89,7 +79,7 @@ impl Parameters {
         };
 
         let debug = matches.get_count("debug");
-        Self::create_log_dir(debug);
+        Self::create_log_dir(debug)?;
 
         let params = Parameters {
             daemon_type: daemon_type.clone(),

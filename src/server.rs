@@ -11,10 +11,9 @@ use std::{
         mpsc, Arc, Mutex,
     },
     thread,
-    time::Duration,
 };
 
-use crate::{config, ipc, outcome::Outcome, parameters::Parameters};
+use crate::{config, ipc, outcome::Outcome, parameters::Parameters, rsync::rsync};
 
 //static SRV_PATH: &str = {
 //    #[cfg(target_os = "windows")]
@@ -290,7 +289,7 @@ fn synch_entry(
                     continue; // FIXME: fatal?
                 }
                 // this call could take a while
-                ipc::rsync(&payload.src_paths, &dest);
+                rsync(&payload.src_paths, &dest);
 
                 if let Ok(mut state) = status.lock() {
                     *state = ipc::Status::Ready;
