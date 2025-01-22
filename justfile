@@ -1,39 +1,4 @@
-arch_var := arch()
-
-set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
-
-export OPENSSL_DIR = if os_family() == "windows" {
-  if arch_var == "x86_64" {
-    "C:\\Program Files\\OpenSSL-Win64"
-  } else {
-    "C:\\Program Files\\OpenSSL-Win64-ARM"
-  }
-} else {
-  ""
-}
-
-export OPENSSL_LIB_DIR = if os_family() == "windows" {
-  if arch_var == "x86_64" {
-    "C:\\Program Files\\OpenSSL-Win64\\lib\\VC\\x64\\MT"
-  } else {
-    "C:\\Program Files\\OpenSSL-Win64-ARM\\lib\\VC\\arm64\\MT"
-  }
-} else {
-  ""
-}
-
-export OPENSSL_INCLUDE_DIR = if os_family() == "windows" {
-  if arch_var == "x86_64" {
-    "C:\\Program Files\\OpenSSL-Win64\\include"
-  } else {
-    "C:\\Program Files\\OpenSSL-Win64-ARM\\include"
-  }
-} else {
-  ""
-}
-
-export OPENSSL_STATIC = if os_family() == "windows" { "1" } else { "" }
-
+# run linter with strict flags
 clippy:
     cargo clippy --fix --allow-dirty --allow-staged \
     -- -W clippy::perf -D clippy::pedantic -D clippy::correctness -D clippy::suspicious -D clippy::complexity
@@ -71,7 +36,7 @@ run args:
 
 # UID := `id -u`
 # GID := `id -g`
-# TLD := `git rev-parse --show-toplevel`
+TLD := `git rev-parse --show-toplevel`
 
 # first rip, setup environment and do a build
 # all: image container build
@@ -79,17 +44,19 @@ run args:
 # add yourself to the docker group for permissions
 # sudo usermod -aG docker $(whoami)
 
-# # create image from Dockerfile
-# image:
-#     @docker build -t alpine -f Dockerfile src/
+# create image from Dockerfile
+image:
+    @docker build -t alpine -f pkg/Dockerfile src/
 
-# # spawn container with tld as /sinkd
-# container:
-#     @docker run --name sinkd --user {{UID}}:{{GID}} -v {{TLD}}:/sinkd  -itd alpine    
+# spawn container with tld as /sinkd
+container:
+    docker run --name sinkd -v {{TLD}}:/sinkd --workdir /sinkd -it alpine    
 
-# # build app in container
-# build:
-#     @docker exec sinkd cargo build
+# @docker run --name sinkd --user {{UID}}:{{GID}} -v {{TLD}}:/sinkd  -itd alpine    
+
+# build app in container
+container-build:
+    @docker exec --workdir /sinkd sinkd cargo build
 
 # # build app with no warnings in container
 # build-no-warn:

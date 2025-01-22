@@ -46,8 +46,6 @@ impl From<paho_mqtt::Error> for Failure {
     fn from(error: paho_mqtt::Error) -> Self {
         let mut err_str = String::from("ERROR Paho>> ");
         match error {
-            paho_mqtt::Error::Paho(e) => { err_str.push_str(&format!("library, num: {e}")); }
-            paho_mqtt::Error::PahoDescr(num, msg) => { err_str.push_str(&format!("description(redundant):{num}, {msg}")); }
             paho_mqtt::Error::Publish(num, msg) => { err_str.push_str(&format!("publish num:{num}, msg:{msg}")); }
             paho_mqtt::Error::ReasonCode(code) => { err_str.push_str(&format!("mqttv5 reason code: {code}")); }
             paho_mqtt::Error::BadTopicFilter => { err_str.push_str("Bad Topic Filter"); }
@@ -58,6 +56,31 @@ impl From<paho_mqtt::Error> for Failure {
             paho_mqtt::Error::Timeout => { err_str.push_str("timeout from synchronous operation"); }
             paho_mqtt::Error::General(msg) => { err_str.push_str(msg); }
             paho_mqtt::Error::GeneralString(msg) => { err_str.push_str(&msg); }
+            paho_mqtt::Error::Failure => { err_str.push_str("Failure"); }
+            paho_mqtt::Error::PersistenceError => { err_str.push_str("PersistenceError"); }
+            paho_mqtt::Error::Disconnected => { err_str.push_str("Disconnected"); }
+            paho_mqtt::Error::MaxMessagesInflight => { err_str.push_str("MaxMessagesInflight"); }
+            paho_mqtt::Error::BadUtf8String => { err_str.push_str("BadUtf8String"); }
+            paho_mqtt::Error::NullParameter => { err_str.push_str("NullParamenter"); }
+            paho_mqtt::Error::TopicNameTruncated => { err_str.push_str("TopicNameTruncated"); }
+            paho_mqtt::Error::BadStructure => { err_str.push_str("BadStructure"); }
+            paho_mqtt::Error::BadQos => { err_str.push_str("BadQOS"); }
+            paho_mqtt::Error::NoMoreMsgIds => { err_str.push_str("NoMoreMsgIds"); }
+            paho_mqtt::Error::OperationIncomplete => { err_str.push_str("OperationIncomplete"); }
+            paho_mqtt::Error::MaxBufferedMessages => { err_str.push_str("MaxBufferedMessages"); }
+            paho_mqtt::Error::SslNotSupported => { err_str.push_str("SslNotSupported"); }
+            paho_mqtt::Error::BadProtocol => { err_str.push_str("BadProtocol"); }
+            paho_mqtt::Error::BadMqttOption => { err_str.push_str("BadMqttOption"); }
+            paho_mqtt::Error::WrongMqttVersion => { err_str.push_str("WrongMqttVersion"); }
+            paho_mqtt::Error::ZeroLenWillTopic => { err_str.push_str("ZeroLenWillTopic"); }
+            paho_mqtt::Error::CommandIgnored => { err_str.push_str("CommandIgnored"); }
+            paho_mqtt::Error::MaxBufferedZero => { err_str.push_str("MaxBufferedZero"); }
+            paho_mqtt::Error::TcpConnectTimeout => { err_str.push_str("TcpConnectTimeout"); }
+            paho_mqtt::Error::TcpConnectCompletionFailure => { err_str.push_str("TcpConnectCompletionFailure"); }
+            paho_mqtt::Error::TcpTlsConnectFailure => { err_str.push_str("TcpTlsConnectFailure"); }
+            paho_mqtt::Error::SocketError(socket_err) => { err_str.push_str(&format!("SocketError:{}", socket_err)); }
+            paho_mqtt::Error::ConnectReturn(connect_return_code) => { err_str.push_str(&format!("ConnectReturn {}", connect_return_code)); }
+            paho_mqtt::Error::ReceivedDisconnect(_) => { err_str.push_str("ReceivedDisconnect"); }
         }
         Failure(err_str)
     }

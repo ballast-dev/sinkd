@@ -87,12 +87,12 @@ fn egress<T>(outcome: Outcome<T>) -> ExitCode {
 #[allow(dead_code)]
 fn main() -> ExitCode {
     if std::env::args().any(|arg| arg == "--windows-daemon") {
-        std::fs::write("windows_daemon.txt", "to hell and back");
         let params = Parameters::from(DaemonType::WindowsClient, 4, 1, None, None).unwrap();
         if let Err(e) = shiplog::init(&params) {
-            std::fs::write("windows_daemon.txt", format!("{e:?}"));
+            let _ = std::fs::write("windows_daemon.txt", format!("{e:?}"));
         }
         info!("logging?");
+        debug!("args {:?}", std::env::args());
         return ExitCode::SUCCESS;
     }
 

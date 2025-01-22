@@ -1,8 +1,7 @@
-FROM rust:1.81-alpine3.20
+FROM rust:1.84-alpine3.20
 
 RUN apk update && apk add \
   build-base \
   cmake \
   openssl-dev \
-  perl \
-  vim
+  openssl-libs-static

@@ -42,7 +42,12 @@ Dependencies:
 - use `git-lfs` to enable data restore (manual tagging)
 
 ##  Development
+
+### Linux
+Install `gcc cmake perl openssl-dev`
+
 1. Windows install openssl
 
         winget install ShiningLight.OpenSSL.Dev
         winget install EclipseFoundation.Mosquitto
+
