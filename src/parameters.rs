@@ -1,4 +1,4 @@
-use clap::parser::ValuesRef;
+use clap::{parser::ValuesRef, ArgMatches};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -65,17 +65,35 @@ impl Parameters {
             user_configs: Arc::new(Vec::new()),
         }
     }
-    pub fn from(
-        daemon_type: DaemonType,
-        verbosity: u8,
-        debug: u8,
-        system_config: Option<&String>,
-        user_configs: Option<ValuesRef<String>>,
-    ) -> Outcome<Self> {
-        Parameters::create_log_dir(debug)?;
-        Ok(Parameters {
+
+    pub fn from(matches: &ArgMatches) -> Outcome<Self> {
+        let (system_config, user_configs, daemon_type) = match matches.subcommand() {
+            Some(("client", submatches)) => {
+                let system_config = submatches.get_one("system-config");
+                let user_configs = submatches.get_many("user-configs");
+                let daemon_type = if matches.get_flag("windows-daemon") {
+                    DaemonType::WindowsClient
+                } else {
+                    DaemonType::UnixClient
+                };
+                (system_config, user_configs, daemon_type)
+            }
+            _ => {
+                let daemon_type = if matches.get_flag("windows-daemon") {
+                    DaemonType::WindowsServer
+                } else {
+                    DaemonType::UnixServer
+                };
+                (None, None, daemon_type)
+            }
+        };
+
+        let debug = matches.get_count("debug");
+        Self::create_log_dir(debug);
+
+        let params = Parameters {
             daemon_type: daemon_type.clone(),
-            verbosity: match (debug, verbosity) {
+            verbosity: match (debug, matches.get_count("verbose")) {
                 (d, _) if d > 0 => 4, // if debugging -> full verbosity
                 (_, 0) => 2,          // default to warn log level  TODO: make this obsolete
                 (_, v) => v,
@@ -101,7 +119,13 @@ impl Parameters {
                 DaemonType::WindowsClient => Self::resolve_user_configs(user_configs)?,
                 DaemonType::WindowsServer => Arc::new(vec![]),
             },
-        })
+        };
+
+        if params.debug > 0 {
+            println!("{}", &params);
+        }
+
+        Ok(params)
     }
 
     fn create_log_dir(debug: u8) -> Outcome<()> {

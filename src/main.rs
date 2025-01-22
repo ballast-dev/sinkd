@@ -62,6 +62,22 @@ fn egress<T>(outcome: Outcome<T>) -> ExitCode {
     }
 }
 
+fn windoze() -> ExitCode {
+    let cli = crate::cli::build_sinkd().no_binary_name(true);
+    let matches = cli.get_matches();
+    let params = Parameters::from(&matches).unwrap();
+    if let Err(e) = shiplog::init(&params) {
+        let _ = std::fs::write("sinkd_error.log", format!("{e:?}"));
+    }
+    info!("-- windoze --");
+    match matches.subcommand() {
+        Some(("client", _submatches)) => debug!("windows client!"),
+        Some(("server", _submatches)) => debug!("windows server!"),
+        _ => debug!("uh oh... matches>> {:?}", matches),
+    }
+    return ExitCode::SUCCESS;
+}
+
 // FIXME:
 // TODO:
 // NOTE:
@@ -71,19 +87,7 @@ fn egress<T>(outcome: Outcome<T>) -> ExitCode {
 #[allow(dead_code)]
 fn main() -> ExitCode {
     if std::env::args().any(|arg| arg == "--windows-daemon") {
-        let params = Parameters::from(DaemonType::WindowsClient, 4, 1, None, None).unwrap();
-        if let Err(e) = shiplog::init(&params) {
-            let _ = std::fs::write("windows_daemon.txt", format!("{e:?}"));
-        }
-        info!("logging?");
-        let cli = crate::cli::build_sinkd().no_binary_name(true);
-        let matches = cli.get_matches();
-        match matches.subcommand() {
-            Some(("client", _submatches)) => debug!("windows client!"),
-            Some(("server", _submatches)) => debug!("windows server!"),
-            _ => debug!("uh oh... matches>> {:?}", matches),
-        }
-        return ExitCode::SUCCESS;
+        return windoze();
     }
 
     println!("timestamp {}", time::stamp(None));
@@ -91,43 +95,10 @@ fn main() -> ExitCode {
     let mut cli = crate::cli::build_sinkd();
     let matches = cli.get_matches_mut();
 
-    // println!("{:?}", matches);
-    let (system_config, user_configs, daemon_type) = match matches.subcommand() {
-        // NOTE: a bit of a mismatch as first run will always be UnixClient
-        Some(("client", submatches)) => {
-            let system_config = submatches.get_one("system-config");
-            let user_configs = submatches.get_many("user-configs");
-            let daemon_type = if matches.get_flag("windows-daemon") {
-                DaemonType::WindowsClient
-            } else {
-                DaemonType::UnixClient
-            };
-            (system_config, user_configs, daemon_type)
-        }
-        _ => {
-            let daemon_type = if matches.get_flag("windows-daemon") {
-                DaemonType::WindowsServer
-            } else {
-                DaemonType::UnixServer
-            };
-            (None, None, daemon_type)
-        }
-    };
-
-    let params = match Parameters::from(
-        daemon_type,
-        matches.get_count("verbose"),
-        matches.get_count("debug"),
-        system_config,
-        user_configs,
-    ) {
+    let params = match Parameters::from(&matches) {
         Ok(params) => params,
         Err(e) => return egress::<String>(bad!(e)),
     };
-
-    if params.debug > 0 {
-        println!("{}", &params);
-    }
 
     match matches.subcommand() {
         Some(("server", submatches)) => match submatches.subcommand() {
