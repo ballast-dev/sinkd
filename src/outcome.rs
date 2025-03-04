@@ -78,6 +78,7 @@ impl From<paho_mqtt::Error> for Failure {
             paho_mqtt::Error::TcpConnectTimeout => { err_str.push_str("TcpConnectTimeout"); }
             paho_mqtt::Error::TcpConnectCompletionFailure => { err_str.push_str("TcpConnectCompletionFailure"); }
             paho_mqtt::Error::TcpTlsConnectFailure => { err_str.push_str("TcpTlsConnectFailure"); }
+            paho_mqtt::Error::MissingSslOptions => { err_str.push_str("MissingSslOptions"); }
             paho_mqtt::Error::SocketError(socket_err) => { err_str.push_str(&format!("SocketError:{}", socket_err)); }
             paho_mqtt::Error::ConnectReturn(connect_return_code) => { err_str.push_str(&format!("ConnectReturn {}", connect_return_code)); }
             paho_mqtt::Error::ReceivedDisconnect(_) => { err_str.push_str("ReceivedDisconnect"); }
