@@ -49,17 +49,16 @@ fn get_repo_root() -> PathBuf {
 }
 
 /// Removes all subdirectories within the specified directory.
-pub fn remove_subfiles(directory: &Path) -> Result<(), String> {
-    info!("Removing subfiles in {:?}", directory);
+pub fn remove_subfiles(directory: &Path) {
+    info!("Removing subfiles in {}", directory.display());
     if directory.exists() {
         for entry in fs::read_dir(directory).expect("Failed to read directory") {
             let entry = entry.expect("Failed to get directory entry");
             let path = entry.path();
             if path.is_dir() {
-                fs::remove_dir_all(&path).expect(&format!("Failed to remove directory {:?}", path));
-                info!("Removed {:?}", path);
+                fs::remove_dir_all(&path).unwrap_or_else(|_| panic!("Failed to remove directory {}", path.display()));
+                info!("Removed {}", path.display());
             }
         }
     }
-    Ok(())
 }

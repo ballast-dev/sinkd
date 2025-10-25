@@ -10,24 +10,22 @@ use crate::{fancy_debug, outcome::Outcome, parameters::Parameters};
 //     libc::signal(libc::SIGHUP, s);
 // }
 
-pub fn add(share_paths: Vec<&String>, user_paths: Vec<&String>) -> Outcome<()> {
-    for p in &share_paths {
+pub fn add(share_paths: &[&String], user_paths: &[&String]) {
+    for p in share_paths {
         println!("share_path: {p}");
     }
-    for p in &user_paths {
+    for p in user_paths {
         println!("user_path: {p}");
     }
-    Ok(())
 }
 
-pub fn remove(share_paths: Vec<&String>, user_paths: Vec<&String>) -> Outcome<()> {
-    for p in &share_paths {
+pub fn remove(share_paths: &[&String], user_paths: &[&String]) {
+    for p in share_paths {
         println!("share_path: {p}");
     }
-    for p in &user_paths {
+    for p in user_paths {
         println!("user_path: {p}");
     }
-    Ok(())
 }
 
 pub fn adduser(users: Option<ValuesRef<String>>) -> Outcome<()> {
@@ -78,7 +76,7 @@ pub fn list(paths: Option<Vec<&String>>) -> Outcome<bool> {
     // }
 }
 
-pub fn log(params: &Parameters) -> Outcome<bool> {
+pub fn log(params: &Parameters) -> bool {
     // info!("hello log");
     // warn!("warning");
     // error!("oops");
@@ -86,5 +84,5 @@ pub fn log(params: &Parameters) -> Outcome<bool> {
         "{}",
         fs::read_to_string(&params.log_path).expect("couldn't read log file, check permissions")
     );
-    Ok(true)
+    true
 }

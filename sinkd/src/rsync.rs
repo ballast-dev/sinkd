@@ -9,12 +9,13 @@ where
     cmd.arg("-atR").arg("--delete").args(srcs).arg(dest);
 
     match cmd.spawn() {
-        Err(x) => error!("{:#?}", x),
-        Ok(_) => debug!("\u{1f6b0} rsync {:#?} {:#?} \u{1f919}", srcs, dest),
+        Err(x) => error!("{x:#?}"),
+        Ok(_) => debug!("\u{1f6b0} rsync {srcs:#?} {dest:#?} \u{1f919}"),
     }
 }
 
 #[allow(dead_code)]
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Default)]
 pub struct RsyncFlags {
     pub verbose: bool,
@@ -118,24 +119,25 @@ pub struct RsyncFlags {
     pub ipv6: bool,
 }
 
+// Helper to parse flag with optional parameter (e.g. --rsh=COMMAND).
+fn parse_kv(flag: &str) -> (String, Option<String>) {
+    if let Some((key, val)) = flag.split_once('=') {
+        (key.to_string(), Some(val.to_string()))
+    } else {
+        (flag.to_string(), None)
+    }
+}
+
 #[allow(dead_code)]
 impl RsyncFlags {
-    /// Parse CLI arguments into RsyncFlags.
+    /// Parse CLI arguments into `RsyncFlags`.
+    #[allow(clippy::too_many_lines)]
     pub fn parse<I, S>(args: I) -> Self
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
         let mut flags = RsyncFlags::default();
-
-        // Helper to parse flag with optional parameter (e.g. --rsh=COMMAND).
-        fn parse_kv(flag: &str) -> (String, Option<String>) {
-            if let Some((key, val)) = flag.split_once('=') {
-                (key.to_string(), Some(val.to_string()))
-            } else {
-                (flag.to_string(), None)
-            }
-        }
 
         for arg in args {
             let arg_str = arg.as_ref();
@@ -279,7 +281,7 @@ impl RsyncFlags {
 
         // Example of pushing a flag with a value (if set):
         if let Some(ref block_size) = self.block_size {
-            result.push(format!("--block-size={}", block_size));
+            result.push(format!("--block-size={block_size}"));
         }
 
         result

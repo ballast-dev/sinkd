@@ -1,0 +1,207 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version'
+        required: true
+        default: '0.1.0'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          # Windows
+          - target: x86_64-pc-windows-gnu
+            os: ubuntu-latest
+            archive: zip
+          
+          # Linux
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            archive: tar.gz
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            archive: tar.gz
+          
+          # macOS
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            archive: tar.gz
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            archive: tar.gz
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.target }}
+
+    - name: Install cross-compilation tools (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          gcc-mingw-w64 \
+          gcc-multilib \
+          musl-tools \
+          musl-dev
+        
+        # Install cross for ARM builds
+        cargo install cross --git https://github.com/cross-rs/cross
+        
+        # Install additional ARM tools
+        if [[ "${{ matrix.target }}" == *"aarch64"* ]]; then
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+        fi
+
+    - name: Install dependencies (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        brew install mosquitto openssl cmake
+
+    - name: Setup build environment
+      run: |
+        # Set OpenSSL environment variables
+        echo "OPENSSL_STATIC=1" >> $GITHUB_ENV
+        echo "OPENSSL_VENDORED=1" >> $GITHUB_ENV
+        
+        # Set target-specific environment
+        case "${{ matrix.target }}" in
+          *windows*)
+            echo "CARGO_TARGET_${{ matrix.target | replace('-', '_') | upper }}_LINKER=x86_64-w64-mingw32-gcc" >> $GITHUB_ENV
+            ;;
+          *musl*)
+            echo "CC_${{ matrix.target | replace('-', '_') }}=musl-gcc" >> $GITHUB_ENV
+            ;;
+        esac
+
+    - name: Build binary
+      run: |
+        if [[ "${{ matrix.target }}" == *"linux"* && "${{ matrix.target }}" == *"aarch64"* ]]; then
+          # Use cross for ARM Linux builds
+          cross build --release --target ${{ matrix.target }}
+        else
+          cargo build --release --target ${{ matrix.target }}
+        fi
+
+    - name: Create archive
+      id: archive
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/v}
+        if [ -z "$VERSION" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+        fi
+        
+        BINARY_NAME="sinkd"
+        if [[ "${{ matrix.target }}" == *"windows"* ]]; then
+          BINARY_NAME="sinkd.exe"
+        fi
+        
+        ARCHIVE_NAME="sinkd-${{ matrix.target }}-${VERSION}"
+        BINARY_PATH="target/${{ matrix.target }}/release/${BINARY_NAME}"
+        
+        if [[ "${{ matrix.archive }}" == "zip" ]]; then
+          zip -r "${ARCHIVE_NAME}.zip" "${BINARY_PATH}" README.md LICENSE
+          echo "archive=${ARCHIVE_NAME}.zip" >> $GITHUB_OUTPUT
+        else
+          tar -czf "${ARCHIVE_NAME}.tar.gz" -C "target/${{ matrix.target }}/release" "${BINARY_NAME}" -C "../../../" README.md LICENSE
+          echo "archive=${ARCHIVE_NAME}.tar.gz" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.target }}
+        path: ${{ steps.archive.outputs.archive }}
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Prepare release assets
+      run: |
+        mkdir -p release-assets
+        find artifacts -type f \( -name "*.zip" -o -name "*.tar.gz" \) -exec cp {} release-assets/ \;
+        
+        # Generate checksums
+        cd release-assets
+        sha256sum * > checksums.sha256
+        cd ..
+
+    - name: Get version
+      id: version
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/v}
+        if [ -z "$VERSION" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+        fi
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+    - name: Create release notes
+      run: |
+        cat > RELEASE_NOTES.md << 'EOF'
+        # sinkd v${{ steps.version.outputs.version }}
+        
+        ## Downloads
+        
+        ### Windows
+        - **x64**: `sinkd-x86_64-pc-windows-gnu-${{ steps.version.outputs.version }}.zip`
+        
+        ### Linux (Static Binaries)
+        - **x64**: `sinkd-x86_64-unknown-linux-musl-${{ steps.version.outputs.version }}.tar.gz`
+        - **ARM64**: `sinkd-aarch64-unknown-linux-musl-${{ steps.version.outputs.version }}.tar.gz`
+        
+        ### macOS
+        - **Intel**: `sinkd-x86_64-apple-darwin-${{ steps.version.outputs.version }}.tar.gz`
+        - **Apple Silicon**: `sinkd-aarch64-apple-darwin-${{ steps.version.outputs.version }}.tar.gz`
+        
+        ## Installation
+        
+        Download the appropriate archive for your platform, extract the binary, and place it in your PATH.
+        
+        ## Checksums
+        
+        ```
+        $(cat release-assets/checksums.sha256)
+        ```
+        
+        ## What's New
+        
+        See the [changelog](CHANGELOG.md) for details.
+        EOF
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: v${{ steps.version.outputs.version }}
+        name: sinkd v${{ steps.version.outputs.version }}
+        body_path: RELEASE_NOTES.md
+        files: release-assets/*
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,6 +1,7 @@
 use clap::{Arg, ArgAction, Command};
 
 #[rustfmt::skip]
+#[allow(clippy::too_many_lines)]
 pub fn build_sinkd() -> Command {
     // composable args
     let share_arg = Arg::new("share")

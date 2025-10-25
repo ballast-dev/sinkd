@@ -1,6 +1,8 @@
 // wrapper type to implement custom behavior
 // Rust's orphan rule prevents aliasing and adding behavior to types
 // outside of this crate's definiton
+use std::fmt::Write;
+
 #[derive(Debug)]
 pub struct Failure(String);
 pub type Outcome<T> = std::result::Result<T, Failure>;
@@ -46,11 +48,11 @@ impl From<paho_mqtt::Error> for Failure {
     fn from(error: paho_mqtt::Error) -> Self {
         let mut err_str = String::from("ERROR Paho>> ");
         match error {
-            paho_mqtt::Error::Publish(num, msg) => { err_str.push_str(&format!("publish num:{num}, msg:{msg}")); }
-            paho_mqtt::Error::ReasonCode(code) => { err_str.push_str(&format!("mqttv5 reason code: {code}")); }
+            paho_mqtt::Error::Publish(num, msg) => { let _ = write!(err_str, "publish num:{num}, msg:{msg}"); }
+            paho_mqtt::Error::ReasonCode(code) => { let _ = write!(err_str, "mqttv5 reason code: {code}"); }
             paho_mqtt::Error::BadTopicFilter => { err_str.push_str("Bad Topic Filter"); }
-            paho_mqtt::Error::Io(num) => { err_str.push_str(&format!("IO lowlevel: {num}")); }
-            paho_mqtt::Error::Utf8(e) => { err_str.push_str(&format!("parsing UTF8 str: {e}")); }
+            paho_mqtt::Error::Io(num) => { let _ = write!(err_str, "IO lowlevel: {num}"); }
+            paho_mqtt::Error::Utf8(e) => { let _ = write!(err_str, "parsing UTF8 str: {e}"); }
             paho_mqtt::Error::Nul(_) => { err_str.push_str("Nul"); }
             paho_mqtt::Error::Conversion => { err_str.push_str("conversion between types"); }
             paho_mqtt::Error::Timeout => { err_str.push_str("timeout from synchronous operation"); }
@@ -79,8 +81,8 @@ impl From<paho_mqtt::Error> for Failure {
             paho_mqtt::Error::TcpConnectCompletionFailure => { err_str.push_str("TcpConnectCompletionFailure"); }
             paho_mqtt::Error::TcpTlsConnectFailure => { err_str.push_str("TcpTlsConnectFailure"); }
             paho_mqtt::Error::MissingSslOptions => { err_str.push_str("MissingSslOptions"); }
-            paho_mqtt::Error::SocketError(socket_err) => { err_str.push_str(&format!("SocketError:{}", socket_err)); }
-            paho_mqtt::Error::ConnectReturn(connect_return_code) => { err_str.push_str(&format!("ConnectReturn {}", connect_return_code)); }
+            paho_mqtt::Error::SocketError(socket_err) => { let _ = write!(err_str, "SocketError:{socket_err}"); }
+            paho_mqtt::Error::ConnectReturn(connect_return_code) => { let _ = write!(err_str, "ConnectReturn {connect_return_code}"); }
             paho_mqtt::Error::ReceivedDisconnect(_) => { err_str.push_str("ReceivedDisconnect"); }
         }
         Failure(err_str)

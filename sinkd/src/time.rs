@@ -32,7 +32,7 @@ impl LastSync {
     }
 }
 
-/// Function to read LastSync from a given file path
+/// Function to read `LastSync` from a given file path
 #[allow(dead_code)]
 fn read_last_sync<S>(path: &S) -> Outcome<LastSync>
 where
@@ -57,7 +57,7 @@ where
     Ok(LastSync::from(timestamp, cycle))
 }
 
-/// Function to write LastSync to a given file path
+/// Function to write `LastSync` to a given file path
 #[allow(dead_code)]
 fn write_last_sync<S>(path: &S, last_sync: &LastSync) -> Outcome<()>
 where

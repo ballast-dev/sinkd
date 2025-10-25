@@ -30,7 +30,7 @@ pub fn stop(params: &Parameters) -> Outcome<()> {
         .arg("end")
         .output()
     {
-        println!("{:#?}", e);
+        println!("{e:#?}");
     }
     Ok(())
 }
@@ -78,10 +78,10 @@ pub fn init(params: &Parameters) -> Outcome<()> {
     });
 
     if let Err(e) = watch_thread.join().unwrap() {
-        error!("{}", e);
+        error!("{e}");
     }
     if let Err(e) = mqtt_thread.join().unwrap() {
-        error!("{}", e);
+        error!("{e}");
     }
     Ok(())
 }
@@ -116,6 +116,7 @@ fn check_interval(
     }
 }
 
+#[allow(clippy::needless_pass_by_value)]
 fn watch_entry(
     inode_map: Arc<RwLock<config::InodeMap>>,
     notify_rx: mpsc::Receiver<notify::Event>,
@@ -154,6 +155,7 @@ fn watch_entry(
     }
 }
 
+#[allow(clippy::needless_pass_by_value)]
 fn mqtt_entry(
     server_addr: &str,
     inode_map: Arc<RwLock<config::InodeMap>>,
@@ -195,7 +197,7 @@ fn mqtt_entry(
                         fatal.store(true, Ordering::Relaxed);
                     } else if let Ok(decoded_payload) = ipc::decode(msg.payload()) {
                         // process mqtt traffic from server
-                        debug!("client>> 👍 recv: {}", decoded_payload);
+                        debug!("client>> 👍 recv: {decoded_payload}");
                         if let Err(e) = process(
                             &event_rx,
                             &mqtt_client,
@@ -203,7 +205,7 @@ fn mqtt_entry(
                             decoded_payload.status,
                             &mut cycle,
                         ) {
-                            error!("client:mqtt_entry>> process: {}", e);
+                            error!("client:mqtt_entry>> process: {e}");
                         }
                     } else {
                         error!(
@@ -262,7 +264,7 @@ fn process(
                 if let Ok(map_read) = inode_map.read() {
                     let src_paths = map_read.keys().cloned().collect();
                     let mut payload = ipc::Payload::new()?
-                        .status(&ipc::Status::NotReady(ipc::Reason::Behind))
+                        .status(ipc::Status::NotReady(ipc::Reason::Behind))
                         .src_paths(src_paths);
                     pull(&payload);
                     mqtt_client.publish(&mut payload)
@@ -277,17 +279,17 @@ fn process(
             debug!("client:process>> ipc::Status::Ready");
             match filter_file_events(event_rx) {
                 Ok(filtered_paths) => {
-                    if !filtered_paths.is_empty() {
+                    if filtered_paths.is_empty() {
+                        debug!("client:process>> nothing to send");
+                    } else {
                         *cycle += 1;
                         let mut payload =
                             ipc::Payload::new()?.src_paths(filtered_paths).cycle(*cycle);
                         if let Err(e) = mqtt_client.publish(&mut payload) {
-                            error!("unable to publish {}", e);
+                            error!("unable to publish {e}");
                         } else {
-                            info!("published payload: {}", payload);
+                            info!("published payload: {payload}");
                         }
-                    } else {
-                        debug!("client:process>> nothing to send");
                     }
                     Ok(())
                 }
@@ -299,6 +301,7 @@ fn process(
     }
 }
 
+#[allow(clippy::needless_pass_by_value)]
 fn setup_watchers(
     inode_map: &config::InodeMap,
     tx: mpsc::Sender<Event>,
@@ -317,7 +320,7 @@ fn setup_watchers(
                         error!("failed to send notify event");
                     }
                 }
-                Err(err) => error!("watch error: {:?}", err),
+                Err(err) => error!("watch error: {err:?}"),
             },
             notify::Config::default().with_poll_interval(std::time::Duration::from_secs(1)), // Set polling interval
         )
@@ -325,11 +328,10 @@ fn setup_watchers(
 
         if watcher.watch(pathbuf, RecursiveMode::Recursive).is_err() {
             warn!("unable to set watcher for: '{}'", pathbuf.display());
-            continue;
+        } else {
+            info!("set watcher for: '{}'", pathbuf.display());
+            watchers.push(watcher);
         }
-
-        info!("set watcher for: '{}'", pathbuf.display());
-        watchers.push(watcher);
     }
 
     if watchers.is_empty() {

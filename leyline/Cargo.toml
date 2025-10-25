@@ -1,0 +1,10 @@
+[package]
+name = "leyline"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { workspace = true }
+bincode = "1.3"
+clap = { version = "4.0", features = ["derive"] }
+lazy_static = "1.4"

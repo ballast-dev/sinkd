@@ -10,19 +10,18 @@ use std::time::Duration;
 
 use env::Environment;
 
-fn main() -> Result<(), String> {
+fn main() {
     env_logger::init();
     build_sinkd().expect("Failed to build sinkd");
     let env = Environment::setup();
     let server = spawn_server();
     let client = spawn_client(&env);
-    run_scenario(&env).expect("Failed to run the situation");
+    run_scenario(&env);
     sleep(Duration::from_secs(10)); // for the server to pick up the change
     stop_sinkd().expect("Failed to stop sinkd");
-    wait_for_exit(server).expect("Failed to wait for server process");
-    wait_for_exit(client).expect("Failed to wait for client process");
+    wait_for_exit(server);
+    wait_for_exit(client);
     info!("Testing completed successfully.");
-    Ok(())
 }
 
 fn build_sinkd() -> Result<(), String> {
@@ -33,33 +32,30 @@ fn build_sinkd() -> Result<(), String> {
         .status()
         .expect("Failed to execute cargo build");
     if !status.success() {
-        return Err(format!("cargo build failed with status: {}", status));
+        return Err(format!("cargo build failed with status: {status}"));
     }
     info!("sinkd built successfully.");
     Ok(())
 }
 
 /// Runs the testing scenario by manipulating files.
-fn run_scenario(env: &Environment) -> Result<(), String> {
+fn run_scenario(env: &Environment) {
     info!("Running test situation...");
     let single_file_path = env.repo_root.join("test").join("single_file");
-    let mut single_file = fs::File::create(&single_file_path).expect(&format!(
-        "Failed to create file {:?}",
-        &single_file_path.display()
-    ));
+    let mut single_file = fs::File::create(&single_file_path).unwrap_or_else(|_| panic!("Failed to create file {:?}",
+        &single_file_path.display()));
 
     let folder1 = env.client_path.join("folder1");
-    env::remove_subfiles(&folder1)?;
-    event::create_files(&folder1, 3, 0.5).expect("Failed to create files in folder1");
+    env::remove_subfiles(&folder1);
+    event::create_files(&folder1, 3, 0.5);
 
     let folder2 = env.client_path.join("folder2");
-    env::remove_subfiles(&folder2)?;
-    event::create_files(&folder2, 10, 1.0).expect("Failed to create files in folder2");
+    env::remove_subfiles(&folder2);
+    event::create_files(&folder2, 10, 1.0);
 
     fs::File::write(&mut single_file, b"thingy").expect("cannot write to file");
 
     info!("==>> Finished client situation <<==");
-    Ok(())
 }
 
 /// Spawns the sinkd server process.
@@ -109,8 +105,7 @@ fn stop_sinkd() -> Result<(), String> {
         .expect("Failed to execute stop command for sinkd client");
     if !client_status.success() {
         return Err(format!(
-            "Failed to stop sinkd client with status: {}",
-            client_status
+            "Failed to stop sinkd client with status: {client_status}"
         ));
     }
 
@@ -122,8 +117,7 @@ fn stop_sinkd() -> Result<(), String> {
         .expect("Failed to execute stop command for sinkd server");
     if !server_status.success() {
         return Err(format!(
-            "Failed to stop sinkd server with status: {}",
-            server_status
+            "Failed to stop sinkd server with status: {server_status}"
         ));
     }
     info!("sinkd client and server stopped.");
@@ -131,12 +125,11 @@ fn stop_sinkd() -> Result<(), String> {
 }
 
 /// Waits for a child process to exit and logs its status.
-fn wait_for_exit(mut child: Child) -> Result<(), String> {
+fn wait_for_exit(mut child: Child) {
     let status = child.wait().expect("Failed to wait for child process");
     if status.success() {
         info!("Process exited successfully.");
     } else {
-        error!("Process exited with status: {}", status);
+        error!("Process exited with status: {status}");
     }
-    Ok(())
 }

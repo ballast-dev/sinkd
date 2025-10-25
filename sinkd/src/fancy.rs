@@ -4,6 +4,7 @@ use std::fmt;
 // C O L O R S
 //--------------------
 #[allow(dead_code)]
+#[derive(Copy, Clone)]
 pub enum Colors {
     // Foreground
     Black = 30,
@@ -53,6 +54,7 @@ impl fmt::Display for Colors {
 }
 
 #[allow(dead_code)]
+#[derive(Copy, Clone)]
 pub enum Attrs {
     // # Attributes
     Normal = 0,

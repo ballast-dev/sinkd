@@ -53,7 +53,7 @@ impl MqttClient {
                         return Err(paho_mqtt::Error::General("Client session already present on broker"));
                     }
 
-                    debug!("Subscribing to topics: {:?} with QoS {:?}", subscriptions, qos);
+                    debug!("Subscribing to topics: {subscriptions:?} with QoS {qos:?}");
                     cli.subscribe_many(subscriptions, &qos)
                         .map_err(|_| paho_mqtt::Error::General("Failed to subscribe to topics"))?;
 
@@ -83,11 +83,11 @@ impl MqttClient {
             paho_mqtt::QOS_0,
         )) {
             Ok(()) => {
-                info!("published payload: {}", payload);
+                info!("published payload: {payload}");
                 Ok(())
             }
             Err(e) => {
-                error!("could not publish payload {}, {}", payload, e);
+                error!("could not publish payload {payload}, {e}");
                 bad!("could not publish payload {}, {}", payload, e)
             }
         }

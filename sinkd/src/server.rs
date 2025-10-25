@@ -43,7 +43,7 @@ pub fn stop() -> Outcome<()> {
         .arg("end")
         .output()
     {
-        println!("{:#?}", e);
+        println!("{e:#?}");
     }
     Ok(())
 }
@@ -70,7 +70,9 @@ fn get_srv_dir(debug: u8) -> PathBuf {
 }
 
 fn create_srv_dir(debug: u8, path: &PathBuf) -> Outcome<()> {
-    if !path.exists() {
+    if path.exists() {
+        Ok(())
+    } else {
         if debug == 0 && !config::have_permissions() {
             return bad!("Need elevated permissions to create {}", path.display());
         }
@@ -78,8 +80,6 @@ fn create_srv_dir(debug: u8, path: &PathBuf) -> Outcome<()> {
             Ok(()) => Ok(()),
             Err(e) => bad!("Unable to create '{}'  {}", path.display(), e),
         }
-    } else {
-        Ok(())
     }
 }
 
@@ -101,7 +101,7 @@ pub fn init(params: &Parameters) -> Outcome<()> {
         let status = Arc::clone(&status);
         move || {
             if let Err(err) = mqtt_entry(synch_tx, fatal, status) {
-                error!("{}", err);
+                error!("{err}");
             }
         }
     });
@@ -109,23 +109,24 @@ pub fn init(params: &Parameters) -> Outcome<()> {
     let synch_thread = thread::spawn({
         move || {
             if let Err(err) = synch_entry(synch_rx, fatal, status, srv_dir) {
-                error!("{}", err);
+                error!("{err}");
             }
         }
     });
 
     if let Err(mqtt_thread_err) = mqtt_thread.join() {
-        error!("server:status_thread join error! >> {:?}", mqtt_thread_err);
+        error!("server:status_thread join error! >> {mqtt_thread_err:?}");
         process::exit(1);
     }
     if let Err(synch_thread_err) = synch_thread.join() {
-        error!("server::synch_thread join error! >> {:?}", synch_thread_err);
+        error!("server::synch_thread join error! >> {synch_thread_err:?}");
         process::exit(1);
     }
     Ok(())
 }
 
 #[allow(unused_variables)]
+#[allow(clippy::needless_pass_by_value)]
 fn mqtt_entry(
     synch_tx: mpsc::Sender<ipc::Payload>,
     fatal: Arc<AtomicBool>,
@@ -165,8 +166,7 @@ fn mqtt_entry(
                     if msg.topic() == terminal_topic {
                         debug!("server:mqtt_entry>> received terminal_topic");
                         fatal.store(true, Ordering::Relaxed);
-                        continue;
-                    }
+                    } else {
                     match ipc::decode(msg.payload()) {
                         Ok(p) => {
                             debug!("server:mqtt_entry>> ⛵ decoded ⛵");
@@ -182,11 +182,12 @@ fn mqtt_entry(
                             }
                         }
                         Err(e) => {
-                            debug!("server:mqtt_entry>> unable to decode 😦>> '{}'", e)
+                            debug!("server:mqtt_entry>> unable to decode 😦>> '{e}'");
                         }
-                    };
+                    }
+                    }
                 } else {
-                    debug!("server:mqtt_entry>> recv empty msg")
+                    debug!("server:mqtt_entry>> recv empty msg");
                 }
                 // need to figure out state of server before synchronizing
             }
@@ -232,7 +233,7 @@ fn queue(
                     }
                     std::cmp::Ordering::Less => {
                         let mut response =
-                            ipc::Payload::new()?.status(&ipc::Status::NotReady(ipc::Reason::Busy));
+                             ipc::Payload::new()?.status(ipc::Status::NotReady(ipc::Reason::Busy));
                         if let Err(e) = mqtt_client.publish(&mut response) {
                             error!("server:queue>> unable to publish response {e}");
                         }
@@ -241,7 +242,7 @@ fn queue(
                 }
             } else {
                 // TODO: if the client is behind this repsonse tells the client to update
-                let mut response = ipc::Payload::new()?.status(&state);
+                let mut response = ipc::Payload::new()?.status(*state);
                 if let Err(e) = mqtt_client.publish(&mut response) {
                     error!("server:queue>> unable to publish response {e}");
                 }
@@ -256,6 +257,7 @@ fn queue(
 // With mqtt messages that are relevant invoke this and mirror current client
 // to this server. This will handle queued messages one at a time.
 #[allow(unused_variables)]
+#[allow(clippy::needless_pass_by_value)]
 fn synch_entry(
     synch_rx: mpsc::Receiver<ipc::Payload>,
     fatal: Arc<AtomicBool>,
@@ -287,7 +289,7 @@ fn synch_entry(
                     *state = ipc::Status::NotReady(ipc::Reason::Busy);
                 } else {
                     error!("server:synch_entry>> unable to acquire status lock");
-                    continue; // FIXME: fatal?
+                    // FIXME: fatal?
                 }
                 // this call could take a while
                 rsync(&payload.src_paths, &dest);
@@ -296,7 +298,6 @@ fn synch_entry(
                     *state = ipc::Status::Ready;
                 } else {
                     error!("server:synch_entry>> unable to acquire status lock");
-                    continue;
                 }
             }
         }
@@ -310,7 +311,7 @@ fn broadcast_status(
     if let Ok(state) = status.lock() {
         let mut status_payload = ipc::Payload::new()?
             .dest_path("sinkd_status")
-            .status(&state);
+            .status(*state);
         if let Err(e) = mqtt_client.publish(&mut status_payload) {
             bad!("server:broadcast_status>> couldn't publish status? '{}'", e)
         } else {

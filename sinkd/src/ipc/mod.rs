@@ -5,7 +5,6 @@ use std::{
     process::Command,
 };
 
-use crate::parameters::DaemonType;
 use crate::{bad, config, outcome::Outcome, parameters::Parameters, time};
 
 mod mqtt;
@@ -20,7 +19,7 @@ pub use mqtt::MqttClient;
 pub fn daemon(func: fn(&Parameters) -> Outcome<()>, params: &Parameters) -> Outcome<()> {
     #[cfg(unix)]
     {
-        unix::daemon(func, &params)
+        unix::daemon(func, params)
     }
     #[cfg(windows)]
     {
@@ -64,7 +63,7 @@ impl fmt::Display for Status {
                     Reason::Busy => write!(f, "Sinking").unwrap(),
                     Reason::Behind => write!(f, "Behind").unwrap(),
                     Reason::Other => write!(f, "Other").unwrap(),
-                };
+                }
                 write!(f, ")") // return result of write
             }
             Status::Ready => write!(f, "Ready"),
@@ -142,8 +141,8 @@ impl Payload {
         self
     }
 
-    pub fn status(mut self, status: &Status) -> Self {
-        self.status = *status;
+    pub fn status(mut self, status: Status) -> Self {
+        self.status = status;
         self
     }
 
@@ -200,8 +199,8 @@ fn resolve_host(host: Option<&str>) -> Result<String, paho_mqtt::Error> {
             "Invalid hostname: it looks like a path. Did you mean 'localhost'?",
         )),
         Some(h) => {
-            let fq_host = format!("tcp://{}:1883", h);
-            debug!("Fully qualified host: {}", fq_host);
+            let fq_host = format!("tcp://{h}:1883");
+            debug!("Fully qualified host: {fq_host}");
             Ok(fq_host)
         }
         None => Err(paho_mqtt::Error::General(

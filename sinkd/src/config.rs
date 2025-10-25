@@ -113,9 +113,8 @@ impl ConfigParser {
     fn parse_user_configs(&mut self, user_configs: &Vec<PathBuf>) -> Result<(), ParseError> {
         for user_config in user_configs {
             match ConfigParser::get_user_config(user_config) {
-                Ok(_usr_cfg) => {
-                    let _ = &self.users.insert(user_config.clone(), _usr_cfg);
-                    continue;
+                Ok(usr_cfg) => {
+                    let _ = &self.users.insert(user_config.clone(), usr_cfg);
                 }
                 Err(error) => match error {
                     ParseError::FileNotFound => {
@@ -124,7 +123,7 @@ impl ConfigParser {
                     ParseError::InvalidSyntax(syntax) => {
                         error!("Invalid syntax in: {}: {}", user_config.display(), syntax);
                     }
-                    _ => (),
+                    ParseError::NoUserFound => (),
                 },
             }
         }
@@ -236,7 +235,6 @@ pub fn have_permissions() -> bool {
 pub fn get_hostname() -> Outcome<String> {
     use libc::{c_char, sysconf, _SC_HOST_NAME_MAX};
     use std::ffi::CStr;
-    use std::ptr;
 
     unsafe {
         // Get the maximum hostname length
@@ -245,10 +243,10 @@ pub fn get_hostname() -> Outcome<String> {
             return bad!("Failed to determine maximum hostname length");
         }
 
-        let mut buffer = vec![0u8; max_len as usize];
-        let ptr = buffer.as_mut_ptr() as *mut c_char;
+        let mut buffer = vec![0u8; usize::try_from(max_len).map_err(|_| "Invalid hostname buffer size")?];
+        let ptr = buffer.as_mut_ptr().cast::<c_char>();
 
-        if libc::gethostname(ptr, max_len as usize) != 0 {
+        if libc::gethostname(ptr, usize::try_from(max_len).map_err(|_| "Invalid hostname buffer size")?) != 0 {
             return bad!("Failed to retrieve hostname");
         }
 

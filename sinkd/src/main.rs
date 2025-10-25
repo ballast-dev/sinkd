@@ -53,7 +53,7 @@ fn egress<T>(outcome: Outcome<T>) -> ExitCode {
             std::process::ExitCode::SUCCESS
         }
         Err(e) => {
-            error!("{}", e);
+            error!("{e}");
             fancy_error!("ERROR: {}", e);
             std::process::ExitCode::FAILURE
         }
@@ -71,7 +71,7 @@ fn windoze() -> ExitCode {
     match matches.subcommand() {
         Some(("client", _submatches)) => debug!("windows client!"),
         Some(("server", _submatches)) => debug!("windows server!"),
-        _ => debug!("uh oh... matches>> {:?}", matches),
+        _ => debug!("uh oh... matches>> {matches:?}"),
     }
     ExitCode::SUCCESS
 }
@@ -128,7 +128,8 @@ fn main() -> ExitCode {
                 user_paths = paths.filter(|p| check_path(p)).collect();
             }
 
-            egress(ops::add(share_paths, user_paths))
+            ops::add(&share_paths, &user_paths);
+            ExitCode::SUCCESS
         }
         Some(("rm", submatches)) => {
             let mut share_paths = Vec::<&String>::new();
@@ -140,7 +141,8 @@ fn main() -> ExitCode {
             if let Some(paths) = submatches.get_many::<String>("path") {
                 user_paths = paths.filter(|p| check_path(p)).collect();
             }
-            egress(ops::remove(share_paths, user_paths))
+            ops::remove(&share_paths, &user_paths);
+            ExitCode::SUCCESS
         }
         Some(("adduser", submatches)) => {
             let users = submatches.get_many::<String>("user");
@@ -153,13 +155,16 @@ fn main() -> ExitCode {
         Some(("ls", submatches)) => {
             // only list out tracking folders and files
             if let Some(paths) = submatches.get_many::<String>("path") {
-                let _paths = paths.filter(|p| check_path(p)).collect();
-                egress(ops::list(Some(_paths)))
+                let filtered_paths = paths.filter(|p| check_path(p)).collect();
+                egress(ops::list(Some(filtered_paths)))
             } else {
                 egress(ops::list(None))
             }
         }
-        Some(("log", _)) => egress(ops::log(&params)),
+        Some(("log", _)) => {
+            ops::log(&params);
+            ExitCode::SUCCESS
+        },
         _ => {
             cli.print_help().expect("sinkd usage: .... ");
             ExitCode::SUCCESS

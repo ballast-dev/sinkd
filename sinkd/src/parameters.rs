@@ -29,14 +29,14 @@ impl std::fmt::Display for Parameters {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&fancy::format(
             &format!(
-                r#"🎨 Parameters 🔍
+                r"🎨 Parameters 🔍
 daemon_type:{:?}
 verbosity:{}
 debug:{}
 log_path:{}
 system_config:{}
 user configs: [{}]
-"#,
+",
                 self.daemon_type,
                 self.verbosity,
                 self.debug,
@@ -56,25 +56,22 @@ user configs: [{}]
 
 impl Parameters {
     pub fn from(matches: &ArgMatches) -> Outcome<Self> {
-        let (system_config, user_configs, daemon_type) = match matches.subcommand() {
-            Some(("client", submatches)) => {
-                let system_config = submatches.get_one("system-config");
-                let user_configs = submatches.get_many("user-configs");
-                let daemon_type = if matches.get_flag("windows-daemon") {
-                    DaemonType::WindowsClient
-                } else {
-                    DaemonType::UnixClient
-                };
-                (system_config, user_configs, daemon_type)
-            }
-            _ => {
-                let daemon_type = if matches.get_flag("windows-daemon") {
-                    DaemonType::WindowsServer
-                } else {
-                    DaemonType::UnixServer
-                };
-                (None, None, daemon_type)
-            }
+        let (system_config, user_configs, daemon_type) = if let Some(("client", submatches)) = matches.subcommand() {
+            let system_config = submatches.get_one("system-config");
+            let user_configs = submatches.get_many("user-configs");
+            let daemon_type = if matches.get_flag("windows-daemon") {
+                DaemonType::WindowsClient
+            } else {
+                DaemonType::UnixClient
+            };
+            (system_config, user_configs, daemon_type)
+        } else {
+            let daemon_type = if matches.get_flag("windows-daemon") {
+                DaemonType::WindowsServer
+            } else {
+                DaemonType::UnixServer
+            };
+            (None, None, daemon_type)
         };
 
         let debug = matches.get_count("debug");
@@ -97,16 +94,12 @@ impl Parameters {
             },
             log_path: Self::get_log_path(debug, &daemon_type),
             system_config: match daemon_type {
-                DaemonType::UnixClient => Self::resolve_system_config(system_config)?,
-                DaemonType::UnixServer => Arc::new(PathBuf::new()),
-                DaemonType::WindowsClient => Self::resolve_system_config(system_config)?,
-                DaemonType::WindowsServer => Arc::new(PathBuf::new()),
+                DaemonType::UnixClient | DaemonType::WindowsClient => Self::resolve_system_config(system_config)?,
+                DaemonType::UnixServer | DaemonType::WindowsServer => Arc::new(PathBuf::new()),
             },
             user_configs: match daemon_type {
-                DaemonType::UnixClient => Self::resolve_user_configs(user_configs)?,
-                DaemonType::UnixServer => Arc::new(vec![]),
-                DaemonType::WindowsClient => Self::resolve_user_configs(user_configs)?,
-                DaemonType::WindowsServer => Arc::new(vec![]),
+                DaemonType::UnixClient | DaemonType::WindowsClient => Self::resolve_user_configs(user_configs)?,
+                DaemonType::UnixServer | DaemonType::WindowsServer => Arc::new(vec![]),
             },
         };
 
@@ -124,7 +117,9 @@ impl Parameters {
             Path::new("/var/log/sinkd")
         };
 
-        if !path.exists() {
+        if path.exists() {
+            Ok(())
+        } else {
             if debug == 0 && !config::have_permissions() {
                 return bad!("Need elevated permissions to create {}", path.display());
             }
@@ -132,8 +127,6 @@ impl Parameters {
                 Ok(()) => Ok(()),
                 Err(e) => bad!("Unable to create '{}'  {}", path.display(), e),
             }
-        } else {
-            Ok(())
         }
     }
 
@@ -145,10 +138,8 @@ impl Parameters {
         };
 
         match daemon_type {
-            DaemonType::UnixClient => PathBuf::from(format!("{}/client.log", base_dir)),
-            DaemonType::UnixServer => PathBuf::from(format!("{}/server.log", base_dir)),
-            DaemonType::WindowsClient => PathBuf::from(format!("{}/client.log", base_dir)),
-            DaemonType::WindowsServer => PathBuf::from(format!("{}/server.log", base_dir)),
+            DaemonType::UnixClient | DaemonType::WindowsClient => PathBuf::from(format!("{base_dir}/client.log")),
+            DaemonType::UnixServer | DaemonType::WindowsServer => PathBuf::from(format!("{base_dir}/server.log")),
         }
     }
 
@@ -165,7 +156,7 @@ impl Parameters {
         // FIXME: need to setup "server_config" which is separate from system/user
         let cfg_path: PathBuf;
         if let Some(sys_cfg) = system_config {
-            debug!("resolve_system_config>> passed in: {}", sys_cfg);
+            debug!("resolve_system_config>> passed in: {sys_cfg}");
             match config::resolve(sys_cfg) {
                 Ok(normalized) => {
                     if normalized.is_dir() {
@@ -218,10 +209,10 @@ impl Parameters {
 
             // WARN: user configs are pulled from system and additionally supplied
             // through command line arg
-            for _cfg in default_cfgs {
-                match config::resolve(_cfg) {
+            for cfg in default_cfgs {
+                match config::resolve(cfg) {
                     Ok(resolved_user_config) => resolved_configs.push(resolved_user_config),
-                    Err(e) => error!("Unable to resolve {_cfg}  {e}"),
+                    Err(e) => error!("Unable to resolve {cfg}  {e}"),
                 }
             }
         }
