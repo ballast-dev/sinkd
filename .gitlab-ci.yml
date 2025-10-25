@@ -5,13 +5,10 @@ stages:
   - test
   - deploy
 
-default:
-  before_script:
-    - nix-shell --run "echo 'Nix shell environment loaded successfully'"
-
 build-job:
   stage: build
   script:
+    - 
     - nix-shell --run "rustc --version && cargo --version"  # Print version info for debugging
     - nix-shell --run "cargo build --release"
   artifacts:

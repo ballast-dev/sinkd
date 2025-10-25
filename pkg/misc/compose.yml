@@ -1,9 +1,0 @@
-services:
-  sinkd:
-    image: sinkd
-    container_name: sinkd_container
-    hostname: anchor
-    volumes:
-      - ${TLD}:/repo
-    tty: true
-    command: ["perms.sh"]
