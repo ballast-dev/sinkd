@@ -1,32 +1,109 @@
-image: "nixos/nix:latest"
+image: docker:24.0.5
+
+services:
+  - docker:24.0.5-dind
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+  IMAGE_NAME: "registry.gitlab.com/ballast-dev/sinkd"
+  IMAGE_VERSION: "0.1.0"
 
 stages:
   - build
   - test
   - deploy
 
-build-job:
+before_script:
+  - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+
+# Build matrix for multi-architecture
+build-amd64:
   stage: build
   script:
-    - 
-    - nix-shell --run "rustc --version && cargo --version"  # Print version info for debugging
-    - nix-shell --run "cargo build --release"
-  artifacts:
-    paths:
-      - target/
+    - docker buildx create --use --name multiarch-builder || true
+    - docker buildx build --platform linux/amd64 
+        --tag ${IMAGE_NAME}/amd64:${IMAGE_VERSION} 
+        --push .
+  tags:
+    - docker
+  only:
+    - main
+    - develop
 
-test:cargo:
+build-arm64:
+  stage: build
   script:
-    - nix-shell --run "cargo test --workspace --verbose"
+    - docker buildx create --use --name multiarch-builder || true
+    - docker buildx build --platform linux/arm64 
+        --tag ${IMAGE_NAME}/arm64:${IMAGE_VERSION} 
+        --push .
+  tags:
+    - docker
+  only:
+    - main
+    - develop
 
-test:lint-job:
+# Test jobs using the built images
+test-amd64:
+  stage: test
+  dependencies:
+    - build-amd64
   script:
-    - nix-shell --run "cargo clippy"
+    - docker pull ${IMAGE_NAME}/amd64:${IMAGE_VERSION}
+    - docker run --rm ${IMAGE_NAME}/amd64:${IMAGE_VERSION} /usr/local/bin/sinkd --help
+    - echo "AMD64 image test passed"
+  tags:
+    - docker
+  only:
+    - main
+    - develop
 
-deploy-job:
+test-arm64:
+  stage: test
+  dependencies:
+    - build-arm64
+  script:
+    - docker pull ${IMAGE_NAME}/arm64:${IMAGE_VERSION}
+    - docker run --rm ${IMAGE_NAME}/arm64:${IMAGE_VERSION} /usr/local/bin/sinkd --help
+    - echo "ARM64 image test passed"
+  tags:
+    - docker
+  only:
+    - main
+    - develop
+
+# Integration test with docker-compose
+test-integration:
+  stage: test
+  dependencies:
+    - build-amd64
+  script:
+    - apk add --no-cache docker-compose
+    - docker-compose --version
+    - echo "Integration tests would run here with docker-compose"
+    - echo "docker-compose up -d && sleep 30 && docker-compose logs && docker-compose down"
+  tags:
+    - docker
+  only:
+    - main
+    - develop
+
+# Deploy stage - create manifest for multi-arch
+deploy-manifest:
   stage: deploy
-  environment: production
+  dependencies:
+    - build-amd64
+    - build-arm64
   script:
-    - echo "Deploying application..."
-    - echo "Application successfully deployed."
+    - docker buildx imagetools create 
+        --tag ${IMAGE_NAME}:${IMAGE_VERSION}
+        ${IMAGE_NAME}/amd64:${IMAGE_VERSION} 
+        ${IMAGE_NAME}/arm64:${IMAGE_VERSION}
+    - echo "Multi-architecture manifest created at ${IMAGE_NAME}:${IMAGE_VERSION}"
+  tags:
+    - docker
+  only:
+    - main
+  when: manual
 

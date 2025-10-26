@@ -2,6 +2,7 @@ mod env;
 mod event;
 
 use log::{error, info};
+use std::env::args;
 use std::fs;
 use std::io::Write;
 use std::process::{Child, Command, Stdio};
@@ -12,6 +13,69 @@ use env::Environment;
 
 fn main() {
     env_logger::init();
+    
+    let args: Vec<String> = args().collect();
+    let instance_type = if args.len() > 1 {
+        args[1].as_str()
+    } else {
+        "default"
+    };
+
+    info!("Starting scenario for instance type: {instance_type}");
+
+    match instance_type {
+        "alpha" => run_alpha_scenario(),
+        "bravo" => run_bravo_scenario(),
+        "charlie" => run_charlie_scenario(),
+        _ => run_default_scenario(),
+    }
+}
+
+fn run_alpha_scenario() {
+    info!("Running Alpha (Server) scenario");
+    let _server = spawn_server_alpha();
+    
+    // Keep server running and wait for termination signal
+    loop {
+        sleep(Duration::from_secs(5));
+        // In a real scenario, you'd check for termination conditions
+    }
+}
+
+fn run_bravo_scenario() {
+    info!("Running Bravo (Client) scenario - file creator");
+    let _client = spawn_client_bravo();
+    
+    // Wait for client to start
+    sleep(Duration::from_secs(5));
+    
+    // Create files in shared directory
+    create_bravo_files();
+    
+    // Keep client running
+    loop {
+        sleep(Duration::from_secs(10));
+        // Periodically create more files
+        modify_bravo_files();
+    }
+}
+
+fn run_charlie_scenario() {
+    info!("Running Charlie (Client) scenario - file modifier");
+    let _client = spawn_client_charlie();
+    
+    // Wait for client to start and for bravo to create files
+    sleep(Duration::from_secs(10));
+    
+    // Modify files created by bravo
+    loop {
+        sleep(Duration::from_secs(15));
+        modify_charlie_files();
+    }
+}
+
+fn run_default_scenario() {
+    info!("Running default scenario (original behavior)");
     build_sinkd().expect("Failed to build sinkd");
     let env = Environment::setup();
     let server = spawn_server();
@@ -131,5 +195,142 @@ fn wait_for_exit(mut child: Child) {
         info!("Process exited successfully.");
     } else {
         error!("Process exited with status: {status}");
+    }
+}
+
+// New functions for Docker scenario instances
+
+/// Spawns the sinkd server for alpha instance
+fn spawn_server_alpha() -> Child {
+    info!("Spawning sinkd server (alpha)...");
+    let child = Command::new("/usr/local/bin/sinkd")
+        .arg("server")
+        .arg("start")
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .expect("Failed to spawn sinkd server");
+    sleep(Duration::from_secs(3));
+    child
+}
+
+/// Spawns the sinkd client for bravo instance
+fn spawn_client_bravo() -> Child {
+    info!("Spawning sinkd client (bravo)...");
+    let child = Command::new("/usr/local/bin/sinkd")
+        .arg("client")
+        .arg("start")
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .expect("Failed to spawn sinkd client");
+    sleep(Duration::from_secs(3));
+    child
+}
+
+/// Spawns the sinkd client for charlie instance
+fn spawn_client_charlie() -> Child {
+    info!("Spawning sinkd client (charlie)...");
+    let child = Command::new("/usr/local/bin/sinkd")
+        .arg("client")
+        .arg("start")
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .expect("Failed to spawn sinkd client");
+    sleep(Duration::from_secs(3));
+    child
+}
+
+/// Creates initial files for bravo scenario
+fn create_bravo_files() {
+    info!("Bravo creating initial files...");
+    
+    // Create bravo's directory
+    fs::create_dir_all("/shared/bravo").expect("Failed to create bravo directory");
+    fs::create_dir_all("/shared/common").expect("Failed to create common directory");
+    
+    // Create some initial files
+    for i in 0..5 {
+        let file_path = format!("/shared/bravo/bravo_file_{i}.txt");
+        fs::write(&file_path, format!("Initial content from bravo - file {i}"))
+            .expect("Failed to create bravo file");
+        info!("Created: {file_path}");
+        
+        sleep(Duration::from_secs(1));
+    }
+    
+    // Create a shared file
+    let shared_file = "/shared/common/shared_document.txt";
+    fs::write(shared_file, "This is a shared document created by bravo\nLine 2\n")
+        .expect("Failed to create shared file");
+    info!("Created shared file: {shared_file}");
+}
+
+/// Periodically modifies files for bravo scenario
+fn modify_bravo_files() {
+    info!("Bravo modifying files...");
+    
+    // Add a new file periodically
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    
+    let new_file = format!("/shared/bravo/bravo_periodic_{timestamp}.txt");
+    fs::write(&new_file, format!("Periodic file created by bravo at {timestamp}"))
+        .expect("Failed to create periodic file");
+    info!("Bravo created periodic file: {new_file}");
+    
+    // Modify the shared document
+    if let Ok(mut content) = fs::read_to_string("/shared/common/shared_document.txt") {
+        content.push_str(&format!("Bravo update at {timestamp}\n"));
+        fs::write("/shared/common/shared_document.txt", content)
+            .expect("Failed to update shared document");
+        info!("Bravo updated shared document");
+    }
+}
+
+/// Modifies files created by bravo for charlie scenario
+fn modify_charlie_files() {
+    info!("Charlie modifying files...");
+    
+    // Create charlie's directory
+    fs::create_dir_all("/shared/charlie").expect("Failed to create charlie directory");
+    
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    
+    // Create charlie's own files
+    let charlie_file = format!("/shared/charlie/charlie_response_{timestamp}.txt");
+    fs::write(&charlie_file, format!("Charlie's response file created at {timestamp}"))
+        .expect("Failed to create charlie file");
+    info!("Charlie created: {charlie_file}");
+    
+    // Modify bravo's files if they exist
+    if let Ok(entries) = fs::read_dir("/shared/bravo") {
+        for entry in entries.flatten() {
+            if let Some(file_name) = entry.file_name().to_str()
+                && file_name.starts_with("bravo_file_") && file_name.ends_with(".txt") {
+                    let file_path = entry.path();
+                    if let Ok(mut content) = fs::read_to_string(&file_path) {
+                        content.push_str(&format!("\n--- Modified by Charlie at {timestamp} ---\n"));
+                        if fs::write(&file_path, content).is_ok() {
+                            info!("Charlie modified: {file_path:?}");
+                            break; // Only modify one file per cycle
+                        }
+                    }
+                }
+        }
+    }
+    
+    // Modify the shared document
+    if let Ok(mut content) = fs::read_to_string("/shared/common/shared_document.txt") {
+        content.push_str(&format!("Charlie's contribution at {timestamp}\n"));
+        fs::write("/shared/common/shared_document.txt", content)
+            .expect("Failed to update shared document");
+        info!("Charlie updated shared document");
     }
 }

@@ -1,0 +1,74 @@
+services:
+  alpha:
+    image: registry.gitlab.com/ballast-dev/sinkd/arm64:0.1.0
+    container_name: sinkd-alpha
+    hostname: alpha
+    volumes:
+      - ./configs/alpha.conf:/etc/sinkd.conf
+      - ./configs/alpha-user.conf:/root/.config/sinkd.conf
+      - ./scripts/alpha-capture.sh:/usr/local/bin/alpha-capture.sh
+      - .:/workspace
+    working_dir: /workspace
+    networks:
+      - nsync
+    command: ["sleep 5; echo 'Alpha server starting...'; sudo ./target/debug/sinkd server start && /usr/local/bin/alpha-capture.sh"]
+    environment:
+      - RUST_LOG=info
+      - WORKDIR=/workspace
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "sinkd.*server"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  bravo:
+    image: registry.gitlab.com/ballast-dev/sinkd/arm64:0.1.0
+    container_name: sinkd-bravo
+    hostname: bravo
+    volumes:
+      - ./configs/bravo.conf:/etc/sinkd.conf
+      - ./configs/bravo-user.conf:/root/.config/sinkd.conf
+      - ./scripts/bravo-scenario.sh:/usr/local/bin/bravo-scenario.sh
+      - .:/workspace
+    working_dir: /workspace
+    networks:
+      - nsync
+    depends_on:
+      alpha:
+        condition: service_healthy
+    command: ["./target/debug/sinkd client start && /usr/local/bin/bravo-scenario.sh"]
+    environment:
+      - RUST_LOG=info
+      - WORKDIR=/workspace
+
+  charlie:
+    image: registry.gitlab.com/ballast-dev/sinkd/arm64:0.1.0
+    container_name: sinkd-charlie
+    hostname: charlie
+    volumes:
+      - ./configs/charlie.conf:/etc/sinkd.conf
+      - ./configs/charlie-user.conf:/root/.config/sinkd.conf
+      - ./scripts/charlie-scenario.sh:/usr/local/bin/charlie-scenario.sh
+      - .:/workspace
+    working_dir: /workspace
+    networks:
+      - nsync
+    depends_on:
+      alpha:
+        condition: service_healthy
+    command: ["./target/debug/sinkd client start && /usr/local/bin/charlie-scenario.sh"]
+    environment:
+      - RUST_LOG=info
+      - WORKDIR=/workspace
+
+# volumes:
+#   alpha_data:
+#     driver: local
+#   bravo_data:
+#     driver: local
+#   charlie_data:
+#     driver: local
+
+networks:
+  nsync:
+    driver: bridge
