@@ -56,7 +56,8 @@ pub fn remove_subfiles(directory: &Path) {
             let entry = entry.expect("Failed to get directory entry");
             let path = entry.path();
             if path.is_dir() {
-                fs::remove_dir_all(&path).unwrap_or_else(|_| panic!("Failed to remove directory {}", path.display()));
+                fs::remove_dir_all(&path)
+                    .unwrap_or_else(|_| panic!("Failed to remove directory {}", path.display()));
                 info!("Removed {}", path.display());
             }
         }

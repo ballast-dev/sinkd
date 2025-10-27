@@ -14,7 +14,7 @@ use env::Environment;
 
 fn main() {
     env_logger::init();
-    
+
     let args: Vec<String> = args().collect();
     let instance_type = if args.len() > 1 {
         args[1].as_str()
@@ -35,7 +35,7 @@ fn main() {
 fn run_alpha_scenario() {
     info!("Running Alpha (Server) scenario");
     let mut server = spawn_server_alpha();
-    
+
     // Keep server running and wait for termination signal
     loop {
         sleep(Duration::from_secs(5));
@@ -46,7 +46,7 @@ fn run_alpha_scenario() {
         }
         // In a real scenario, you'd check for termination conditions
     }
-    
+
     // Wait for server to finish
     let _ = server.wait();
 }
@@ -54,13 +54,13 @@ fn run_alpha_scenario() {
 fn run_bravo_scenario() {
     info!("Running Bravo (Client) scenario - file creator");
     let mut client = spawn_client_bravo();
-    
+
     // Wait for client to start
     sleep(Duration::from_secs(5));
-    
+
     // Create files in shared directory
     create_bravo_files();
-    
+
     // Keep client running
     loop {
         sleep(Duration::from_secs(10));
@@ -72,7 +72,7 @@ fn run_bravo_scenario() {
         // Periodically create more files
         modify_bravo_files();
     }
-    
+
     // Wait for client to finish
     let _ = client.wait();
 }
@@ -80,10 +80,10 @@ fn run_bravo_scenario() {
 fn run_charlie_scenario() {
     info!("Running Charlie (Client) scenario - file modifier");
     let mut client = spawn_client_charlie();
-    
+
     // Wait for client to start and for bravo to create files
     sleep(Duration::from_secs(10));
-    
+
     // Modify files created by bravo
     loop {
         sleep(Duration::from_secs(15));
@@ -94,7 +94,7 @@ fn run_charlie_scenario() {
         }
         modify_charlie_files();
     }
-    
+
     // Wait for client to finish
     let _ = client.wait();
 }
@@ -131,8 +131,8 @@ fn build_sinkd() -> Result<(), String> {
 fn run_scenario(env: &Environment) {
     info!("Running test situation...");
     let single_file_path = env.repo_root.join("test").join("single_file");
-    let mut single_file = fs::File::create(&single_file_path).unwrap_or_else(|_| panic!("Failed to create file {:?}",
-        &single_file_path.display()));
+    let mut single_file = fs::File::create(&single_file_path)
+        .unwrap_or_else(|_| panic!("Failed to create file {:?}", &single_file_path.display()));
 
     let folder1 = env.client_path.join("folder1");
     env::remove_subfiles(&folder1);
@@ -270,43 +270,49 @@ fn spawn_client_charlie() -> Child {
 /// Creates initial files for bravo scenario
 fn create_bravo_files() {
     info!("Bravo creating initial files...");
-    
+
     // Create bravo's directory
     fs::create_dir_all("/shared/bravo").expect("Failed to create bravo directory");
     fs::create_dir_all("/shared/common").expect("Failed to create common directory");
-    
+
     // Create some initial files
     for i in 0..5 {
         let file_path = format!("/shared/bravo/bravo_file_{i}.txt");
         fs::write(&file_path, format!("Initial content from bravo - file {i}"))
             .expect("Failed to create bravo file");
         info!("Created: {file_path}");
-        
+
         sleep(Duration::from_secs(1));
     }
-    
+
     // Create a shared file
     let shared_file = "/shared/common/shared_document.txt";
-    fs::write(shared_file, "This is a shared document created by bravo\nLine 2\n")
-        .expect("Failed to create shared file");
+    fs::write(
+        shared_file,
+        "This is a shared document created by bravo\nLine 2\n",
+    )
+    .expect("Failed to create shared file");
     info!("Created shared file: {shared_file}");
 }
 
 /// Periodically modifies files for bravo scenario
 fn modify_bravo_files() {
     info!("Bravo modifying files...");
-    
+
     // Add a new file periodically
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_secs();
-    
+
     let new_file = format!("/shared/bravo/bravo_periodic_{timestamp}.txt");
-    fs::write(&new_file, format!("Periodic file created by bravo at {timestamp}"))
-        .expect("Failed to create periodic file");
+    fs::write(
+        &new_file,
+        format!("Periodic file created by bravo at {timestamp}"),
+    )
+    .expect("Failed to create periodic file");
     info!("Bravo created periodic file: {new_file}");
-    
+
     // Modify the shared document
     if let Ok(mut content) = fs::read_to_string("/shared/common/shared_document.txt") {
         writeln!(content, "Bravo update at {timestamp}").expect("Failed to format string");
@@ -319,43 +325,50 @@ fn modify_bravo_files() {
 /// Modifies files created by bravo for charlie scenario
 fn modify_charlie_files() {
     info!("Charlie modifying files...");
-    
+
     // Create charlie's directory
     fs::create_dir_all("/shared/charlie").expect("Failed to create charlie directory");
-    
+
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_secs();
-    
+
     // Create charlie's own files
     let charlie_file = format!("/shared/charlie/charlie_response_{timestamp}.txt");
-    fs::write(&charlie_file, format!("Charlie's response file created at {timestamp}"))
-        .expect("Failed to create charlie file");
+    fs::write(
+        &charlie_file,
+        format!("Charlie's response file created at {timestamp}"),
+    )
+    .expect("Failed to create charlie file");
     info!("Charlie created: {charlie_file}");
-    
+
     // Modify bravo's files if they exist
     if let Ok(entries) = fs::read_dir("/shared/bravo") {
         for entry in entries.flatten() {
             if let Some(file_name) = entry.file_name().to_str()
-                && file_name.starts_with("bravo_file_") && std::path::Path::new(file_name)
+                && file_name.starts_with("bravo_file_")
+                && std::path::Path::new(file_name)
                     .extension()
-                    .is_some_and(|ext| ext.eq_ignore_ascii_case("txt")) {
-                    let file_path = entry.path();
-                    if let Ok(mut content) = fs::read_to_string(&file_path) {
-                        write!(content, "\n--- Modified by Charlie at {timestamp} ---\n").expect("Failed to format string");
-                        if fs::write(&file_path, content).is_ok() {
-                            info!("Charlie modified: {}", file_path.display());
-                            break; // Only modify one file per cycle
-                        }
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("txt"))
+            {
+                let file_path = entry.path();
+                if let Ok(mut content) = fs::read_to_string(&file_path) {
+                    write!(content, "\n--- Modified by Charlie at {timestamp} ---\n")
+                        .expect("Failed to format string");
+                    if fs::write(&file_path, content).is_ok() {
+                        info!("Charlie modified: {}", file_path.display());
+                        break; // Only modify one file per cycle
                     }
                 }
+            }
         }
     }
-    
+
     // Modify the shared document
     if let Ok(mut content) = fs::read_to_string("/shared/common/shared_document.txt") {
-        writeln!(content, "Charlie's contribution at {timestamp}").expect("Failed to format string");
+        writeln!(content, "Charlie's contribution at {timestamp}")
+            .expect("Failed to format string");
         fs::write("/shared/common/shared_document.txt", content)
             .expect("Failed to update shared document");
         info!("Charlie updated shared document");

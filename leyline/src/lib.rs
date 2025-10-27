@@ -18,7 +18,7 @@ pub struct Client {
 impl Client {
     /// Create a new client without connecting (listener-only mode initially).
     /// Use `connect_to()` later to establish an outbound connection.
-    #[must_use] 
+    #[must_use]
     pub fn new(callback: MessageCallback) -> Self {
         Self {
             connection: None,
@@ -27,11 +27,14 @@ impl Client {
     }
 
     /// Create a client with an immediate connection to a peer.
-    /// 
+    ///
     /// # Errors
-    /// 
+    ///
     /// Returns an error if the connection to the specified address fails.
-    pub fn connect(addr: &str, callback: MessageCallback) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn connect(
+        addr: &str,
+        callback: MessageCallback,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let stream = TcpStream::connect(addr)?;
         Ok(Self {
             connection: Some(stream),
@@ -41,9 +44,9 @@ impl Client {
 
     /// Connect to a peer (if not already connected).
     /// This allows you to create a listener-first client and connect later.
-    /// 
+    ///
     /// # Errors
-    /// 
+    ///
     /// Returns an error if the connection to the specified address fails.
     pub fn connect_to(&mut self, addr: &str) -> Result<(), Box<dyn std::error::Error>> {
         if self.connection.is_none() {
@@ -54,13 +57,15 @@ impl Client {
 
     /// Send a message using the established connection.
     /// Returns an error if not connected to any peer.
-    /// 
+    ///
     /// # Errors
-    /// 
+    ///
     /// Returns an error if not connected to any peer, if serialization fails,
     /// or if the network write operation fails.
     pub fn send(&mut self, topic: &str, payload: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
-        let stream = self.connection.as_mut()
+        let stream = self
+            .connection
+            .as_mut()
             .ok_or("Not connected to any peer. Call connect_to() first.")?;
 
         let msg = Message {
@@ -69,7 +74,7 @@ impl Client {
         };
         let serialized = bincode::serialize(&msg)?;
         let len = u32::try_from(serialized.len())?;
-        
+
         // Send length prefix (4 bytes)
         stream.write_all(&len.to_be_bytes())?;
         // Send message
@@ -79,35 +84,34 @@ impl Client {
     }
 
     /// Start listening for incoming messages on a specific port and topic.
-    /// 
+    ///
     /// This is a blocking call that will not return unless an error occurs.
     /// **Important**: The implementer should wrap this in a thread for non-blocking behavior.
-    /// 
+    ///
     /// # Example - Point-to-Point Communication
     /// ```no_run
     /// use leyline::{Client, Message};
     /// use std::thread;
-    /// 
+    ///
     /// // Client A: Listen on 8080, send to B on 8081
     /// let callback = Box::new(|msg: &Message| {
     ///     println!("Received: {}", msg.topic);
     /// });
-    /// 
+    ///
     /// let mut client = Client::new(callback);
     /// client.connect_to("127.0.0.1:8081").unwrap();
-    /// 
+    ///
     /// // Spawn a thread for listening
     /// thread::spawn(move || {
     ///     client.listen(8080, "my-topic").unwrap();
     /// });
     /// ```
-    /// 
+    ///
     /// # Errors
-    /// 
+    ///
     /// Returns an error if binding to the port fails, if accepting connections fails,
     /// or if reading/deserializing messages fails.
     pub fn listen(&self, port: u16, topic: &str) -> Result<(), Box<dyn std::error::Error>> {
-
         // listen to all addresses on the given port on this host
         let listener = TcpListener::bind(format!("0.0.0.0:{port}"))?;
         println!("🎧 Listening on port {port} for topic '{topic}'");
@@ -118,16 +122,16 @@ impl Client {
                     let peer_addr = stream.peer_addr()?;
                     let peer_ip = peer_addr.ip();
                     println!("📡 New connection from: {peer_ip}");
-                    
+
                     // Read 4-byte length prefix
                     let mut len_bytes = [0u8; 4];
                     stream.read_exact(&mut len_bytes)?;
                     let len = u32::from_be_bytes(len_bytes) as usize;
-                    
+
                     // Read the message
                     let mut buf = vec![0u8; len];
                     stream.read_exact(&mut buf)?;
-                    
+
                     let msg = bincode::deserialize::<Message>(&buf)?;
                     (self.callback)(&msg);
                 }
@@ -194,13 +198,14 @@ mod tests {
                 let mut len_bytes = [0u8; 4];
                 if stream.read_exact(&mut len_bytes).is_ok() {
                     let len = u32::from_be_bytes(len_bytes) as usize;
-                    
+
                     // Read message
                     let mut buf = vec![0u8; len];
                     if stream.read_exact(&mut buf).is_ok()
-                        && let Ok(msg) = bincode::deserialize::<Message>(&buf) {
-                            *received_clone.lock().unwrap() = Some(msg);
-                        }
+                        && let Ok(msg) = bincode::deserialize::<Message>(&buf)
+                    {
+                        *received_clone.lock().unwrap() = Some(msg);
+                    }
                 }
             }
         });
@@ -250,7 +255,8 @@ mod tests {
 
         // Send a message to the listener
         let sender_callback = Box::new(|_msg: &Message| {});
-        let mut sender = Client::connect(&format!("127.0.0.1:{listen_port}"), sender_callback).unwrap();
+        let mut sender =
+            Client::connect(&format!("127.0.0.1:{listen_port}"), sender_callback).unwrap();
         sender.send("test-topic", b"test payload").unwrap();
 
         // Give time for callback to be invoked
@@ -266,7 +272,7 @@ mod tests {
         // Test that sending without connecting returns an error
         let callback = Box::new(|_msg: &Message| {});
         let mut client = Client::new(callback);
-        
+
         let result = client.send("test", b"hello");
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Not connected"));
@@ -294,10 +300,10 @@ mod tests {
         // Create client without connection
         let callback = Box::new(|_msg: &Message| {});
         let mut client = Client::new(callback);
-        
+
         // Connect later
         client.connect_to(&addr.to_string()).unwrap();
-        
+
         // Should now be able to send
         let result = client.send("test", b"hello");
         assert!(result.is_ok());

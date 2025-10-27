@@ -243,10 +243,15 @@ pub fn get_hostname() -> Outcome<String> {
             return bad!("Failed to determine maximum hostname length");
         }
 
-        let mut buffer = vec![0u8; usize::try_from(max_len).map_err(|_| "Invalid hostname buffer size")?];
+        let mut buffer =
+            vec![0u8; usize::try_from(max_len).map_err(|_| "Invalid hostname buffer size")?];
         let ptr = buffer.as_mut_ptr().cast::<c_char>();
 
-        if libc::gethostname(ptr, usize::try_from(max_len).map_err(|_| "Invalid hostname buffer size")?) != 0 {
+        if libc::gethostname(
+            ptr,
+            usize::try_from(max_len).map_err(|_| "Invalid hostname buffer size")?,
+        ) != 0
+        {
             return bad!("Failed to retrieve hostname");
         }
 

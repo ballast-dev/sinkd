@@ -164,7 +164,7 @@ fn main() -> ExitCode {
         Some(("log", _)) => {
             ops::log(&params);
             ExitCode::SUCCESS
-        },
+        }
         _ => {
             cli.print_help().expect("sinkd usage: .... ");
             ExitCode::SUCCESS

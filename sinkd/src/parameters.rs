@@ -56,23 +56,24 @@ user configs: [{}]
 
 impl Parameters {
     pub fn from(matches: &ArgMatches) -> Outcome<Self> {
-        let (system_config, user_configs, daemon_type) = if let Some(("client", submatches)) = matches.subcommand() {
-            let system_config = submatches.get_one("system-config");
-            let user_configs = submatches.get_many("user-configs");
-            let daemon_type = if matches.get_flag("windows-daemon") {
-                DaemonType::WindowsClient
+        let (system_config, user_configs, daemon_type) =
+            if let Some(("client", submatches)) = matches.subcommand() {
+                let system_config = submatches.get_one("system-config");
+                let user_configs = submatches.get_many("user-configs");
+                let daemon_type = if matches.get_flag("windows-daemon") {
+                    DaemonType::WindowsClient
+                } else {
+                    DaemonType::UnixClient
+                };
+                (system_config, user_configs, daemon_type)
             } else {
-                DaemonType::UnixClient
+                let daemon_type = if matches.get_flag("windows-daemon") {
+                    DaemonType::WindowsServer
+                } else {
+                    DaemonType::UnixServer
+                };
+                (None, None, daemon_type)
             };
-            (system_config, user_configs, daemon_type)
-        } else {
-            let daemon_type = if matches.get_flag("windows-daemon") {
-                DaemonType::WindowsServer
-            } else {
-                DaemonType::UnixServer
-            };
-            (None, None, daemon_type)
-        };
 
         let debug = matches.get_count("debug");
         Self::create_log_dir(debug)?;
@@ -94,11 +95,15 @@ impl Parameters {
             },
             log_path: Self::get_log_path(debug, &daemon_type),
             system_config: match daemon_type {
-                DaemonType::UnixClient | DaemonType::WindowsClient => Self::resolve_system_config(system_config)?,
+                DaemonType::UnixClient | DaemonType::WindowsClient => {
+                    Self::resolve_system_config(system_config)?
+                }
                 DaemonType::UnixServer | DaemonType::WindowsServer => Arc::new(PathBuf::new()),
             },
             user_configs: match daemon_type {
-                DaemonType::UnixClient | DaemonType::WindowsClient => Self::resolve_user_configs(user_configs)?,
+                DaemonType::UnixClient | DaemonType::WindowsClient => {
+                    Self::resolve_user_configs(user_configs)?
+                }
                 DaemonType::UnixServer | DaemonType::WindowsServer => Arc::new(vec![]),
             },
         };
@@ -138,8 +143,12 @@ impl Parameters {
         };
 
         match daemon_type {
-            DaemonType::UnixClient | DaemonType::WindowsClient => PathBuf::from(format!("{base_dir}/client.log")),
-            DaemonType::UnixServer | DaemonType::WindowsServer => PathBuf::from(format!("{base_dir}/server.log")),
+            DaemonType::UnixClient | DaemonType::WindowsClient => {
+                PathBuf::from(format!("{base_dir}/client.log"))
+            }
+            DaemonType::UnixServer | DaemonType::WindowsServer => {
+                PathBuf::from(format!("{base_dir}/server.log"))
+            }
         }
     }
 

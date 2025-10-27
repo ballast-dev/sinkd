@@ -7,14 +7,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create Client A listener (receives messages on port 8080)
     let callback_a = Box::new(|msg: &Message| {
-        println!("📨 Client A received: [{}] {}", 
-            msg.topic, 
+        println!(
+            "📨 Client A received: [{}] {}",
+            msg.topic,
             String::from_utf8_lossy(&msg.payload)
         );
     });
-    
+
     let alice_listener = Client::new(callback_a);
-    
+
     // Start Client A listener in a thread
     thread::spawn(move || {
         println!("🎧 Client A listening on port 8080...");
@@ -28,14 +29,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create Client B listener (receives messages on port 8081)
     let callback_b = Box::new(|msg: &Message| {
-        println!("📨 Client B received: [{}] {}", 
-            msg.topic, 
+        println!(
+            "📨 Client B received: [{}] {}",
+            msg.topic,
             String::from_utf8_lossy(&msg.payload)
         );
     });
-    
+
     let bob_listener = Client::new(callback_b);
-    
+
     // Start Client B listener in a thread
     thread::spawn(move || {
         println!("🎧 Client B listening on port 8081...");
@@ -59,16 +61,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Send messages back and forth
     println!("💬 Sending messages...\n");
-    
+
     bob_sender.send("chat", b"Hello from Client B!")?;
     thread::sleep(Duration::from_millis(100));
-    
+
     alice_sender.send("chat", b"Hi Client B, this is Client A!")?;
     thread::sleep(Duration::from_millis(100));
-    
+
     bob_sender.send("chat", b"How are you doing?")?;
     thread::sleep(Duration::from_millis(100));
-    
+
     alice_sender.send("chat", b"Doing great! Point-to-point works!")?;
     thread::sleep(Duration::from_millis(100));
 
@@ -76,7 +78,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Keep threads alive for a bit
     thread::sleep(Duration::from_millis(500));
-    
+
     Ok(())
 }
-

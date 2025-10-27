@@ -11,7 +11,7 @@ use std::{
         mpsc, Arc, Mutex,
     },
     thread,
-    time::Duration
+    time::Duration,
 };
 
 use crate::{config, ipc, outcome::Outcome, parameters::Parameters, rsync::rsync};
@@ -167,24 +167,26 @@ fn mqtt_entry(
                         debug!("server:mqtt_entry>> received terminal_topic");
                         fatal.store(true, Ordering::Relaxed);
                     } else {
-                    match ipc::decode(msg.payload()) {
-                        Ok(p) => {
-                            debug!("server:mqtt_entry>> ⛵ decoded ⛵");
+                        match ipc::decode(msg.payload()) {
+                            Ok(p) => {
+                                debug!("server:mqtt_entry>> ⛵ decoded ⛵");
 
-                            // TODO
-                            // 1. recieve msg from client
-                            // 2. if in good state switch status to "synchronizing"
-                            // 3. call rsync <client> <server> <opts>
-                            // 4. once finished switch state to "ready"
+                                // TODO
+                                // 1. recieve msg from client
+                                // 2. if in good state switch status to "synchronizing"
+                                // 3. call rsync <client> <server> <opts>
+                                // 4. once finished switch state to "ready"
 
-                            if let Err(e) = queue(&synch_tx, &mqtt_client, p, &mut cycle, &status) {
-                                error!("{e}");
+                                if let Err(e) =
+                                    queue(&synch_tx, &mqtt_client, p, &mut cycle, &status)
+                                {
+                                    error!("{e}");
+                                }
+                            }
+                            Err(e) => {
+                                debug!("server:mqtt_entry>> unable to decode 😦>> '{e}'");
                             }
                         }
-                        Err(e) => {
-                            debug!("server:mqtt_entry>> unable to decode 😦>> '{e}'");
-                        }
-                    }
                     }
                 } else {
                     debug!("server:mqtt_entry>> recv empty msg");
@@ -233,7 +235,7 @@ fn queue(
                     }
                     std::cmp::Ordering::Less => {
                         let mut response =
-                             ipc::Payload::new()?.status(ipc::Status::NotReady(ipc::Reason::Busy));
+                            ipc::Payload::new()?.status(ipc::Status::NotReady(ipc::Reason::Busy));
                         if let Err(e) = mqtt_client.publish(&mut response) {
                             error!("server:queue>> unable to publish response {e}");
                         }
