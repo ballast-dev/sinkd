@@ -19,12 +19,13 @@ server:
 server-log:
     tail -f /tmp/sinkd/server.log
 
+# ensure to run this only on native architecture
 lint:
     cargo clippy --all-targets --all-features -- \
     -W clippy::perf -D clippy::pedantic -D clippy::correctness -D clippy::suspicious -D clippy::complexity
 
 
-ci: lint
+ci:
     cargo build --release -p sinkd --target x86_64-unknown-linux-gnu
     cargo build --release -p sinkd --target aarch64-unknown-linux-gnu
 
