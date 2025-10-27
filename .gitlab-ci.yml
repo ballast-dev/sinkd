@@ -12,7 +12,7 @@ build:
     - tags
   stage: build
   image: 
-    name: registry.gitlab.com/ballast-dev/sinkd/arm64:0.1.0
+    name: registry.gitlab.com/ballast-dev/sinkd/amd64:0.1.0
     entrypoint: [""]
   script:
     - just ci
