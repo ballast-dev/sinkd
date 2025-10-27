@@ -4,6 +4,7 @@ RUN apk update && apk add \
   build-base \
   cmake \
   fd \
+  just \
   mosquitto \
   mosquitto-dev \
   openssh \
