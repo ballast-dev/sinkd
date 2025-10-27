@@ -103,7 +103,7 @@ mod tests {
     #[test]
     fn check_stamp() {
         let current_timestamp = stamp(None);
-        println!("Current Timestamp: {}", current_timestamp);
+        println!("Current Timestamp: {current_timestamp}");
         assert!(!current_timestamp.is_empty());
         // Optionally, assert that the timestamp matches the expected format using regex
         // This requires the `regex` crate. If you prefer not to use external crates, you can skip this.
@@ -141,7 +141,7 @@ mod tests {
         );
 
         let ls_updated = ls_updated.unwrap();
-        println!("Updated Last Sync: {:?}", ls_updated);
+        println!("Updated Last Sync: {ls_updated:?}");
         assert_eq!(ls_updated.cycle, 5);
         assert_eq!(ls_updated.timestamp, "2024-04-01 12:00:00");
         fs::remove_file(&temp_path).expect("Failed to remove temporary lastsync file");

@@ -3,7 +3,7 @@ _:
 
 # run linter with strict flags
 clippy:
-    cargo clippy --fix --allow-dirty --allow-staged \
+    cargo clippy --fix --allow-dirty --allow-staged --all-targets --all-features \
     -- -W clippy::perf -D clippy::pedantic -D clippy::correctness -D clippy::suspicious -D clippy::complexity
 
 # the following commands are purely for debugging
@@ -18,6 +18,17 @@ server:
 
 server-log:
     tail -f /tmp/sinkd/server.log
+
+lint:
+    cargo clippy --all-targets --all-features -- \
+    -W clippy::perf -D clippy::pedantic -D clippy::correctness -D clippy::suspicious -D clippy::complexity
+
+
+native:
+    cargo build --all-targets --all-features
+
+
+ci: lint native
 
 
 ## Build Environment

@@ -197,11 +197,10 @@ mod tests {
                     
                     // Read message
                     let mut buf = vec![0u8; len];
-                    if stream.read_exact(&mut buf).is_ok() {
-                        if let Ok(msg) = bincode::deserialize::<Message>(&buf) {
+                    if stream.read_exact(&mut buf).is_ok()
+                        && let Ok(msg) = bincode::deserialize::<Message>(&buf) {
                             *received_clone.lock().unwrap() = Some(msg);
                         }
-                    }
                 }
             }
         });
@@ -251,7 +250,7 @@ mod tests {
 
         // Send a message to the listener
         let sender_callback = Box::new(|_msg: &Message| {});
-        let mut sender = Client::connect(&format!("127.0.0.1:{}", listen_port), sender_callback).unwrap();
+        let mut sender = Client::connect(&format!("127.0.0.1:{listen_port}"), sender_callback).unwrap();
         sender.send("test-topic", b"test payload").unwrap();
 
         // Give time for callback to be invoked

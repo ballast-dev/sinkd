@@ -17,10 +17,10 @@ build-arm64:
   stage: build
   image: $IMAGE_NAME/arm64:$IMAGE_VERSION
   script:
-    - just build
+    - just ci
 
 build-amd64:
   stage: build
   image: $IMAGE_NAME/amd64:$IMAGE_VERSION
   script:
-    - just build
+    - just ci

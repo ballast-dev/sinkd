@@ -3,6 +3,7 @@ mod event;
 
 use log::{error, info};
 use std::env::args;
+use std::fmt::Write as FmtWrite;
 use std::fs;
 use std::io::Write;
 use std::process::{Child, Command, Stdio};
@@ -33,18 +34,26 @@ fn main() {
 
 fn run_alpha_scenario() {
     info!("Running Alpha (Server) scenario");
-    let _server = spawn_server_alpha();
+    let mut server = spawn_server_alpha();
     
     // Keep server running and wait for termination signal
     loop {
         sleep(Duration::from_secs(5));
+        // Check if server is still running
+        if let Ok(Some(_)) = server.try_wait() {
+            error!("Server process exited unexpectedly");
+            break;
+        }
         // In a real scenario, you'd check for termination conditions
     }
+    
+    // Wait for server to finish
+    let _ = server.wait();
 }
 
 fn run_bravo_scenario() {
     info!("Running Bravo (Client) scenario - file creator");
-    let _client = spawn_client_bravo();
+    let mut client = spawn_client_bravo();
     
     // Wait for client to start
     sleep(Duration::from_secs(5));
@@ -55,14 +64,22 @@ fn run_bravo_scenario() {
     // Keep client running
     loop {
         sleep(Duration::from_secs(10));
+        // Check if client is still running
+        if let Ok(Some(_)) = client.try_wait() {
+            error!("Client process exited unexpectedly");
+            break;
+        }
         // Periodically create more files
         modify_bravo_files();
     }
+    
+    // Wait for client to finish
+    let _ = client.wait();
 }
 
 fn run_charlie_scenario() {
     info!("Running Charlie (Client) scenario - file modifier");
-    let _client = spawn_client_charlie();
+    let mut client = spawn_client_charlie();
     
     // Wait for client to start and for bravo to create files
     sleep(Duration::from_secs(10));
@@ -70,8 +87,16 @@ fn run_charlie_scenario() {
     // Modify files created by bravo
     loop {
         sleep(Duration::from_secs(15));
+        // Check if client is still running
+        if let Ok(Some(_)) = client.try_wait() {
+            error!("Client process exited unexpectedly");
+            break;
+        }
         modify_charlie_files();
     }
+    
+    // Wait for client to finish
+    let _ = client.wait();
 }
 
 fn run_default_scenario() {
@@ -284,7 +309,7 @@ fn modify_bravo_files() {
     
     // Modify the shared document
     if let Ok(mut content) = fs::read_to_string("/shared/common/shared_document.txt") {
-        content.push_str(&format!("Bravo update at {timestamp}\n"));
+        writeln!(content, "Bravo update at {timestamp}").expect("Failed to format string");
         fs::write("/shared/common/shared_document.txt", content)
             .expect("Failed to update shared document");
         info!("Bravo updated shared document");
@@ -313,12 +338,14 @@ fn modify_charlie_files() {
     if let Ok(entries) = fs::read_dir("/shared/bravo") {
         for entry in entries.flatten() {
             if let Some(file_name) = entry.file_name().to_str()
-                && file_name.starts_with("bravo_file_") && file_name.ends_with(".txt") {
+                && file_name.starts_with("bravo_file_") && std::path::Path::new(file_name)
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("txt")) {
                     let file_path = entry.path();
                     if let Ok(mut content) = fs::read_to_string(&file_path) {
-                        content.push_str(&format!("\n--- Modified by Charlie at {timestamp} ---\n"));
+                        write!(content, "\n--- Modified by Charlie at {timestamp} ---\n").expect("Failed to format string");
                         if fs::write(&file_path, content).is_ok() {
-                            info!("Charlie modified: {file_path:?}");
+                            info!("Charlie modified: {}", file_path.display());
                             break; // Only modify one file per cycle
                         }
                     }
@@ -328,7 +355,7 @@ fn modify_charlie_files() {
     
     // Modify the shared document
     if let Ok(mut content) = fs::read_to_string("/shared/common/shared_document.txt") {
-        content.push_str(&format!("Charlie's contribution at {timestamp}\n"));
+        writeln!(content, "Charlie's contribution at {timestamp}").expect("Failed to format string");
         fs::write("/shared/common/shared_document.txt", content)
             .expect("Failed to update shared document");
         info!("Charlie updated shared document");
