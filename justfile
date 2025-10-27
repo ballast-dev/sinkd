@@ -26,8 +26,8 @@ lint:
 
 
 ci:
-    cargo build --release -p sinkd --target x86_64-unknown-linux-gnu
-    cargo build --release -p sinkd --target aarch64-unknown-linux-gnu
+    cargo build --release -p sinkd --target x86_64-unknown-linux-musl
+    cargo build --release -p sinkd --target aarch64-unknown-linux-musl
 
 
 ## Build Environment
