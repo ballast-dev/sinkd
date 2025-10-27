@@ -7,17 +7,17 @@ edition = "2021"
 [dependencies]
 bincode = "1"
 chrono = { workspace = true }
-clap = "4"
+clap = { workspace = true }
 crossbeam = "0.8"
 libc = "0.2"
 log = { workspace = true }
-nix = { version = "0.29", features = ["process", "signal"] }
+nix = { version = "0.30", features = ["process", "signal"] }
 notify = "8"
-paho-mqtt = { version = "0.13", features = ["ssl"] }
+paho-mqtt = { version = "0.13", features = ["bundled", "ssl"] }
 serde = { workspace = true }
 signal-hook = "0.3"
 toml = { workspace = true }
-windows = { version = "0.59.0", features = [
+windows = { version = "0.60.0", features = [
     "Win32_Foundation",
     "Win32_Security",
     "Win32_System_Console",

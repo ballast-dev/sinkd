@@ -24,11 +24,9 @@ lint:
     -W clippy::perf -D clippy::pedantic -D clippy::correctness -D clippy::suspicious -D clippy::complexity
 
 
-native:
-    cargo build --all-targets --all-features
-
-
-ci: lint native
+ci: lint
+    cargo build --release -p sinkd --target x86_64-unknown-linux-gnu
+    cargo build --release -p sinkd --target aarch64-unknown-linux-gnu
 
 
 ## Build Environment
@@ -44,7 +42,7 @@ img ARCH=ARCH:
         -< Dockerfile
 
 # spawn container
-_docker_run *ARGS:
+_docker_run ARCH *ARGS:
     @docker run -it --rm \
         --hostname sinkd \
         -e WORKDIR=$(pwd) \
@@ -53,9 +51,18 @@ _docker_run *ARGS:
         {{ARGS}}
 
 build: (_docker_run 'cargo build')
-sh: (_docker_run '/bin/sh')
+sh ARCH=ARCH: (_docker_run ARCH '/bin/sh')
 
-test: (_docker_run 'which cargo')
+root ARCH=ARCH:
+    @docker run -it --rm \
+        --platform linux/{{ARCH}} \
+        --hostname sinkd \
+        -v $(pwd):$(pwd) \
+        --workdir $(pwd) \
+        --entrypoint "" \
+        {{IMAGE_NAME}}/{{ARCH}}:{{IMAGE_VERSION}} \
+        /bin/sh
+
 
 ##################################
 ## Docker Multi-Instance Commands

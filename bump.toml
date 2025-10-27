@@ -1,0 +1,27 @@
+#  ____  __  __  __  __  ____ 
+# (  _ \(  )(  )(  \/  )(  _ \
+#  ) _ < )(__)(  )    (  )___/
+# (____/(______)(_/\/\_)(__)  
+#
+# https://github.com/launchfirestorm/bump
+
+prefix = "v"
+
+# NOTE: This section is modified by the bump command
+[version]
+major = 0
+minor = 1
+patch = 0
+candidate = 0
+
+[candidate]
+promotion = "minor"
+delimiter = "-rc"
+
+# promotion strategies:
+#  - git_sha ( 7 char sha1 of the current commit )
+#  - branch ( append branch name )
+#  - full ( <branch>_<sha1> )
+[development]
+promotion = "git_sha"
+delimiter = "+"
