@@ -26,7 +26,14 @@ adduser -D -h /home/sinkd -G wheel sinkd
 PATH="/usr/local/rustup/toolchains/1.90.0-aarch64-unknown-linux-musl/bin:${PATH}"
 PATH="/usr/local/rustup/toolchains/1.90.0-x86_64-unknown-linux-musl/bin:${PATH}"
 echo "sinkd:${PASSWORD}" | chpasswd > /dev/null 2>&1
-exec su -l "${USER}" -c "cd ${WORKDIR:-~}; PATH=${PATH} $*"
+
+# If no arguments provided, start a shell
+if [ $# -eq 0 ]; then
+    exec su -l "${USER}" -c "cd ${WORKDIR:-~}; PATH=${PATH} /bin/sh"
+else
+    # Execute the provided command with proper quoting
+    exec su -l "${USER}" -c "cd ${WORKDIR:-~}; PATH=${PATH} exec \"\$@\"" -- "$@"
+fi
 EOF
 
 RUN chmod +x /entrypoint.sh

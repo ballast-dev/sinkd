@@ -7,12 +7,16 @@ stages:
 
 build-arm64:
   stage: build
-  image: $IMAGE_NAME/arm64:$IMAGE_VERSION
+  image: 
+    name: $IMAGE_NAME/arm64:$IMAGE_VERSION
+    entrypoint: [""]  # override the entrypoint
   script:
     - just ci
 
 build-amd64:
   stage: build
-  image: $IMAGE_NAME/amd64:$IMAGE_VERSION
+  image: 
+    name: $IMAGE_NAME/amd64:$IMAGE_VERSION
+    entrypoint: [""]
   script:
     - just ci
