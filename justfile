@@ -25,19 +25,15 @@ lint:
     -W clippy::perf -D clippy::pedantic -D clippy::correctness -D clippy::suspicious -D clippy::complexity
 
 
-ci:
-    cargo build --release -p sinkd --target x86_64-unknown-linux-musl
-    cargo build --release -p sinkd --target aarch64-unknown-linux-musl
-
-
 ## Build Environment
 
 IMAGE_VERSION := "0.1.0"
-ARCH := if "$(uname -m)" == "x86_64" { "amd64" } else { "arm64" }
+ARCH := if `uname -m` == "x86_64" { "amd64" } else { "arm64" }
 IMAGE_NAME := "registry.gitlab.com/ballast-dev/sinkd"
 
 # build docker image
 img ARCH=ARCH:
+    @echo "Building docker image for {{ARCH}}"
     @docker build --platform linux/{{ARCH}} \
         -t {{IMAGE_NAME}}/{{ARCH}}:{{IMAGE_VERSION}} \
         -< Dockerfile
@@ -45,6 +41,7 @@ img ARCH=ARCH:
 # spawn container
 _docker_run ARCH *ARGS:
     @docker run -it --rm \
+        --platform linux/{{ARCH}} \
         --hostname sinkd \
         -e WORKDIR=$(pwd) \
         -v $(pwd):$(pwd) \
@@ -52,7 +49,7 @@ _docker_run ARCH *ARGS:
         {{ARGS}}
 
 build: (_docker_run 'cargo build')
-sh ARCH=ARCH: (_docker_run ARCH '/bin/sh')
+sh ARCH=ARCH: (_docker_run ARCH '/bin/bash')
 
 root ARCH=ARCH:
     @docker run -it --rm \
