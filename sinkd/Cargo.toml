@@ -1,6 +1,6 @@
 [package]
 name = "sinkd"
-version = "0.1.0"
+version = "0.0.1"
 authors = ["Tony <krakjn@gmail.com>"]
 edition = "2021"
 

@@ -1,6 +1,12 @@
 _:
     @just --list
 
+_version:
+    #!/usr/bin/env bash
+    set -e
+    VERSION=$(bump --print-base)
+    sed -i "s|^version = \".*\"|version = \"${VERSION}\"|g" sinkd/Cargo.toml
+
 # run linter with strict flags
 clippy:
     cargo clippy --fix --allow-dirty --allow-staged --all-targets --all-features \

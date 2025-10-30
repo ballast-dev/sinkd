@@ -4,17 +4,34 @@ stages:
 variables:
   VERSION: $(bump --print)
 
-build-release:
+build:amd64:
   stage: build
+  tags:
+    - saas-linux-small-amd64
   image: 
     name: registry.gitlab.com/ballast-dev/sinkd/amd64:0.1.0
     entrypoint: [""]
   script:
+    - just _version
     - cargo build --release -p sinkd --target x86_64-unknown-linux-gnu
-    - cargo build --release -p sinkd --target aarch64-unknown-linux-gnu
   artifacts:
-    name: "sinkd-binaries-$CI_COMMIT_SHORT_SHA"
+    name: "sinkd-amd64-$CI_COMMIT_SHORT_SHA"
     paths:
       - target/x86_64-unknown-linux-gnu/release/sinkd
+    expire_in: 7 days
+
+build:arm64:
+  stage: build
+  tags:
+    - saas-linux-small-arm64
+  image: 
+    name: registry.gitlab.com/ballast-dev/sinkd/arm64:0.1.0
+    entrypoint: [""]
+  script:
+    - just _version
+    - cargo build --release -p sinkd --target aarch64-unknown-linux-gnu
+  artifacts:
+    name: "sinkd-arm64-$CI_COMMIT_SHORT_SHA"
+    paths:
       - target/aarch64-unknown-linux-gnu/release/sinkd
     expire_in: 7 days
