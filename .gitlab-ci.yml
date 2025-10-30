@@ -1,40 +1,20 @@
 stages:
   - build
-  # - release
 
 variables:
-  # Use the tag name as version, fallback to commit SHA for non-tag builds
   VERSION: $(bump --print)
 
-# Build job for regular commits (testing)
-build-amd64:
-  except:
-    - tags  # only build on regular commits
+build-release:
   stage: build
-  tags:
-    - amd64 # only build on amd64 architecture
   image: 
     name: registry.gitlab.com/ballast-dev/sinkd/amd64:0.1.0
     entrypoint: [""]
   script:
     - cargo build --release -p sinkd --target x86_64-unknown-linux-gnu
+    - cargo build --release -p sinkd --target aarch64-unknown-linux-gnu
   artifacts:
+    name: "sinkd-binaries-$CI_COMMIT_SHORT_SHA"
     paths:
       - target/x86_64-unknown-linux-gnu/release/sinkd
-    expire_in: 7 days
-
-build-arm64:
-  except:
-    - tags
-  stage: build
-  tags:
-    - arm64
-  image: 
-    name: registry.gitlab.com/ballast-dev/sinkd/arm64:0.1.0
-    entrypoint: [""]
-  script: |
-    cargo build --release -p sinkd --target aarch64-unknown-linux-gnu
-  artifacts:
-    paths:
       - target/aarch64-unknown-linux-gnu/release/sinkd
     expire_in: 7 days
