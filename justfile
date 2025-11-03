@@ -74,7 +74,7 @@ root ARCH=ARCH:
 
 # start the multi-instance docker setup
 docker-up:
-    docker-compose up -d --build
+    docker-compose up -d
 
 # stop the multi-instance docker setup
 docker-down:

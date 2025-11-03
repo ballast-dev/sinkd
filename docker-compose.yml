@@ -36,7 +36,7 @@ services:
     depends_on:
       alpha:
         condition: service_healthy
-    command: ["./target/debug/sinkd client start && /usr/local/bin/bravo-scenario.sh"]
+    command: ["sudo ./target/debug/sinkd client start && /usr/local/bin/bravo-scenario.sh"]
     environment:
       - RUST_LOG=info
       - WORKDIR=/workspace
@@ -56,7 +56,7 @@ services:
     depends_on:
       alpha:
         condition: service_healthy
-    command: ["./target/debug/sinkd client start && /usr/local/bin/charlie-scenario.sh"]
+    command: ["sudo ./target/debug/sinkd client start && /usr/local/bin/charlie-scenario.sh"]
     environment:
       - RUST_LOG=info
       - WORKDIR=/workspace
