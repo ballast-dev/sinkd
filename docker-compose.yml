@@ -3,15 +3,16 @@ services:
     image: registry.gitlab.com/ballast-dev/sinkd/arm64:0.1.0
     container_name: sinkd-alpha
     hostname: alpha
+    entrypoint: [""]
     volumes:
       - ./configs/alpha.conf:/etc/sinkd.conf
       - ./configs/alpha-user.conf:/root/.config/sinkd.conf
-      - ./scripts/alpha-capture.sh:/usr/local/bin/alpha-capture.sh
       - .:/workspace
+      - ./test_scenarios:/mounted_path/test_scenarios
     working_dir: /workspace
     networks:
       - nsync
-    command: ["sleep 5; echo 'Alpha server starting...'; sudo ./target/debug/sinkd server start && /usr/local/bin/alpha-capture.sh"]
+    command: ["/bin/bash", "-c", "./target/debug/sinkd server start & sleep 3 && ./target/debug/scenario alpha"]
     environment:
       - RUST_LOG=info
       - WORKDIR=/workspace
@@ -25,18 +26,19 @@ services:
     image: registry.gitlab.com/ballast-dev/sinkd/arm64:0.1.0
     container_name: sinkd-bravo
     hostname: bravo
+    entrypoint: [""]
     volumes:
       - ./configs/bravo.conf:/etc/sinkd.conf
       - ./configs/bravo-user.conf:/root/.config/sinkd.conf
-      - ./scripts/bravo-scenario.sh:/usr/local/bin/bravo-scenario.sh
       - .:/workspace
+      - ./test_scenarios:/mounted_path/test_scenarios
     working_dir: /workspace
     networks:
       - nsync
     depends_on:
       alpha:
         condition: service_healthy
-    command: ["sudo ./target/debug/sinkd client start && /usr/local/bin/bravo-scenario.sh"]
+    command: ["/bin/bash", "-c", "./target/debug/sinkd client start & sleep 3 && ./target/debug/scenario bravo"]
     environment:
       - RUST_LOG=info
       - WORKDIR=/workspace
@@ -45,18 +47,40 @@ services:
     image: registry.gitlab.com/ballast-dev/sinkd/arm64:0.1.0
     container_name: sinkd-charlie
     hostname: charlie
+    entrypoint: [""]
     volumes:
       - ./configs/charlie.conf:/etc/sinkd.conf
       - ./configs/charlie-user.conf:/root/.config/sinkd.conf
-      - ./scripts/charlie-scenario.sh:/usr/local/bin/charlie-scenario.sh
       - .:/workspace
+      - ./test_scenarios:/mounted_path/test_scenarios
     working_dir: /workspace
     networks:
       - nsync
     depends_on:
       alpha:
         condition: service_healthy
-    command: ["sudo ./target/debug/sinkd client start && /usr/local/bin/charlie-scenario.sh"]
+    command: ["/bin/bash", "-c", "./target/debug/sinkd client start & sleep 3 && ./target/debug/scenario charlie"]
+    environment:
+      - RUST_LOG=info
+      - WORKDIR=/workspace
+
+  delta:
+    image: registry.gitlab.com/ballast-dev/sinkd/arm64:0.1.0
+    container_name: sinkd-delta
+    hostname: delta
+    entrypoint: [""]
+    volumes:
+      - ./configs/charlie.conf:/etc/sinkd.conf
+      - ./configs/charlie-user.conf:/root/.config/sinkd.conf
+      - .:/workspace
+      - ./test_scenarios:/mounted_path/test_scenarios
+    working_dir: /workspace
+    networks:
+      - nsync
+    depends_on:
+      alpha:
+        condition: service_healthy
+    command: ["/bin/bash", "-c", "./target/debug/sinkd client start & sleep 3 && ./target/debug/scenario delta"]
     environment:
       - RUST_LOG=info
       - WORKDIR=/workspace

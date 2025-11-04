@@ -1,3 +1,7 @@
+IMAGE_VERSION := "0.1.0"
+ARCH := if `uname -m` == "x86_64" { "amd64" } else { "arm64" }
+IMAGE_NAME := "registry.gitlab.com/ballast-dev/sinkd"
+
 _:
     @just --list
 
@@ -33,10 +37,6 @@ lint:
 
 ## Build Environment
 
-IMAGE_VERSION := "0.1.0"
-ARCH := if `uname -m` == "x86_64" { "amd64" } else { "arm64" }
-IMAGE_NAME := "registry.gitlab.com/ballast-dev/sinkd"
-
 # build docker image
 img ARCH=ARCH:
     @echo "Building docker image for {{ARCH}}"
@@ -54,7 +54,7 @@ _docker_run ARCH *ARGS:
         {{IMAGE_NAME}}/{{ARCH}}:{{IMAGE_VERSION}} \
         {{ARGS}}
 
-build: (_docker_run 'cargo build')
+build ARCH=ARCH: (_docker_run ARCH 'cargo build')
 sh ARCH=ARCH: (_docker_run ARCH '/bin/bash')
 
 root ARCH=ARCH:
@@ -73,29 +73,13 @@ root ARCH=ARCH:
 ##################################
 
 # start the multi-instance docker setup
-docker-up:
-    docker-compose up -d
+scenario:
+    docker compose up -d
 
 # stop the multi-instance docker setup
-docker-down:
-    docker-compose down
+scenario-down:
+    docker compose down
 
 # view logs from all instances
-docker-logs:
-    docker-compose logs -f
-
-# view logs from specific instance (alpha, bravo, or charlie)
-docker-logs-instance INSTANCE:
-    docker-compose logs -f {{INSTANCE}}
-
-# run the test script
-docker-test:
-    ./test-docker-setup.sh
-
-# check shared volume contents
-docker-check-shared:
-    docker exec sinkd-alpha find /shared/ -type f 2>/dev/null || echo "No files found"
-
-# view shared document
-docker-view-shared:
-    docker exec sinkd-alpha cat /shared/common/shared_document.txt 2>/dev/null || echo "Shared document not found"
+scenario-logs:
+    docker compose logs -f
