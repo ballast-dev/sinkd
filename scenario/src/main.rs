@@ -28,7 +28,9 @@ fn main() {
         "charlie" => run_charlie_scenario(),
         "delta" => run_delta_scenario(),
         _ => {
-            error!("Unknown instance type: {instance_type}. Must be one of: alpha, bravo, charlie, delta");
+            error!(
+                "Unknown instance type: {instance_type}. Must be one of: alpha, bravo, charlie, delta"
+            );
             std::process::exit(1);
         }
     }
@@ -37,7 +39,7 @@ fn main() {
 fn run_alpha_scenario() {
     info!("Running Alpha (Server) scenario");
     info!("Alpha server should already be running from docker-compose command");
-    
+
     // Alpha just keeps running - server is managed by docker-compose
     loop {
         sleep(Duration::from_secs(30));
@@ -48,7 +50,7 @@ fn run_alpha_scenario() {
 fn run_bravo_scenario() {
     info!("Running Bravo (Client) scenario - file creator/modifier");
     info!("Bravo client should already be running from docker-compose command");
-    
+
     // Wait for client to start and sync to initialize
     sleep(Duration::from_secs(10));
 
@@ -66,7 +68,7 @@ fn run_bravo_scenario() {
 fn run_charlie_scenario() {
     info!("Running Charlie (Client) scenario - file modifier");
     info!("Charlie client should already be running from docker-compose command");
-    
+
     // Wait for client to start and for bravo to create files
     sleep(Duration::from_secs(15));
 
@@ -80,7 +82,7 @@ fn run_charlie_scenario() {
 fn run_delta_scenario() {
     info!("Running Delta (Client) scenario - reporter");
     info!("Delta client should already be running from docker-compose command");
-    
+
     // Wait for client to start and sync to initialize
     sleep(Duration::from_secs(20));
 
@@ -88,7 +90,7 @@ fn run_delta_scenario() {
     let mut report_counter = 0;
     loop {
         sleep(Duration::from_secs(30));
-        
+
         report_counter += 1;
         info!("Delta generating report #{report_counter}");
         if let Err(e) = report::generate_toml_report(TEST_SCENARIOS_PATH, report_counter) {
@@ -96,7 +98,6 @@ fn run_delta_scenario() {
         }
     }
 }
-
 
 /// Creates initial files for bravo scenario
 fn create_bravo_files() {
@@ -109,8 +110,11 @@ fn create_bravo_files() {
     // Create some initial files with bravo_ prefix
     for i in 0..5 {
         let file_path = bravo_path.join(format!("bravo_file_{i}.txt"));
-        fs::write(&file_path, format!("Initial content from bravo - file {i}\n"))
-            .expect("Failed to create bravo file");
+        fs::write(
+            &file_path,
+            format!("Initial content from bravo - file {i}\n"),
+        )
+        .expect("Failed to create bravo file");
         info!("Created: {}", file_path.display());
         sleep(Duration::from_secs(1));
     }
@@ -151,16 +155,17 @@ fn modify_bravo_files() {
     let shared_file = base_path.join("shared_document.txt");
     if shared_file.exists() {
         if let Ok(mut content) = fs::read_to_string(&shared_file) {
-            content.push_str(&format!("\n--- BRAVO MODIFICATION at {} ---\n", timestamp));
-            fs::write(&shared_file, content)
-                .expect("Failed to update shared document");
+            use std::fmt::Write;
+            writeln!(content, "\n--- BRAVO MODIFICATION at {timestamp} ---")
+                .expect("Failed to write to string");
+            fs::write(&shared_file, content).expect("Failed to update shared document");
             info!("Bravo updated shared document");
         }
     } else {
         // Create if it doesn't exist
         fs::write(
             &shared_file,
-            format!("Shared document (created by bravo at {})\n", timestamp),
+            format!("Shared document (created by bravo at {timestamp})\n"),
         )
         .expect("Failed to create shared file");
     }
@@ -190,20 +195,22 @@ fn modify_charlie_files() {
 
     // Modify bravo's files if they exist (synced via sinkd)
     let bravo_path = base_path.join("bravo");
-    if bravo_path.exists() {
-        if let Ok(entries) = fs::read_dir(&bravo_path) {
-            for entry in entries.flatten() {
-                if let Some(file_name) = entry.file_name().to_str()
-                    && file_name.starts_with("bravo_file_")
-                    && entry.path().extension().is_some_and(|ext| ext == "txt")
-                {
-                    let file_path = entry.path();
-                    if let Ok(mut content) = fs::read_to_string(&file_path) {
-                        content.push_str(&format!("\n--- Modified by Charlie at {} ---\n", timestamp));
-                        if fs::write(&file_path, content).is_ok() {
-                            info!("Charlie modified: {}", file_path.display());
-                            break; // Only modify one file per cycle
-                        }
+    if bravo_path.exists()
+        && let Ok(entries) = fs::read_dir(&bravo_path)
+    {
+        for entry in entries.flatten() {
+            if let Some(file_name) = entry.file_name().to_str()
+                && file_name.starts_with("bravo_file_")
+                && entry.path().extension().is_some_and(|ext| ext == "txt")
+            {
+                let file_path = entry.path();
+                if let Ok(mut content) = fs::read_to_string(&file_path) {
+                    use std::fmt::Write;
+                    if writeln!(content, "\n--- Modified by Charlie at {timestamp} ---").is_ok()
+                        && fs::write(&file_path, content).is_ok()
+                    {
+                        info!("Charlie modified: {}", file_path.display());
+                        break; // Only modify one file per cycle
                     }
                 }
             }
@@ -212,12 +219,13 @@ fn modify_charlie_files() {
 
     // Modify the shared document (synced via sinkd)
     let shared_file = base_path.join("shared_document.txt");
-    if shared_file.exists() {
-        if let Ok(mut content) = fs::read_to_string(&shared_file) {
-            content.push_str(&format!("\n--- CHARLIE MODIFICATION at {} ---\n", timestamp));
-            fs::write(&shared_file, content)
-                .expect("Failed to update shared document");
-            info!("Charlie updated shared document");
-        }
+    if shared_file.exists()
+        && let Ok(mut content) = fs::read_to_string(&shared_file)
+    {
+        use std::fmt::Write;
+        writeln!(content, "\n--- CHARLIE MODIFICATION at {timestamp} ---")
+            .expect("Failed to write to string");
+        fs::write(&shared_file, content).expect("Failed to update shared document");
+        info!("Charlie updated shared document");
     }
 }

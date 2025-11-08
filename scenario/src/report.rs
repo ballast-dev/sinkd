@@ -37,9 +37,9 @@ struct Report {
 
 #[derive(serde::Serialize)]
 struct SummaryInfo {
-    total_files: usize,
-    total_directories: usize,
-    total_size: u64,
+    files: usize,
+    directories: usize,
+    size: u64,
 }
 
 /// Generates a TOML report of the test scenarios directory
@@ -67,9 +67,9 @@ pub fn generate_toml_report(base_path: &str, report_number: u32) -> Result<(), S
     };
 
     let summary = SummaryInfo {
-        total_files: files.len(),
-        total_directories: directories.len(),
-        total_size,
+        files: files.len(),
+        directories: directories.len(),
+        size: total_size,
     };
 
     let report = Report {
@@ -99,10 +99,15 @@ pub fn generate_toml_report(base_path: &str, report_number: u32) -> Result<(), S
     if latest_file.exists() {
         let _ = fs::remove_file(&latest_file);
     }
-    fs::write(&latest_file, format!("# Latest report: delta_report_{report_number}.toml\n# Generated: {}\n", 
-        chrono::Utc::now().to_rfc3339()))
-        .ok();
-    
+    fs::write(
+        &latest_file,
+        format!(
+            "# Latest report: delta_report_{report_number}.toml\n# Generated: {}\n",
+            chrono::Utc::now().to_rfc3339()
+        ),
+    )
+    .ok();
+
     info!("Latest report reference updated");
 
     Ok(())
@@ -117,9 +122,11 @@ fn scan_directory(
     total_size: &mut u64,
 ) -> Result<(), String> {
     // Skip reports directory
-    if current.file_name()
+    if current
+        .file_name()
         .and_then(|n| n.to_str())
-        .is_some_and(|n| n == "_reports") {
+        .is_some_and(|n| n == "_reports")
+    {
         return Ok(());
     }
 
@@ -150,15 +157,15 @@ fn scan_directory(
                 .modified()
                 .ok()
                 .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
-                .map(|d| chrono::DateTime::<chrono::Utc>::from_timestamp(
-                    d.as_secs() as i64,
-                    0,
-                ))
-                .flatten()
-                .map(|dt| dt.to_rfc3339())
-                .unwrap_or_else(|| "unknown".to_string());
+                .and_then(|d| {
+                    i64::try_from(d.as_secs())
+                        .ok()
+                        .and_then(|secs| chrono::DateTime::<chrono::Utc>::from_timestamp(secs, 0))
+                })
+                .map_or_else(|| "unknown".to_string(), |dt| dt.to_rfc3339());
 
-            let relative_path = path.strip_prefix(root)
+            let relative_path = path
+                .strip_prefix(root)
                 .unwrap_or(&path)
                 .to_string_lossy()
                 .to_string();
@@ -191,4 +198,3 @@ fn scan_directory(
 
     Ok(())
 }
-

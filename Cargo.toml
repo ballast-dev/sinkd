@@ -10,3 +10,11 @@ serde = { version = "1.0", features = ["derive"] }
 toml = "0.9"
 clap = { version = "4", features = ["derive"] }
 bincode = "1"
+
+# Workspace-wide Clippy lint levels - matches justfile lint recipe behavior
+[workspace.lints.clippy]
+perf = "warn"
+pedantic = "deny"
+correctness = "deny"
+suspicious = "deny"
+complexity = "deny"

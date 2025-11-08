@@ -1,20 +1,17 @@
+set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
 IMAGE_VERSION := "0.1.0"
-ARCH := if `uname -m` == "x86_64" { "amd64" } else { "arm64" }
-IMAGE_NAME := "registry.gitlab.com/ballast-dev/sinkd"
+IMAGE_NAME := "sinkd"
+# Set ARCH based on OS - default to amd64 on Windows, detect on Unix
+ARCH := if os() == "windows" { "amd64" } else { if `uname -m` == "x86_64" { "amd64" } else { "arm64" } }
 
-_:
+
+_: 
     @just --list
 
-_version:
-    #!/usr/bin/env bash
-    set -e
-    VERSION=$(bump --print-base)
-    sed -i "s|^version = \".*\"|version = \"${VERSION}\"|g" sinkd/Cargo.toml
 
 # run linter with strict flags
 clippy:
-    cargo clippy --fix --allow-dirty --allow-staged --all-targets --all-features \
-    -- -W clippy::perf -D clippy::pedantic -D clippy::correctness -D clippy::suspicious -D clippy::complexity
+    cargo clippy --fix --allow-dirty --allow-staged --all-targets --all-features
 
 # the following commands are purely for debugging
 client:
@@ -36,8 +33,15 @@ lint:
 
 
 ## Build Environment
+[windows]
+img ARCH=ARCH:
+    @echo "Building docker image for {{ARCH}}"
+    @docker build --platform linux/{{ARCH}} \
+        -t {{IMAGE_NAME}}/{{ARCH}}:{{IMAGE_VERSION}} \
+        -f Dockerfile .
 
 # build docker image
+[unix]
 img ARCH=ARCH:
     @echo "Building docker image for {{ARCH}}"
     @docker build --platform linux/{{ARCH}} \
@@ -49,8 +53,8 @@ _docker_run ARCH *ARGS:
     @docker run -it --rm \
         --platform linux/{{ARCH}} \
         --hostname sinkd \
-        -e WORKDIR=$(pwd) \
-        -v $(pwd):$(pwd) \
+        -e WORKDIR=$PWD \
+        -v $PWD:$PWD \
         {{IMAGE_NAME}}/{{ARCH}}:{{IMAGE_VERSION}} \
         {{ARGS}}
 
@@ -61,8 +65,8 @@ root ARCH=ARCH:
     @docker run -it --rm \
         --platform linux/{{ARCH}} \
         --hostname sinkd \
-        -v $(pwd):$(pwd) \
-        --workdir $(pwd) \
+        -v $PWD:$PWD \
+        --workdir $PWD \
         --entrypoint "" \
         {{IMAGE_NAME}}/{{ARCH}}:{{IMAGE_VERSION}} \
         /bin/sh

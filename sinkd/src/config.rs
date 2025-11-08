@@ -206,20 +206,23 @@ pub fn have_permissions() -> bool {
         unsafe {
             let process_handle = GetCurrentProcess();
             let mut token_handle: HANDLE = HANDLE::default();
-            if let Err(_) = OpenProcessToken(process_handle, TOKEN_QUERY, &mut token_handle) {
+            if OpenProcessToken(process_handle, TOKEN_QUERY, &raw mut token_handle).is_err() {
                 return false;
             }
             // Check if the token has admin rights
             let mut elevation: TOKEN_ELEVATION = std::mem::zeroed();
             let mut return_length = 0;
-            if let Err(_) = GetTokenInformation(
+            let size = u32::try_from(std::mem::size_of::<TOKEN_ELEVATION>()).unwrap_or(u32::MAX);
+            if GetTokenInformation(
                 token_handle,
                 TokenElevation,
                 // look away, interfacing with Windows is hacky even with windows crate
-                Some(&mut elevation as *mut _ as *mut _),
-                std::mem::size_of::<TOKEN_ELEVATION>() as u32,
-                &mut return_length,
-            ) {
+                Some((&raw mut elevation).cast()),
+                size,
+                &raw mut return_length,
+            )
+            .is_err()
+            {
                 return false;
             }
 
@@ -271,11 +274,11 @@ pub fn get_hostname() -> Outcome<String> {
     use windows::Win32::System::WindowsProgramming::{GetComputerNameW, MAX_COMPUTERNAME_LENGTH};
 
     let mut buffer = [0u16; MAX_COMPUTERNAME_LENGTH as usize + 1];
-    let mut size = buffer.len() as u32;
+    let mut size = u32::try_from(buffer.len()).unwrap_or(u32::MAX);
 
     unsafe {
         let pwstr = windows::core::PWSTR(buffer.as_mut_ptr());
-        if let Err(e) = GetComputerNameW(Some(pwstr), &mut size) {
+        if let Err(e) = GetComputerNameW(Some(pwstr), &raw mut size) {
             bad!("Failed to retrieve the hostname: {}", e)
         } else {
             let hostname = OsString::from_wide(&buffer[..size as usize]);
