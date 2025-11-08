@@ -1,5 +1,5 @@
 IMAGE_VERSION := "0.1.0"
-IMAGE_NAME := "registry.gitlab.com/ballast-dev/sinkd"
+IMAGE_NAME := "ghcr.io/ballast-dev/sinkd"
 # Set ARCH based on Linux architecture
 ARCH := if `uname -m` == "x86_64" { "amd64" } else { "arm64" }
 
