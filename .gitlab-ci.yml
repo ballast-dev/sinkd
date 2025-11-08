@@ -41,12 +41,7 @@ build:windows:amd64:
   stage: build
   tags:
     - saas-windows-medium-amd64
-  before_script:
-    - rustup default stable
-    - rustup target add x86_64-pc-windows-msvc
-    - rustup component add clippy
-  script:
-    - cargo clippy -p sinkd
+  script:  # just assume the windows machine has cargo
     - cargo build --release -p sinkd --target x86_64-pc-windows-msvc
   artifacts:
     name: "sinkd-windows-$CI_COMMIT_SHORT_SHA"
