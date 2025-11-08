@@ -1,5 +1,5 @@
 IMAGE_VERSION := "0.1.0"
-IMAGE_NAME := "sinkd"
+IMAGE_NAME := "registry.gitlab.com/ballast-dev/sinkd"
 # Set ARCH based on Linux architecture
 ARCH := if `uname -m` == "x86_64" { "amd64" } else { "arm64" }
 
@@ -7,7 +7,7 @@ _:
     @just --list
 
 _version:
-    @cargo pkgid | cut -d# -f2
+    @cargo pkgid -p sinkd | cut -d# -f2
 
 # ensure to run this only on native architecture
 lint:
@@ -35,6 +35,9 @@ img ARCH=ARCH:
     @docker build --platform linux/{{ARCH}} \
         -t {{IMAGE_NAME}}/{{ARCH}}:{{IMAGE_VERSION}} \
         -< Dockerfile
+
+img-push ARCH=ARCH:
+    @docker push {{IMAGE_NAME}}/{{ARCH}}:{{IMAGE_VERSION}}
 
 _docker_run ARCH *ARGS:
     @docker run -it --rm \
