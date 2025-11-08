@@ -8,37 +8,20 @@ RUN apt-get update && apt-get install -y \
   fd-find \
   just \
   libmosquitto-dev \
-  libssl-dev \
   mosquitto \
   openssh-client \
   openssh-server \
-  pkg-config \
   rsync \
   sudo \
   && rm -rf /var/lib/apt/lists/*
 
-RUN <<EOF
-ARCH=$(arch)
-if [ "$ARCH" = "x86_64" ]; then
-  ARCH="amd64"
-elif [ "$ARCH" = "aarch64" ]; then
-  ARCH="arm64"
-fi
-curl -fsSL https://github.com/launchfirestorm/bump/releases/download/v5.0.0/bump-linux-$ARCH -o /usr/local/bin/bump
-chmod +x /usr/local/bin/bump
-EOF
-
-
 RUN rustup component add rustfmt clippy
-# RUN rustup target add aarch64-unknown-linux-gnu
-# x86_64-pc-windows-msvc \
-# aarch64-pc-windows-msvc \
-# x86_64-apple-darwin \
-# aarch64-apple-darwin
+RUN rustup target add \
+  x86_64-unknown-linux-gnu \
+  aarch64-unknown-linux-gnu
 
 # Allow sudo group to run sudo without password
 RUN echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
-
 
 COPY <<'EOF' /entrypoint.sh
 #!/bin/sh

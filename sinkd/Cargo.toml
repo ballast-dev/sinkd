@@ -13,7 +13,7 @@ libc = "0.2"
 log = { workspace = true }
 nix = { version = "0.30", features = ["process", "signal"] }
 notify = "8"
-paho-mqtt = { version = "0.13", features = ["bundled", "ssl"] }
+paho-mqtt = { version = "0.13", features = ["ssl", "vendored-ssl"] }
 serde = { workspace = true }
 signal-hook = "0.3"
 toml = { workspace = true }

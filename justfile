@@ -1,17 +1,17 @@
-set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
 IMAGE_VERSION := "0.1.0"
 IMAGE_NAME := "sinkd"
-# Set ARCH based on OS - default to amd64 on Windows, detect on Unix
-ARCH := if os() == "windows" { "amd64" } else { if `uname -m` == "x86_64" { "amd64" } else { "arm64" } }
-
+# Set ARCH based on Linux architecture
+ARCH := if `uname -m` == "x86_64" { "amd64" } else { "arm64" }
 
 _: 
     @just --list
 
+_version:
+    @cargo pkgid | cut -d# -f2
 
-# run linter with strict flags
-clippy:
-    cargo clippy --fix --allow-dirty --allow-staged --all-targets --all-features
+# ensure to run this only on native architecture
+lint:
+    cargo clippy --all-targets --all-features
 
 # the following commands are purely for debugging
 client:
@@ -26,35 +26,22 @@ server:
 server-log:
     tail -f /tmp/sinkd/server.log
 
-# ensure to run this only on native architecture
-lint:
-    cargo clippy --all-targets --all-features -- \
-    -W clippy::perf -D clippy::pedantic -D clippy::correctness -D clippy::suspicious -D clippy::complexity
-
 
 ## Build Environment
-[windows]
-img ARCH=ARCH:
-    @echo "Building docker image for {{ARCH}}"
-    @docker build --platform linux/{{ARCH}} \
-        -t {{IMAGE_NAME}}/{{ARCH}}:{{IMAGE_VERSION}} \
-        -f Dockerfile .
 
 # build docker image
-[unix]
 img ARCH=ARCH:
     @echo "Building docker image for {{ARCH}}"
     @docker build --platform linux/{{ARCH}} \
         -t {{IMAGE_NAME}}/{{ARCH}}:{{IMAGE_VERSION}} \
         -< Dockerfile
 
-# spawn container
 _docker_run ARCH *ARGS:
     @docker run -it --rm \
         --platform linux/{{ARCH}} \
         --hostname sinkd \
-        -e WORKDIR=$PWD \
-        -v $PWD:$PWD \
+        -e WORKDIR=$(pwd) \
+        -v $(pwd):$(pwd) \
         {{IMAGE_NAME}}/{{ARCH}}:{{IMAGE_VERSION}} \
         {{ARGS}}
 
@@ -65,8 +52,8 @@ root ARCH=ARCH:
     @docker run -it --rm \
         --platform linux/{{ARCH}} \
         --hostname sinkd \
-        -v $PWD:$PWD \
-        --workdir $PWD \
+        -v $(pwd):$(pwd) \
+        --workdir $(pwd) \
         --entrypoint "" \
         {{IMAGE_NAME}}/{{ARCH}}:{{IMAGE_VERSION}} \
         /bin/sh

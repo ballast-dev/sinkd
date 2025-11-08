@@ -1,10 +1,7 @@
 stages:
   - build
 
-variables:
-  VERSION: $(bump --print)
-
-build:amd64:
+build:linux:amd64:
   stage: build
   tags:
     - saas-linux-small-amd64
@@ -12,7 +9,7 @@ build:amd64:
     name: registry.gitlab.com/ballast-dev/sinkd/amd64:0.1.0
     entrypoint: [""]
   script:
-    - just _version
+    - cargo clippy -p sinkd
     - cargo build --release -p sinkd --target x86_64-unknown-linux-gnu
   artifacts:
     name: "sinkd-amd64-$CI_COMMIT_SHORT_SHA"
@@ -20,7 +17,7 @@ build:amd64:
       - target/x86_64-unknown-linux-gnu/release/sinkd
     expire_in: 7 days
 
-build:arm64:
+build:linux:arm64:
   stage: build
   tags:
     - saas-linux-small-arm64
@@ -28,10 +25,27 @@ build:arm64:
     name: registry.gitlab.com/ballast-dev/sinkd/arm64:0.1.0
     entrypoint: [""]
   script:
-    - just _version
+    - cargo clippy -p sinkd
     - cargo build --release -p sinkd --target aarch64-unknown-linux-gnu
   artifacts:
     name: "sinkd-arm64-$CI_COMMIT_SHORT_SHA"
     paths:
       - target/aarch64-unknown-linux-gnu/release/sinkd
+    expire_in: 7 days
+
+build:windows:amd64:
+  stage: build
+  tags:
+    - saas-windows-medium-amd64
+  before_script:
+    - rustup default stable
+    - rustup target add x86_64-pc-windows-msvc
+    - rustup component add clippy
+  script:
+    - cargo clippy -p sinkd
+    - cargo build --release -p sinkd --target x86_64-pc-windows-msvc
+  artifacts:
+    name: "sinkd-windows-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - target/x86_64-pc-windows-msvc/release/sinkd.exe
     expire_in: 7 days
