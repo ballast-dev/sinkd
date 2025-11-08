@@ -54,30 +54,30 @@ build:windows:amd64:
       - target/x86_64-pc-windows-msvc/release/sinkd.exe
     expire_in: 7 days
 
-release:
+release_sinkd:
   stage: release
-  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  image: registry.gitlab.com/gitlab-org/cli:latest
+  needs:
+    - job: build:linux:amd64
+      artifacts: true
+    - job: build:linux:arm64
+      artifacts: true
+    - job: build:windows:amd64
+      artifacts: true
+  rules:
+    - if: $CI_COMMIT_TAG
   tags:
     - saas-linux-small-amd64
-  only:
-    - tags
-  dependencies:
-    - build:linux:amd64
-    - build:linux:arm64
-    - build:windows:amd64
   script:
     - mkdir -p release
     - cp target/x86_64-unknown-linux-gnu/release/sinkd release/sinkd-linux-amd64
     - cp target/aarch64-unknown-linux-gnu/release/sinkd release/sinkd-linux-arm64
     - cp target/x86_64-pc-windows-msvc/release/sinkd.exe release/sinkd-windows-amd64.exe
-    - echo "Creating release for $CI_COMMIT_TAG"
-  artifacts:
-    paths:
-      - release/
-    expire_in: never
   release:
     name: 'Release $CI_COMMIT_TAG'
     description: 'Release $CI_COMMIT_TAG of sinkd'
+    tag_name: $CI_COMMIT_TAG
+    ref: $CI_COMMIT_SHA
     assets:
       links:
         - name: 'sinkd-linux-amd64'
