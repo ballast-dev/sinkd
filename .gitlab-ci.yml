@@ -73,6 +73,10 @@ release_sinkd:
     - cp target/x86_64-unknown-linux-gnu/release/sinkd release/sinkd-linux-amd64
     - cp target/aarch64-unknown-linux-gnu/release/sinkd release/sinkd-linux-arm64
     - cp target/x86_64-pc-windows-msvc/release/sinkd.exe release/sinkd-windows-amd64.exe
+  artifacts:
+    paths:
+      - release/
+    expire_in: never
   release:
     name: 'Release $CI_COMMIT_TAG'
     description: 'Release $CI_COMMIT_TAG of sinkd'
