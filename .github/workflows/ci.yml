@@ -18,6 +18,9 @@ jobs:
         run: |
           cargo clippy -p sinkd
           cargo test -p sinkd
+          # capture version for later use
+          VERSION=$(cargo pkgid -p sinkd | cut -d# -f2)
+          echo "version=${VERSION}" >> $GITHUB_ENV
 
   build:
     needs: lint
@@ -27,38 +30,46 @@ jobs:
           - runner: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             platform: linux-amd64
-            arch: amd64
           - runner: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             platform: linux-arm64
-            arch: arm64
           - runner: windows-latest
             target: x86_64-pc-windows-msvc
             platform: windows-amd64
-          - runner: windows-latest
-            target: arm-pc-windows-msvc
-            platform: windows-arm64
-          - runner: macos-latest
+          # Note: Windows ARM64 requires aarch64-pc-windows-msvc target
+          # and may need special runner configuration
+          # - runner: windows-latest
+          #   target: aarch64-pc-windows-msvc
+          #   platform: windows-arm64
+          - runner: macos-15-intel
             target: x86_64-apple-darwin
             platform: darwin-amd64
-            arch: amd64
           - runner: macos-latest
             target: aarch64-apple-darwin
             platform: darwin-arm64
-            arch: arm64
 
 
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
-      - name: Build
+      - name: setup cross compile for ubuntu-latest
+        if: matrix.runner == 'ubuntu-latest'
+        run: |
+          rustup target add ${{ matrix.target }}
+      - name: Build (Unix)
+        if: matrix.runner != 'windows-latest'
         run: |
           mkdir -p artifacts
-          VERSION=$(cargo pkgid -p sinkd | cut -d# -f2)
-          echo "version=${VERSION}" >> $GITHUB_ENV
           cargo build --release -p sinkd --target ${{ matrix.target }}
-          cp target/${{ matrix.target }}/release/sinkd artifacts/sinkd-${{ matrix.platform }}-${VERSION}
+          cp target/${{ matrix.target }}/release/sinkd artifacts/sinkd-${{ matrix.platform }}-${{ env.version }}
+      - name: Build (Windows)
+        if: matrix.runner == 'windows-latest'
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts
+          cargo build --release -p sinkd --target ${{ matrix.target }}
+          Copy-Item "target/${{ matrix.target }}/release/sinkd.exe" "artifacts/sinkd-${{ matrix.platform }}-${{ env.version }}.exe"
       - name: Upload artifacts
         uses: actions/upload-artifact@v5
         with:
@@ -71,6 +82,8 @@ jobs:
     needs: build
     if: github.ref_type == 'tag'
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
       - name: Download artifacts
         uses: actions/download-artifact@v6
         with:
