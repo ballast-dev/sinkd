@@ -41,7 +41,13 @@ build:windows:amd64:
   stage: build
   tags:
     - saas-windows-medium-amd64
-  script:  # just assume the windows machine has cargo
+  before_script:
+    - $ProgressPreference = 'SilentlyContinue'
+    - Invoke-WebRequest -Uri "https://win.rustup.rs/x86_64" -OutFile "rustup-init.exe"
+    - .\rustup-init.exe -y --default-host x86_64-pc-windows-msvc --default-toolchain stable
+    - $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
+    - rustup target add x86_64-pc-windows-msvc
+  script:
     - cargo build --release -p sinkd --target x86_64-pc-windows-msvc
   artifacts:
     name: "sinkd-windows-$CI_COMMIT_SHORT_SHA"
