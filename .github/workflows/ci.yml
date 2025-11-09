@@ -56,6 +56,7 @@ jobs:
           apt-get update && apt-get install -y gcc-multilib g++-multilib
           rustup target add x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu
       - name: Build (Linux)
+        if: matrix.runner == 'ubuntu-latest'
         run: |
           mkdir -p artifacts
           cargo build --release -p sinkd --target x86_64-unknown-linux-gnu
@@ -70,6 +71,7 @@ jobs:
           cargo build --release -p sinkd --target x86_64-pc-windows-msvc
           Copy-Item "target/x86_64-pc-windows-msvc/release/sinkd.exe" "artifacts/sinkd-windows-amd64-${{ env.version }}.exe"
       - name: Build (Mac)
+        if: matrix.runner == 'macos-15-intel' || matrix.runner == 'macos-latest'
         run: |
           mkdir -p artifacts
           cargo build --release -p sinkd --target ${{ matrix.target }}
