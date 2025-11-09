@@ -5,6 +5,8 @@ use std::{
     process::Command,
 };
 
+#[cfg(windows)]
+use crate::parameters::DaemonType;
 use crate::{bad, config, outcome::Outcome, parameters::Parameters, time};
 
 mod mqtt;

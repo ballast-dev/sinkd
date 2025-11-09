@@ -1,16 +1,13 @@
-mod env;
-mod event;
+mod report;
 
 use log::{error, info};
 use std::env::args;
-use std::fmt::Write as FmtWrite;
 use std::fs;
-use std::io::Write;
-use std::process::{Child, Command, Stdio};
+use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
 
-use env::Environment;
+const TEST_SCENARIOS_PATH: &str = "/mounted_path/test_scenarios";
 
 fn main() {
     env_logger::init();
@@ -19,7 +16,8 @@ fn main() {
     let instance_type = if args.len() > 1 {
         args[1].as_str()
     } else {
-        "default"
+        error!("Usage: scenario <alpha|bravo|charlie|delta>");
+        std::process::exit(1);
     };
 
     info!("Starting scenario for instance type: {instance_type}");
@@ -28,297 +26,148 @@ fn main() {
         "alpha" => run_alpha_scenario(),
         "bravo" => run_bravo_scenario(),
         "charlie" => run_charlie_scenario(),
-        _ => run_default_scenario(),
+        "delta" => run_delta_scenario(),
+        _ => {
+            error!(
+                "Unknown instance type: {instance_type}. Must be one of: alpha, bravo, charlie, delta"
+            );
+            std::process::exit(1);
+        }
     }
 }
 
 fn run_alpha_scenario() {
     info!("Running Alpha (Server) scenario");
-    let mut server = spawn_server_alpha();
+    info!("Alpha server should already be running from docker-compose command");
 
-    // Keep server running and wait for termination signal
+    // Alpha just keeps running - server is managed by docker-compose
     loop {
-        sleep(Duration::from_secs(5));
-        // Check if server is still running
-        if let Ok(Some(_)) = server.try_wait() {
-            error!("Server process exited unexpectedly");
-            break;
-        }
-        // In a real scenario, you'd check for termination conditions
+        sleep(Duration::from_secs(30));
+        info!("Alpha server scenario still running...");
     }
-
-    // Wait for server to finish
-    let _ = server.wait();
 }
 
 fn run_bravo_scenario() {
-    info!("Running Bravo (Client) scenario - file creator");
-    let mut client = spawn_client_bravo();
+    info!("Running Bravo (Client) scenario - file creator/modifier");
+    info!("Bravo client should already be running from docker-compose command");
 
-    // Wait for client to start
-    sleep(Duration::from_secs(5));
+    // Wait for client to start and sync to initialize
+    sleep(Duration::from_secs(10));
 
-    // Create files in shared directory
+    // Create initial files
     create_bravo_files();
 
-    // Keep client running
+    // Keep client running and periodically modify files
     loop {
         sleep(Duration::from_secs(10));
-        // Check if client is still running
-        if let Ok(Some(_)) = client.try_wait() {
-            error!("Client process exited unexpectedly");
-            break;
-        }
-        // Periodically create more files
+        // Periodically create/modify more files
         modify_bravo_files();
     }
-
-    // Wait for client to finish
-    let _ = client.wait();
 }
 
 fn run_charlie_scenario() {
     info!("Running Charlie (Client) scenario - file modifier");
-    let mut client = spawn_client_charlie();
+    info!("Charlie client should already be running from docker-compose command");
 
     // Wait for client to start and for bravo to create files
-    sleep(Duration::from_secs(10));
+    sleep(Duration::from_secs(15));
 
     // Modify files created by bravo
     loop {
         sleep(Duration::from_secs(15));
-        // Check if client is still running
-        if let Ok(Some(_)) = client.try_wait() {
-            error!("Client process exited unexpectedly");
-            break;
-        }
         modify_charlie_files();
     }
-
-    // Wait for client to finish
-    let _ = client.wait();
 }
 
-fn run_default_scenario() {
-    info!("Running default scenario (original behavior)");
-    build_sinkd().expect("Failed to build sinkd");
-    let env = Environment::setup();
-    let server = spawn_server();
-    let client = spawn_client(&env);
-    run_scenario(&env);
-    sleep(Duration::from_secs(10)); // for the server to pick up the change
-    stop_sinkd().expect("Failed to stop sinkd");
-    wait_for_exit(server);
-    wait_for_exit(client);
-    info!("Testing completed successfully.");
-}
+fn run_delta_scenario() {
+    info!("Running Delta (Client) scenario - reporter");
+    info!("Delta client should already be running from docker-compose command");
 
-fn build_sinkd() -> Result<(), String> {
-    info!("Building sinkd...");
-    let status = Command::new("cargo")
-        .arg("build")
-        .current_dir("../sinkd") // Specify the relative path to sinkd
-        .status()
-        .expect("Failed to execute cargo build");
-    if !status.success() {
-        return Err(format!("cargo build failed with status: {status}"));
+    // Wait for client to start and sync to initialize
+    sleep(Duration::from_secs(20));
+
+    // Periodically generate reports
+    let mut report_counter = 0;
+    loop {
+        sleep(Duration::from_secs(30));
+
+        report_counter += 1;
+        info!("Delta generating report #{report_counter}");
+        if let Err(e) = report::generate_toml_report(TEST_SCENARIOS_PATH, report_counter) {
+            error!("Failed to generate report: {e}");
+        }
     }
-    info!("sinkd built successfully.");
-    Ok(())
-}
-
-/// Runs the testing scenario by manipulating files.
-fn run_scenario(env: &Environment) {
-    info!("Running test situation...");
-    let single_file_path = env.repo_root.join("test").join("single_file");
-    let mut single_file = fs::File::create(&single_file_path)
-        .unwrap_or_else(|_| panic!("Failed to create file {:?}", &single_file_path.display()));
-
-    let folder1 = env.client_path.join("folder1");
-    env::remove_subfiles(&folder1);
-    event::create_files(&folder1, 3, 0.5);
-
-    let folder2 = env.client_path.join("folder2");
-    env::remove_subfiles(&folder2);
-    event::create_files(&folder2, 10, 1.0);
-
-    fs::File::write(&mut single_file, b"thingy").expect("cannot write to file");
-
-    info!("==>> Finished client situation <<==");
-}
-
-/// Spawns the sinkd server process.
-fn spawn_server() -> Child {
-    info!("Spawning sinkd server...");
-    let child = Command::new("../sinkd/target/debug/sinkd") // Path to sinkd binary
-        .arg("-d")
-        .arg("server")
-        .arg("start")
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .expect("Failed to spawn sinkd server");
-    // Optional: Add a delay to ensure the server starts properly
-    sleep(Duration::from_secs(2));
-    child
-}
-
-/// Spawns the sinkd client process with specified configurations.
-fn spawn_client(env: &Environment) -> Child {
-    info!("Spawning sinkd client...");
-    let child = Command::new("../sinkd/target/debug/sinkd")
-        .arg("-d")
-        .arg("client")
-        .arg("--sys-cfg")
-        .arg(&env.server_config)
-        .arg("--usr-cfg")
-        .arg(&env.client_config)
-        .arg("start")
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .expect("Failed to spawn sinkd client");
-    // Optional: Add a delay to ensure the client starts properly
-    sleep(Duration::from_secs(2));
-    child
-}
-
-/// Stops both the sinkd client and server processes.
-fn stop_sinkd() -> Result<(), String> {
-    info!("Stopping sinkd client and server...");
-    let client_status = Command::new("../sinkd/target/debug/sinkd")
-        .arg("-d")
-        .arg("client")
-        .arg("stop")
-        .status()
-        .expect("Failed to execute stop command for sinkd client");
-    if !client_status.success() {
-        return Err(format!(
-            "Failed to stop sinkd client with status: {client_status}"
-        ));
-    }
-
-    let server_status = Command::new("../sinkd/target/debug/sinkd")
-        .arg("-d")
-        .arg("server")
-        .arg("stop")
-        .status()
-        .expect("Failed to execute stop command for sinkd server");
-    if !server_status.success() {
-        return Err(format!(
-            "Failed to stop sinkd server with status: {server_status}"
-        ));
-    }
-    info!("sinkd client and server stopped.");
-    Ok(())
-}
-
-/// Waits for a child process to exit and logs its status.
-fn wait_for_exit(mut child: Child) {
-    let status = child.wait().expect("Failed to wait for child process");
-    if status.success() {
-        info!("Process exited successfully.");
-    } else {
-        error!("Process exited with status: {status}");
-    }
-}
-
-// New functions for Docker scenario instances
-
-/// Spawns the sinkd server for alpha instance
-fn spawn_server_alpha() -> Child {
-    info!("Spawning sinkd server (alpha)...");
-    let child = Command::new("/usr/local/bin/sinkd")
-        .arg("server")
-        .arg("start")
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .expect("Failed to spawn sinkd server");
-    sleep(Duration::from_secs(3));
-    child
-}
-
-/// Spawns the sinkd client for bravo instance
-fn spawn_client_bravo() -> Child {
-    info!("Spawning sinkd client (bravo)...");
-    let child = Command::new("/usr/local/bin/sinkd")
-        .arg("client")
-        .arg("start")
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .expect("Failed to spawn sinkd client");
-    sleep(Duration::from_secs(3));
-    child
-}
-
-/// Spawns the sinkd client for charlie instance
-fn spawn_client_charlie() -> Child {
-    info!("Spawning sinkd client (charlie)...");
-    let child = Command::new("/usr/local/bin/sinkd")
-        .arg("client")
-        .arg("start")
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .expect("Failed to spawn sinkd client");
-    sleep(Duration::from_secs(3));
-    child
 }
 
 /// Creates initial files for bravo scenario
 fn create_bravo_files() {
-    info!("Bravo creating initial files...");
+    info!("Bravo creating initial files in {TEST_SCENARIOS_PATH}...");
 
-    // Create bravo's directory
-    fs::create_dir_all("/shared/bravo").expect("Failed to create bravo directory");
-    fs::create_dir_all("/shared/common").expect("Failed to create common directory");
+    let base_path = Path::new(TEST_SCENARIOS_PATH);
+    let bravo_path = base_path.join("bravo");
+    fs::create_dir_all(&bravo_path).expect("Failed to create bravo directory");
 
-    // Create some initial files
+    // Create some initial files with bravo_ prefix
     for i in 0..5 {
-        let file_path = format!("/shared/bravo/bravo_file_{i}.txt");
-        fs::write(&file_path, format!("Initial content from bravo - file {i}"))
-            .expect("Failed to create bravo file");
-        info!("Created: {file_path}");
-
+        let file_path = bravo_path.join(format!("bravo_file_{i}.txt"));
+        fs::write(
+            &file_path,
+            format!("Initial content from bravo - file {i}\n"),
+        )
+        .expect("Failed to create bravo file");
+        info!("Created: {}", file_path.display());
         sleep(Duration::from_secs(1));
     }
 
-    // Create a shared file
-    let shared_file = "/shared/common/shared_document.txt";
+    // Create a shared file that both bravo and charlie can modify
+    let shared_file = base_path.join("shared_document.txt");
     fs::write(
-        shared_file,
-        "This is a shared document created by bravo\nLine 2\n",
+        &shared_file,
+        "Initial shared document\nLine 2: Original content\n",
     )
     .expect("Failed to create shared file");
-    info!("Created shared file: {shared_file}");
+    info!("Created shared file: {}", shared_file.display());
 }
 
 /// Periodically modifies files for bravo scenario
 fn modify_bravo_files() {
     info!("Bravo modifying files...");
 
-    // Add a new file periodically
+    let base_path = Path::new(TEST_SCENARIOS_PATH);
+    let bravo_path = base_path.join("bravo");
+    fs::create_dir_all(&bravo_path).expect("Failed to ensure bravo directory exists");
+
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_secs();
 
-    let new_file = format!("/shared/bravo/bravo_periodic_{timestamp}.txt");
+    // Add a new file periodically
+    let new_file = bravo_path.join(format!("bravo_periodic_{timestamp}.txt"));
     fs::write(
         &new_file,
-        format!("Periodic file created by bravo at {timestamp}"),
+        format!("Periodic file created by bravo at {timestamp}\n"),
     )
     .expect("Failed to create periodic file");
-    info!("Bravo created periodic file: {new_file}");
+    info!("Bravo created periodic file: {}", new_file.display());
 
     // Modify the shared document
-    if let Ok(mut content) = fs::read_to_string("/shared/common/shared_document.txt") {
-        writeln!(content, "Bravo update at {timestamp}").expect("Failed to format string");
-        fs::write("/shared/common/shared_document.txt", content)
-            .expect("Failed to update shared document");
-        info!("Bravo updated shared document");
+    let shared_file = base_path.join("shared_document.txt");
+    if shared_file.exists() {
+        if let Ok(mut content) = fs::read_to_string(&shared_file) {
+            use std::fmt::Write;
+            writeln!(content, "\n--- BRAVO MODIFICATION at {timestamp} ---")
+                .expect("Failed to write to string");
+            fs::write(&shared_file, content).expect("Failed to update shared document");
+            info!("Bravo updated shared document");
+        }
+    } else {
+        // Create if it doesn't exist
+        fs::write(
+            &shared_file,
+            format!("Shared document (created by bravo at {timestamp})\n"),
+        )
+        .expect("Failed to create shared file");
     }
 }
 
@@ -326,8 +175,9 @@ fn modify_bravo_files() {
 fn modify_charlie_files() {
     info!("Charlie modifying files...");
 
-    // Create charlie's directory
-    fs::create_dir_all("/shared/charlie").expect("Failed to create charlie directory");
+    let base_path = Path::new(TEST_SCENARIOS_PATH);
+    let charlie_path = base_path.join("charlie");
+    fs::create_dir_all(&charlie_path).expect("Failed to create charlie directory");
 
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -335,28 +185,30 @@ fn modify_charlie_files() {
         .as_secs();
 
     // Create charlie's own files
-    let charlie_file = format!("/shared/charlie/charlie_response_{timestamp}.txt");
+    let charlie_file = charlie_path.join(format!("charlie_response_{timestamp}.txt"));
     fs::write(
         &charlie_file,
-        format!("Charlie's response file created at {timestamp}"),
+        format!("Charlie's response file created at {timestamp}\n"),
     )
     .expect("Failed to create charlie file");
-    info!("Charlie created: {charlie_file}");
+    info!("Charlie created: {}", charlie_file.display());
 
-    // Modify bravo's files if they exist
-    if let Ok(entries) = fs::read_dir("/shared/bravo") {
+    // Modify bravo's files if they exist (synced via sinkd)
+    let bravo_path = base_path.join("bravo");
+    if bravo_path.exists()
+        && let Ok(entries) = fs::read_dir(&bravo_path)
+    {
         for entry in entries.flatten() {
             if let Some(file_name) = entry.file_name().to_str()
                 && file_name.starts_with("bravo_file_")
-                && std::path::Path::new(file_name)
-                    .extension()
-                    .is_some_and(|ext| ext.eq_ignore_ascii_case("txt"))
+                && entry.path().extension().is_some_and(|ext| ext == "txt")
             {
                 let file_path = entry.path();
                 if let Ok(mut content) = fs::read_to_string(&file_path) {
-                    write!(content, "\n--- Modified by Charlie at {timestamp} ---\n")
-                        .expect("Failed to format string");
-                    if fs::write(&file_path, content).is_ok() {
+                    use std::fmt::Write;
+                    if writeln!(content, "\n--- Modified by Charlie at {timestamp} ---").is_ok()
+                        && fs::write(&file_path, content).is_ok()
+                    {
                         info!("Charlie modified: {}", file_path.display());
                         break; // Only modify one file per cycle
                     }
@@ -365,12 +217,15 @@ fn modify_charlie_files() {
         }
     }
 
-    // Modify the shared document
-    if let Ok(mut content) = fs::read_to_string("/shared/common/shared_document.txt") {
-        writeln!(content, "Charlie's contribution at {timestamp}")
-            .expect("Failed to format string");
-        fs::write("/shared/common/shared_document.txt", content)
-            .expect("Failed to update shared document");
+    // Modify the shared document (synced via sinkd)
+    let shared_file = base_path.join("shared_document.txt");
+    if shared_file.exists()
+        && let Ok(mut content) = fs::read_to_string(&shared_file)
+    {
+        use std::fmt::Write;
+        writeln!(content, "\n--- CHARLIE MODIFICATION at {timestamp} ---")
+            .expect("Failed to write to string");
+        fs::write(&shared_file, content).expect("Failed to update shared document");
         info!("Charlie updated shared document");
     }
 }

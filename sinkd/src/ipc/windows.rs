@@ -35,21 +35,21 @@ pub fn daemon() -> Outcome<u32> {
         .collect();
 
     unsafe {
-        let mut startup_info = STARTUPINFOW::default();
+        let startup_info = STARTUPINFOW::default();
         let mut process_info = PROCESS_INFORMATION::default();
         let creation_flags = PROCESS_CREATION_FLAGS(CREATE_NO_WINDOW.0 | DETACHED_PROCESS.0);
 
         CreateProcessW(
             PCWSTR(exe_wide.as_ptr()),
-            Some(PWSTR(args_wide.as_ptr() as *mut _)),
+            Some(PWSTR(args_wide.as_ptr().cast_mut())),
             None,  // Process security attributes
             None,  // Thread security attributes
             false, // Inherit handles
             creation_flags,
             None, // Environment block
             None, // Current directory
-            &mut startup_info,
-            &mut process_info,
+            &raw const startup_info,
+            &raw mut process_info,
         )
         .map_err(|e| format!("Failed to daemonize process: {e:?}"))?;
 
@@ -65,7 +65,7 @@ pub fn daemon() -> Outcome<u32> {
 /// Redirects stdin, stdout, stderr to NUL (basically /dev/null on Windows).
 pub fn redirect_stdio_to_null() -> Outcome<()> {
     let devnull = File::open("NUL")?;
-    let devnull_handle: HANDLE = HANDLE(devnull.into_raw_handle() as *mut _);
+    let devnull_handle: HANDLE = HANDLE(devnull.into_raw_handle().cast());
 
     unsafe {
         SetStdHandle(STD_INPUT_HANDLE, devnull_handle)

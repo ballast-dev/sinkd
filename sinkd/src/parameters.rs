@@ -204,7 +204,7 @@ impl Parameters {
         // safe unwrap due to default args
         if let Some(usr_cfgs) = user_configs {
             for cfg in usr_cfgs {
-                let normalized = config::resolve(&cfg.to_string())?;
+                let normalized = config::resolve(&cfg.clone())?;
                 if normalized.is_dir() {
                     return bad!(
                         "{} is a directory, not a file; aborting",

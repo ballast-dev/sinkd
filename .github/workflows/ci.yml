@@ -1,0 +1,113 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+    tags: ['*']
+  pull_request:
+    branches: [main]
+
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+      - name: Run clippy and tests
+        run: |
+          cargo clippy -p sinkd
+          cargo test -p sinkd
+
+  build:
+    needs: lint
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: cross
+            platform: linux
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            platform: windows-amd64
+          # Note: Windows ARM64 requires aarch64-pc-windows-msvc target
+          # and may need special runner configuration
+          # - runner: windows-latest
+          #   target: aarch64-pc-windows-msvc
+          #   platform: windows-arm64
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+            platform: darwin-amd64
+          - runner: macos-latest
+            target: aarch64-apple-darwin
+            platform: darwin-arm64
+
+
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+      - name: setup cross compile for ubuntu-latest
+        if: matrix.runner == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
+          rustup target add x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu
+      - name: Build (Linux)
+        if: matrix.runner == 'ubuntu-latest'
+        run: |
+          mkdir -p artifacts
+          cargo build --release -p sinkd --target x86_64-unknown-linux-gnu
+          cargo build --release -p sinkd --target aarch64-unknown-linux-gnu
+          cp target/x86_64-unknown-linux-gnu/release/sinkd artifacts/sinkd-linux-amd64
+          cp target/aarch64-unknown-linux-gnu/release/sinkd artifacts/sinkd-linux-arm64
+      - name: Build (Windows)
+        if: matrix.runner == 'windows-latest'
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts
+          cargo build --release -p sinkd --target x86_64-pc-windows-msvc
+          Copy-Item "target/x86_64-pc-windows-msvc/release/sinkd.exe" "artifacts/sinkd-windows-amd64.exe"
+      - name: Build (Mac)
+        if: matrix.runner == 'macos-15-intel' || matrix.runner == 'macos-latest'
+        run: |
+          mkdir -p artifacts
+          cargo build --release -p sinkd --target ${{ matrix.target }}
+          cp target/${{ matrix.target }}/release/sinkd artifacts/sinkd-${{ matrix.platform }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: sinkd-artifacts-${{ matrix.platform }}
+          path: artifacts/sinkd-*
+          retention-days: 7
+
+  release:
+    runs-on: ubuntu-latest
+    needs: [lint, build]
+    if: github.ref_type == 'tag'
+    steps:
+      - uses: actions/checkout@v5
+      - name: Download artifacts
+        uses: actions/download-artifact@v6
+        with:
+          merge-multiple: true
+          path: artifacts/
+      - name: Get version
+        run: |
+          VERSION=$(cargo pkgid -p sinkd | cut -d# -f2)
+          echo "version=${VERSION}" >> $GITHUB_ENV
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ env.version }}
+          body: |
+            sinkd ${{ env.version }}
+          draft: false
+          prerelease: false
+          files: |
+            artifacts/
+      
+
+
+
