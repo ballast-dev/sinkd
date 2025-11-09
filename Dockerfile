@@ -2,10 +2,12 @@
 FROM rust:1.90-slim
 
 RUN apt-get update && apt-get install -y \
+  binutils-aarch64-linux-gnu \
   build-essential \
   cmake \
   curl \
   fd-find \
+  gcc-aarch64-linux-gnu \
   just \
   libmosquitto-dev \
   mosquitto \
@@ -44,3 +46,5 @@ EOF
 RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
+
+CMD ["/bin/bash"]
