@@ -47,10 +47,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
-      - name: Set version from lint job
-        run: |
-          VERSION=$(cargo pkgid -p sinkd | cut -d# -f2)
-          echo "version=${VERSION}" >> $GITHUB_ENV
       - name: setup cross compile for ubuntu-latest
         if: matrix.runner == 'ubuntu-latest'
         run: |
@@ -63,21 +59,21 @@ jobs:
           mkdir -p artifacts
           cargo build --release -p sinkd --target x86_64-unknown-linux-gnu
           cargo build --release -p sinkd --target aarch64-unknown-linux-gnu
-          cp target/x86_64-unknown-linux-gnu/release/sinkd artifacts/sinkd-linux-amd64-${{ env.version }}
-          cp target/aarch64-unknown-linux-gnu/release/sinkd artifacts/sinkd-linux-arm64-${{ env.version }}
+          cp target/x86_64-unknown-linux-gnu/release/sinkd artifacts/sinkd-linux-amd64
+          cp target/aarch64-unknown-linux-gnu/release/sinkd artifacts/sinkd-linux-arm64
       - name: Build (Windows)
         if: matrix.runner == 'windows-latest'
         shell: powershell
         run: |
           New-Item -ItemType Directory -Force -Path artifacts
           cargo build --release -p sinkd --target x86_64-pc-windows-msvc
-          Copy-Item "target/x86_64-pc-windows-msvc/release/sinkd.exe" "artifacts/sinkd-windows-amd64-${{ env.version }}.exe"
+          Copy-Item "target/x86_64-pc-windows-msvc/release/sinkd.exe" "artifacts/sinkd-windows-amd64.exe"
       - name: Build (Mac)
         if: matrix.runner == 'macos-15-intel' || matrix.runner == 'macos-latest'
         run: |
           mkdir -p artifacts
           cargo build --release -p sinkd --target ${{ matrix.target }}
-          cp target/${{ matrix.target }}/release/sinkd artifacts/sinkd-${{ matrix.platform }}-${{ env.version }}
+          cp target/${{ matrix.target }}/release/sinkd artifacts/sinkd-${{ matrix.platform }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v5
@@ -91,8 +87,7 @@ jobs:
     needs: [lint, build]
     if: github.ref_type == 'tag'
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
+      - uses: actions/checkout@v5
       - name: Download artifacts
         uses: actions/download-artifact@v6
         with:
