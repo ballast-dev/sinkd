@@ -1,4 +1,4 @@
-name: CI
+name: ci
 
 on:
   push:
@@ -28,11 +28,8 @@ jobs:
       matrix:
         include:
           - runner: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            platform: linux-amd64
-          - runner: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            platform: linux-arm64
+            target: cross
+            platform: cross
           - runner: windows-latest
             target: x86_64-pc-windows-msvc
             platform: windows-amd64
@@ -56,20 +53,28 @@ jobs:
       - name: setup cross compile for ubuntu-latest
         if: matrix.runner == 'ubuntu-latest'
         run: |
-          rustup target add ${{ matrix.target }}
-      - name: Build (Unix)
-        if: matrix.runner != 'windows-latest'
+          apt-get update && apt-get install -y gcc-multilib g++-multilib
+          rustup target add x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu
+      - name: Build (Linux)
         run: |
           mkdir -p artifacts
-          cargo build --release -p sinkd --target ${{ matrix.target }}
-          cp target/${{ matrix.target }}/release/sinkd artifacts/sinkd-${{ matrix.platform }}-${{ env.version }}
+          cargo build --release -p sinkd --target x86_64-unknown-linux-gnu
+          cargo build --release -p sinkd --target aarch64-unknown-linux-gnu
+          cp target/x86_64-unknown-linux-gnu/release/sinkd artifacts/sinkd-linux-amd64-${{ env.version }}
+          cp target/aarch64-unknown-linux-gnu/release/sinkd artifacts/sinkd-linux-arm64-${{ env.version }}
       - name: Build (Windows)
         if: matrix.runner == 'windows-latest'
         shell: powershell
         run: |
           New-Item -ItemType Directory -Force -Path artifacts
+          cargo build --release -p sinkd --target x86_64-pc-windows-msvc
+          Copy-Item "target/x86_64-pc-windows-msvc/release/sinkd.exe" "artifacts/sinkd-windows-amd64-${{ env.version }}.exe"
+      - name: Build (Mac)
+        run: |
+          mkdir -p artifacts
           cargo build --release -p sinkd --target ${{ matrix.target }}
-          Copy-Item "target/${{ matrix.target }}/release/sinkd.exe" "artifacts/sinkd-${{ matrix.platform }}-${{ env.version }}.exe"
+          cp target/${{ matrix.target }}/release/sinkd artifacts/sinkd-${{ matrix.platform }}-${{ env.version }}
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v5
         with:
