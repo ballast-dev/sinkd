@@ -49,10 +49,19 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Build ${{ matrix.target }}
+        if: ${{ !startsWith(matrix.runner, 'windows') }}
         run: |
           mkdir -p artifacts
           cargo build --release -p sinkd --target ${{ matrix.target }}
           cp target/${{ matrix.target }}/release/sinkd artifacts/sinkd-${{ matrix.platform }}
+
+      - name: Build (Windows)
+        if: ${{ startsWith(matrix.runner, 'windows') }}
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts
+          cargo build --release -p sinkd --target ${{ matrix.target }}
+          Copy-Item "target/${{ matrix.target }}/release/sinkd.exe" "artifacts/sinkd-${{ matrix.platform }}.exe"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v5
