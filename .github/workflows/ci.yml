@@ -24,52 +24,31 @@ jobs:
     strategy:
       matrix:
         include:
-          - runner: ubuntu-latest
-            target: cross
-            platform: linux
+          - runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            platform: linux-amd64
+          - runner: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+            platform: linux-arm64
           - runner: windows-latest
             target: x86_64-pc-windows-msvc
             platform: windows-amd64
-          # Note: Windows ARM64 requires aarch64-pc-windows-msvc target
-          # and may need special runner configuration
-          # - runner: windows-latest
-          #   target: aarch64-pc-windows-msvc
-          #   platform: windows-arm64
+          - runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            platform: windows-arm64
           - runner: macos-15-intel
             target: x86_64-apple-darwin
             platform: darwin-amd64
           - runner: macos-latest
             target: aarch64-apple-darwin
             platform: darwin-arm64
+            # os: [ubuntu-latest, macos-latest, windows-latest, windows-11-arm, ubuntu-24.04-arm]
 
 
     runs-on: ${{ matrix.runner }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
-      - name: setup cross compile for ubuntu-latest
-        if: matrix.runner == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
-          rustup target add x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu
-      - name: Build (Linux)
-        if: matrix.runner == 'ubuntu-latest'
-        run: |
-          mkdir -p artifacts
-          cargo build --release -p sinkd --target x86_64-unknown-linux-gnu
-          cargo build --release -p sinkd --target aarch64-unknown-linux-gnu
-          cp target/x86_64-unknown-linux-gnu/release/sinkd artifacts/sinkd-linux-amd64
-          cp target/aarch64-unknown-linux-gnu/release/sinkd artifacts/sinkd-linux-arm64
-      - name: Build (Windows)
-        if: matrix.runner == 'windows-latest'
-        shell: powershell
-        run: |
-          New-Item -ItemType Directory -Force -Path artifacts
-          cargo build --release -p sinkd --target x86_64-pc-windows-msvc
-          Copy-Item "target/x86_64-pc-windows-msvc/release/sinkd.exe" "artifacts/sinkd-windows-amd64.exe"
-      - name: Build (Mac)
-        if: matrix.runner == 'macos-15-intel' || matrix.runner == 'macos-latest'
+      - uses: actions/checkout@v5
+      - name: Build ${{ matrix.target }}
         run: |
           mkdir -p artifacts
           cargo build --release -p sinkd --target ${{ matrix.target }}
