@@ -18,9 +18,7 @@ RUN apt-get update && apt-get install -y \
   && rm -rf /var/lib/apt/lists/*
 
 RUN rustup component add rustfmt clippy
-RUN rustup target add \
-  x86_64-unknown-linux-gnu \
-  aarch64-unknown-linux-gnu
+RUN cargo install cargo-deb
 
 # Allow sudo group to run sudo without password
 RUN echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
