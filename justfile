@@ -31,8 +31,10 @@ sh *ARGS:
         --hostname sinkd \
         -e WORKDIR=$(pwd) \
         -v $(pwd):$(pwd) \
+        -w $(pwd) \
         {{ARGS}} \
-        {{IMAGE}}
+        {{IMAGE}} \
+        /usr/bin/bash
 
 
 ##################################
