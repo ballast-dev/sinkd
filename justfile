@@ -1,4 +1,5 @@
 IMAGE := "ghcr.io/ballast-dev/sinkd:0.1.0"
+export ARCH := if `uname -m` == "x86_64" { "amd64" } else { "arm64" }
 
 _: 
     @just --list
@@ -23,7 +24,17 @@ server-log:
 
 # build docker image
 img:
-    @docker build -t {{IMAGE}} -< Dockerfile
+    @docker buildx build \
+    --platform linux/amd64,linux/arm64 \
+    -t {{IMAGE}} \
+    -< Dockerfile
+
+img-push:
+    @docker buildx build \
+    --platform linux/amd64,linux/arm64 \
+    -t {{IMAGE}} \
+    --push \
+    -< Dockerfile
 
 
 sh *ARGS:
