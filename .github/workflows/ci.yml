@@ -36,7 +36,7 @@ jobs:
 
     runs-on: ${{ matrix.runner }}
     container:
-      image: ghcr.io/ballast-dev/sinkd:latest
+      image: ghcr.io/ballast-dev/sinkd:0.1.0
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.BALLAST_DEV_TOKEN }}
