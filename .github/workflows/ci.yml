@@ -7,6 +7,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: write
+  packages: write
 
 jobs:
   lint:
@@ -32,7 +35,11 @@ jobs:
             platform: linux-arm64
 
     runs-on: ${{ matrix.runner }}
-    container: ghcr.io/ballast-dev/sinkd:latest
+    container:
+      image: ghcr.io/ballast-dev/sinkd:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.BALLAST_DEV_TOKEN }}
     steps:
       - uses: actions/checkout@v5
 
