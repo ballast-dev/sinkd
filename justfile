@@ -44,8 +44,7 @@ sh *ARGS:
         -v $(pwd):$(pwd) \
         -w $(pwd) \
         {{ARGS}} \
-        {{IMAGE}} \
-        /usr/bin/bash
+        {{IMAGE}}
 
 
 ##################################
