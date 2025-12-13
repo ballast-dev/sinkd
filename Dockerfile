@@ -9,8 +9,6 @@ RUN apt-get update && apt-get install -y \
   fd-find \
   gcc-aarch64-linux-gnu \
   just \
-  libmosquitto-dev \
-  mosquitto \
   openssh-client \
   openssh-server \
   rsync \

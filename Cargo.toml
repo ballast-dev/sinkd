@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["sinkd", "scenario", "leyline"]
+members = ["scenario"]
 
 [workspace.dependencies]
 # Shared dependencies that can be used by workspace members
@@ -10,6 +10,7 @@ serde = { version = "1.0", features = ["derive"] }
 toml = "0.9"
 clap = { version = "4", features = ["derive"] }
 bincode = "1"
+dust_dds = "0.14"
 
 # Workspace-wide Clippy lint levels - matches justfile lint recipe behavior
 [workspace.lints.clippy]
@@ -18,3 +19,34 @@ pedantic = "deny"
 correctness = "deny"
 suspicious = "deny"
 complexity = "deny"
+
+[package]
+name = "sinkd"
+version = "0.0.1"
+authors = ["Tony <krakjn@gmail.com>"]
+edition = "2021"
+
+[dependencies]
+bincode = "1"
+chrono = { workspace = true }
+clap = { workspace = true }
+crossbeam = "0.8"
+dust_dds = { workspace = true }
+libc = "0.2"
+log = { workspace = true }
+nix = { version = "0.30", features = ["process", "signal"] }
+notify = "8"
+serde = { workspace = true }
+signal-hook = "0.3"
+toml = { workspace = true }
+windows = { version = "0.60.0", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Console",
+    "Win32_System_SystemInformation",
+    "Win32_System_Threading",
+    "Win32_System_WindowsProgramming",
+] }
+
+[lints]
+workspace = true

@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::{self, BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 
-use crate::{bad, Outcome};
+use crate::Outcome;
 
 const DEFAULT_FORMAT: &str = "%T";
 

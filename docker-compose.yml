@@ -5,8 +5,8 @@ services:
     hostname: alpha
     entrypoint: [""]
     volumes:
-      - ./configs/alpha.conf:/etc/sinkd.conf
-      - ./configs/alpha-user.conf:/root/.config/sinkd.conf
+      - ./cfg/scenario/alpha.conf:/etc/sinkd.conf
+      - ./cfg/scenario/alpha-user.conf:/root/.config/sinkd.conf
       - .:/workspace
       - ./test_scenarios:/mounted_path/test_scenarios
     working_dir: /workspace
@@ -28,8 +28,8 @@ services:
     hostname: bravo
     entrypoint: [""]
     volumes:
-      - ./configs/bravo.conf:/etc/sinkd.conf
-      - ./configs/bravo-user.conf:/root/.config/sinkd.conf
+      - ./cfg/scenario/bravo.conf:/etc/sinkd.conf
+      - ./cfg/scenario/bravo-user.conf:/root/.config/sinkd.conf
       - .:/workspace
       - ./test_scenarios:/mounted_path/test_scenarios
     working_dir: /workspace
@@ -49,8 +49,8 @@ services:
     hostname: charlie
     entrypoint: [""]
     volumes:
-      - ./configs/charlie.conf:/etc/sinkd.conf
-      - ./configs/charlie-user.conf:/root/.config/sinkd.conf
+      - ./cfg/scenario/charlie.conf:/etc/sinkd.conf
+      - ./cfg/scenario/charlie-user.conf:/root/.config/sinkd.conf
       - .:/workspace
       - ./test_scenarios:/mounted_path/test_scenarios
     working_dir: /workspace
@@ -70,8 +70,8 @@ services:
     hostname: delta
     entrypoint: [""]
     volumes:
-      - ./configs/charlie.conf:/etc/sinkd.conf
-      - ./configs/charlie-user.conf:/root/.config/sinkd.conf
+      - ./cfg/scenario/charlie.conf:/etc/sinkd.conf
+      - ./cfg/scenario/charlie-user.conf:/root/.config/sinkd.conf
       - .:/workspace
       - ./test_scenarios:/mounted_path/test_scenarios
     working_dir: /workspace

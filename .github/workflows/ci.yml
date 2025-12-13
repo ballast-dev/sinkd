@@ -14,9 +14,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Run clippy
-        run: cargo clippy -p sinkd
+        run: cargo clippy
       - name: Run tests
-        run: cargo test -p sinkd
+        run: cargo test
 
   build:
     needs: lint
@@ -51,11 +51,11 @@ jobs:
         shell: bash
         run: |
           mkdir -p artifacts
-          cargo build --release -p sinkd --target ${{ matrix.target }}
+          cargo build --release --target ${{ matrix.target }}
           cp target/${{ matrix.target }}/release/sinkd artifacts/sinkd-${{ matrix.platform }}
           if [[ "${{ matrix.runner }}" == ubuntu* ]]; then
             cargo install cargo-deb
-            cargo deb -p sinkd -o artifacts/sinkd-${{ matrix.platform }}.deb
+            cargo deb -o artifacts/sinkd-${{ matrix.platform }}.deb
           fi
 
       - name: Build (Windows)
@@ -63,7 +63,7 @@ jobs:
         shell: powershell
         run: |
           New-Item -ItemType Directory -Force -Path artifacts
-          cargo build --release -p sinkd --target ${{ matrix.target }}
+          cargo build --release --target ${{ matrix.target }}
           Copy-Item "target/${{ matrix.target }}/release/sinkd.exe" "artifacts/sinkd-${{ matrix.platform }}.exe"
 
       - name: Upload artifacts
@@ -86,7 +86,7 @@ jobs:
           path: artifacts/
       - name: Get version
         run: |
-          VERSION=$(cargo pkgid -p sinkd | cut -d# -f2)
+          VERSION=$(cargo pkgid | cut -d# -f2)
           echo "version=${VERSION}" >> $GITHUB_ENV
       - name: Publish release
         uses: softprops/action-gh-release@v2
