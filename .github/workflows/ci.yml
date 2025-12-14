@@ -35,18 +35,14 @@ jobs:
             platform: linux-arm64
 
     runs-on: ${{ matrix.runner }}
-    container:
-      image: ghcr.io/ballast-dev/sinkd:0.1.0
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.BALLAST_DEV_TOKEN }}
     steps:
       - uses: actions/checkout@v5
 
       - name: Build ${{ matrix.target }}
         run: |
           mkdir -p artifacts
-          cargo build --release --target ${{ matrix.target }}
+          docker run --rm --entrypoint="" -v $(pwd):$(pwd) -w $(pwd) ghcr.io/ballast-dev/sinkd:0.1.0 \
+            cargo build --release --target ${{ matrix.target }}
           cp target/${{ matrix.target }}/release/sinkd artifacts/sinkd-${{ matrix.platform }}
 
       - name: Upload artifacts
