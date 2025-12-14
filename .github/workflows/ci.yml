@@ -41,6 +41,7 @@ jobs:
       - name: Build ${{ matrix.target }}
         run: |
           mkdir -p artifacts
+          echo ${{ secrets.BALLAST_DEV_TOKEN }} | docker login -u ${{ github.actor }} --password-stdin ghcr.io
           docker run --rm --entrypoint="" -v $(pwd):$(pwd) -w $(pwd) ghcr.io/ballast-dev/sinkd:0.1.0 \
             cargo build --release --target ${{ matrix.target }}
           cp target/${{ matrix.target }}/release/sinkd artifacts/sinkd-${{ matrix.platform }}
