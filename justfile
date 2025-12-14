@@ -46,6 +46,16 @@ sh *ARGS:
         {{ARGS}} \
         {{IMAGE}}
 
+# build binaries inside container (for Alpine/musl compatibility)
+build:
+    @docker run --rm \
+        --hostname sinkd \
+        -e WORKDIR=$(pwd) \
+        -v $(pwd):$(pwd) \
+        -w $(pwd) \
+        {{IMAGE}} \
+        "cargo build --workspace"
+
 
 ##################################
 ## Docker Multi-Instance Commands

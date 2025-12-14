@@ -12,7 +12,7 @@ services:
     working_dir: /workspace
     networks:
       - nsync
-    command: ["/bin/bash", "-c", "./target/debug/sinkd server start & sleep 3 && ./target/debug/scenario alpha"]
+    command: ["/bin/sh", "-c", "./target/debug/sinkd server start & sleep 3 && ./target/debug/scenario alpha"]
     environment:
       - RUST_LOG=info
       - WORKDIR=/workspace
@@ -38,7 +38,7 @@ services:
     depends_on:
       alpha:
         condition: service_healthy
-    command: ["/bin/bash", "-c", "./target/debug/sinkd client start & sleep 3 && ./target/debug/scenario bravo"]
+    command: ["/bin/sh", "-c", "./target/debug/sinkd client start & sleep 3 && ./target/debug/scenario bravo"]
     environment:
       - RUST_LOG=info
       - WORKDIR=/workspace
@@ -59,7 +59,7 @@ services:
     depends_on:
       alpha:
         condition: service_healthy
-    command: ["/bin/bash", "-c", "./target/debug/sinkd client start & sleep 3 && ./target/debug/scenario charlie"]
+    command: ["/bin/sh", "-c", "./target/debug/sinkd client start & sleep 3 && ./target/debug/scenario charlie"]
     environment:
       - RUST_LOG=info
       - WORKDIR=/workspace
@@ -80,7 +80,7 @@ services:
     depends_on:
       alpha:
         condition: service_healthy
-    command: ["/bin/bash", "-c", "./target/debug/sinkd client start & sleep 3 && ./target/debug/scenario delta"]
+    command: ["/bin/sh", "-c", "./target/debug/sinkd client start & sleep 3 && ./target/debug/scenario delta"]
     environment:
       - RUST_LOG=info
       - WORKDIR=/workspace
