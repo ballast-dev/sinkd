@@ -11,7 +11,6 @@ use std::{
         mpsc, Arc, Mutex,
     },
     thread,
-    time::Duration,
 };
 
 use crate::{config, ipc, outcome::Outcome, parameters::Parameters, rsync::rsync};
@@ -26,24 +25,27 @@ use crate::{config, ipc, outcome::Outcome, parameters::Parameters, rsync::rsync}
 //};
 
 pub fn start(params: &Parameters) -> Outcome<()> {
-    ipc::start_mosquitto()?;
-    thread::sleep(Duration::from_millis(500));
+    // No need to start mosquitto - DDS is peer-to-peer
     println!("logging to: {}", params.log_path.display());
     ipc::daemon(init, params)
 }
 
 pub fn stop() -> Outcome<()> {
     let terminal_topic = format!("sinkd/{}/terminate", config::get_hostname()?);
-    if let Err(e) = std::process::Command::new("mosquitto_pub")
-        .arg("-h")
-        .arg("localhost") // server stays local
-        .arg("-t")
-        .arg(terminal_topic)
-        .arg("-m")
-        .arg("end")
-        .output()
-    {
-        println!("{e:#?}");
+
+    // Create a temporary DDS client just to send the terminate message
+    match ipc::DdsClient::new(&[], &terminal_topic) {
+        Ok((client, _rx)) => {
+            let mut payload = ipc::Payload::new()?;
+            payload.status = ipc::Status::NotReady(ipc::Reason::Other);
+            if let Err(e) = client.publish(&mut payload) {
+                println!("Failed to send terminate message: {e}");
+            }
+            client.disconnect();
+        }
+        Err(e) => {
+            println!("Failed to create DDS client for termination: {e}");
+        }
     }
     Ok(())
 }
@@ -96,11 +98,11 @@ pub fn init(params: &Parameters) -> Outcome<()> {
     // TODO: this needs to be read from file, status + cycle number
     let status = Arc::new(Mutex::new(ipc::Status::Ready));
 
-    let mqtt_thread = thread::spawn({
+    let dds_thread = thread::spawn({
         let fatal = Arc::clone(&fatal);
         let status = Arc::clone(&status);
         move || {
-            if let Err(err) = mqtt_entry(synch_tx, fatal, status) {
+            if let Err(err) = dds_entry(synch_tx, fatal, status) {
                 error!("{err}");
             }
         }
@@ -114,8 +116,8 @@ pub fn init(params: &Parameters) -> Outcome<()> {
         }
     });
 
-    if let Err(mqtt_thread_err) = mqtt_thread.join() {
-        error!("server:status_thread join error! >> {mqtt_thread_err:?}");
+    if let Err(dds_thread_err) = dds_thread.join() {
+        error!("server:dds_thread join error! >> {dds_thread_err:?}");
         process::exit(1);
     }
     if let Err(synch_thread_err) = synch_thread.join() {
@@ -127,21 +129,20 @@ pub fn init(params: &Parameters) -> Outcome<()> {
 
 #[allow(unused_variables)]
 #[allow(clippy::needless_pass_by_value)]
-fn mqtt_entry(
+fn dds_entry(
     synch_tx: mpsc::Sender<ipc::Payload>,
     fatal: Arc<AtomicBool>,
     status: Arc<Mutex<ipc::Status>>,
 ) -> Outcome<()> {
     let terminal_topic = format!("sinkd/{}/terminate", config::get_hostname()?);
-    let (mqtt_client, mqtt_rx): (ipc::MqttClient, ipc::Rx) = match ipc::MqttClient::new(
-        Some("localhost"), // server always spawn on current machine
-        &["sinkd/clients", &terminal_topic],
-        "sinkd/server",
+    let (dds_client, dds_rx): (ipc::DdsClient, ipc::Rx) = match ipc::DdsClient::new(
+        &[ipc::TOPIC_CLIENTS, &terminal_topic],
+        ipc::TOPIC_SERVER,
     ) {
         Ok((client, rx)) => (client, rx),
         Err(e) => {
             fatal.store(true, Ordering::Relaxed);
-            return bad!("Unable to create mqtt client, {}", e);
+            return bad!("Unable to create DDS client, {}", e);
         }
     };
 
@@ -151,57 +152,48 @@ fn mqtt_entry(
 
     loop {
         if fatal.load(Ordering::Relaxed) {
-            mqtt_client.disconnect();
-            info!("server:mqtt_entry>> aborting");
+            dds_client.disconnect();
+            info!("server:dds_entry>> aborting");
             return Ok(());
         }
 
-        if let Err(e) = broadcast_status(&mqtt_client, &status) {
+        if let Err(e) = broadcast_status(&dds_client, &status) {
             error!("{e}");
         }
 
-        match mqtt_rx.try_recv() {
+        match dds_rx.try_recv() {
             Ok(msg) => {
                 if let Some(msg) = msg {
-                    if msg.topic() == terminal_topic {
-                        debug!("server:mqtt_entry>> received terminal_topic");
+                    if msg.topic == terminal_topic {
+                        debug!("server:dds_entry>> received terminal_topic");
                         fatal.store(true, Ordering::Relaxed);
                     } else {
-                        match ipc::decode(msg.payload()) {
-                            Ok(p) => {
-                                debug!("server:mqtt_entry>> ⛵ decoded ⛵");
+                        debug!("server:dds_entry>> ⛵ received payload ⛵");
 
-                                // TODO
-                                // 1. recieve msg from client
-                                // 2. if in good state switch status to "synchronizing"
-                                // 3. call rsync <client> <server> <opts>
-                                // 4. once finished switch state to "ready"
+                        // TODO
+                        // 1. recieve msg from client
+                        // 2. if in good state switch status to "synchronizing"
+                        // 3. call rsync <client> <server> <opts>
+                        // 4. once finished switch state to "ready"
 
-                                if let Err(e) =
-                                    queue(&synch_tx, &mqtt_client, p, &mut cycle, &status)
-                                {
-                                    error!("{e}");
-                                }
-                            }
-                            Err(e) => {
-                                debug!("server:mqtt_entry>> unable to decode 😦>> '{e}'");
-                            }
+                        if let Err(e) =
+                            queue(&synch_tx, &dds_client, msg.payload, &mut cycle, &status)
+                        {
+                            error!("{e}");
                         }
                     }
                 } else {
-                    debug!("server:mqtt_entry>> recv empty msg");
+                    debug!("server:dds_entry>> recv empty msg");
                 }
-                // need to figure out state of server before synchronizing
             }
             Err(err) => match err {
-                // NOTE: mqtt uses crossbeam
-                crossbeam::channel::TryRecvError::Empty => {
+                mpsc::TryRecvError::Empty => {
                     std::thread::sleep(std::time::Duration::from_secs(1));
-                    debug!("server:mqtt_entry>> waiting...");
+                    debug!("server:dds_entry>> waiting...");
                 }
-                crossbeam::channel::TryRecvError::Disconnected => {
+                mpsc::TryRecvError::Disconnected => {
                     fatal.store(true, Ordering::Relaxed);
-                    return bad!("server>> mqtt_rx channel disconnected");
+                    return bad!("server>> dds_rx channel disconnected");
                 }
             },
         }
@@ -211,7 +203,7 @@ fn mqtt_entry(
 // check state of server and queue up payload if ready
 fn queue(
     synch_tx: &mpsc::Sender<ipc::Payload>,
-    mqtt_client: &ipc::MqttClient,
+    dds_client: &ipc::DdsClient,
     payload: ipc::Payload,
     cycle: &mut u32,
     status: &Arc<Mutex<ipc::Status>>,
@@ -236,7 +228,7 @@ fn queue(
                     std::cmp::Ordering::Less => {
                         let mut response =
                             ipc::Payload::new()?.status(ipc::Status::NotReady(ipc::Reason::Busy));
-                        if let Err(e) = mqtt_client.publish(&mut response) {
+                        if let Err(e) = dds_client.publish(&mut response) {
                             error!("server:queue>> unable to publish response {e}");
                         }
                         Ok(())
@@ -245,7 +237,7 @@ fn queue(
             } else {
                 // TODO: if the client is behind this repsonse tells the client to update
                 let mut response = ipc::Payload::new()?.status(*state);
-                if let Err(e) = mqtt_client.publish(&mut response) {
+                if let Err(e) = dds_client.publish(&mut response) {
                     error!("server:queue>> unable to publish response {e}");
                 }
                 Ok(())
@@ -256,7 +248,7 @@ fn queue(
 }
 
 // The engine behind sinkd is rsync
-// With mqtt messages that are relevant invoke this and mirror current client
+// With DDS messages that are relevant invoke this and mirror current client
 // to this server. This will handle queued messages one at a time.
 #[allow(unused_variables)]
 #[allow(clippy::needless_pass_by_value)]
@@ -307,14 +299,14 @@ fn synch_entry(
 }
 
 fn broadcast_status(
-    mqtt_client: &ipc::MqttClient,
+    dds_client: &ipc::DdsClient,
     status: &Arc<Mutex<ipc::Status>>,
 ) -> Outcome<()> {
     if let Ok(state) = status.lock() {
         let mut status_payload = ipc::Payload::new()?
             .dest_path("sinkd_status")
             .status(*state);
-        if let Err(e) = mqtt_client.publish(&mut status_payload) {
+        if let Err(e) = dds_client.publish(&mut status_payload) {
             bad!("server:broadcast_status>> couldn't publish status? '{}'", e)
         } else {
             Ok(())

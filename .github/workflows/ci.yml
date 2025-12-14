@@ -7,6 +7,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: write
+  packages: write
 
 jobs:
   lint:
@@ -14,27 +17,48 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Run clippy
-        run: cargo clippy -p sinkd
+        run: cargo clippy
       - name: Run tests
-        run: cargo test -p sinkd
+        run: cargo test
 
-  build:
+
+  build-linux:
     needs: lint
     strategy:
       matrix:
         include:
           - runner: ubuntu-22.04
-            target: x86_64-unknown-linux-gnu
+            target: x86_64-unknown-linux-musl
             platform: linux-amd64
           - runner: ubuntu-22.04-arm
-            target: aarch64-unknown-linux-gnu
+            target: aarch64-unknown-linux-musl
             platform: linux-arm64
-          - runner: windows-latest
-            target: x86_64-pc-windows-msvc
-            platform: windows-amd64
-          - runner: windows-11-arm
-            target: aarch64-pc-windows-msvc
-            platform: windows-arm64
+
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build ${{ matrix.target }}
+        run: |
+          mkdir -p artifacts
+          echo ${{ secrets.BALLAST_DEV_TOKEN }} | docker login -u ${{ github.actor }} --password-stdin ghcr.io
+          docker run --rm --entrypoint="" -v $(pwd):$(pwd) -w $(pwd) ghcr.io/ballast-dev/sinkd:0.1.0 \
+            cargo build --release --target ${{ matrix.target }}
+          cp target/${{ matrix.target }}/release/sinkd artifacts/sinkd-${{ matrix.platform }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: sinkd-${{ matrix.platform }}
+          path: artifacts/sinkd-*
+          retention-days: 7
+
+
+  build-macos:
+    needs: lint
+    strategy:
+      matrix:
+        include:
           - runner: macos-15-intel
             target: x86_64-apple-darwin
             platform: darwin-amd64
@@ -42,52 +66,73 @@ jobs:
             target: aarch64-apple-darwin
             platform: darwin-arm64
 
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build ${{ matrix.target }}
+        run: |
+          mkdir -p artifacts
+          cargo build --release --target ${{ matrix.target }}
+          cp target/${{ matrix.target }}/release/sinkd artifacts/sinkd-${{ matrix.platform }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: sinkd-${{ matrix.platform }}
+          path: artifacts/sinkd-*
+          retention-days: 7
+
+
+  build-windows:
+    needs: lint
+    strategy:
+      matrix:
+        include:
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            platform: windows-amd64
+          - runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            platform: windows-arm64
 
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v5
-      - name: Build ${{ matrix.target }}
-        if: ${{ !startsWith(matrix.runner, 'windows') }}
-        shell: bash
-        run: |
-          mkdir -p artifacts
-          cargo build --release -p sinkd --target ${{ matrix.target }}
-          cp target/${{ matrix.target }}/release/sinkd artifacts/sinkd-${{ matrix.platform }}
-          if [[ "${{ matrix.runner }}" == ubuntu* ]]; then
-            cargo install cargo-deb
-            cargo deb -p sinkd -o artifacts/sinkd-${{ matrix.platform }}.deb
-          fi
 
-      - name: Build (Windows)
-        if: ${{ startsWith(matrix.runner, 'windows') }}
+      - name: Build ${{ matrix.target }}
         shell: powershell
         run: |
           New-Item -ItemType Directory -Force -Path artifacts
-          cargo build --release -p sinkd --target ${{ matrix.target }}
+          cargo build --release --target ${{ matrix.target }}
           Copy-Item "target/${{ matrix.target }}/release/sinkd.exe" "artifacts/sinkd-${{ matrix.platform }}.exe"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v5
         with:
-          name: sinkd-artifacts-${{ matrix.platform }}
+          name: sinkd-${{ matrix.platform }}
           path: artifacts/sinkd-*
           retention-days: 7
 
   release:
     runs-on: ubuntu-latest
-    needs: [lint, build]
+    needs: [build-linux, build-macos, build-windows]
     if: github.ref_type == 'tag'
     steps:
       - uses: actions/checkout@v5
+
       - name: Download artifacts
         uses: actions/download-artifact@v6
         with:
+          pattern: sinkd-*
           merge-multiple: true
           path: artifacts/
+
       - name: Get version
         run: |
-          VERSION=$(cargo pkgid -p sinkd | cut -d# -f2)
+          VERSION=$(cargo pkgid | cut -d# -f2)
           echo "version=${VERSION}" >> $GITHUB_ENV
+
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:

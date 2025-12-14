@@ -2,20 +2,19 @@ use serde::{Deserialize, Serialize};
 use std::{
     fmt,
     path::{Path, PathBuf},
-    process::Command,
 };
 
 #[cfg(windows)]
 use crate::parameters::DaemonType;
-use crate::{bad, config, outcome::Outcome, parameters::Parameters, time};
+use crate::{config, outcome::Outcome, parameters::Parameters};
 
-mod mqtt;
+mod dds;
 #[cfg(unix)]
 mod unix;
 #[cfg(windows)]
 mod windows;
 
-pub use mqtt::MqttClient;
+pub use dds::{DdsClient, Rx, TOPIC_CLIENTS, TOPIC_SERVER};
 
 #[allow(unused_variables)]
 pub fn daemon(func: fn(&Parameters) -> Outcome<()>, params: &Parameters) -> Outcome<()> {
@@ -40,12 +39,11 @@ pub fn daemon(func: fn(&Parameters) -> Outcome<()>, params: &Parameters) -> Outc
     }
 }
 
-pub type Rx = paho_mqtt::Receiver<Option<paho_mqtt::Message>>;
-
-#[derive(PartialEq, Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(PartialEq, Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub enum Reason {
     Busy,   // server will enter this state
     Behind, // response to client, never enters state
+    #[default]
     Other,
 }
 
@@ -176,53 +174,3 @@ impl fmt::Display for Payload {
     }
 }
 
-pub fn encode(payload: &mut Payload) -> Result<Vec<u8>, paho_mqtt::Error> {
-    payload.date = time::stamp(Some("%Y%m%d"));
-    match bincode::serialize(payload) {
-        Err(e) => Err(paho_mqtt::Error::GeneralString(format!(
-            "FATAL, bincode::serialize >> {e}"
-        ))),
-        Ok(stream) => Ok(stream),
-    }
-}
-
-pub fn decode(bytes: &[u8]) -> Result<Payload, paho_mqtt::Error> {
-    match bincode::deserialize(bytes) {
-        Err(_) => Err(paho_mqtt::Error::General(
-            "FATAL, bincode could not deserialize",
-        )),
-        Ok(payload) => Ok(payload),
-    }
-}
-
-fn resolve_host(host: Option<&str>) -> Result<String, paho_mqtt::Error> {
-    match host {
-        Some(h) if h.starts_with('/') => Err(paho_mqtt::Error::General(
-            "Invalid hostname: it looks like a path. Did you mean 'localhost'?",
-        )),
-        Some(h) => {
-            let fq_host = format!("tcp://{h}:1883");
-            debug!("Fully qualified host: {fq_host}");
-            Ok(fq_host)
-        }
-        None => Err(paho_mqtt::Error::General(
-            "Host string is required but missing",
-        )),
-    }
-}
-
-pub fn start_mosquitto() -> Outcome<()> {
-    debug!(">> spawn mosquitto daemon");
-    let mut cmd = Command::new("mosquitto");
-
-    #[cfg(unix)]
-    cmd.arg("-d");
-
-    if let Err(spawn_error) = cmd.spawn() {
-        return bad!(format!(
-            "Is mosquitto installed and in path? >> {}",
-            spawn_error
-        ));
-    }
-    Ok(())
-}

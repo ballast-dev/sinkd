@@ -1,12 +1,12 @@
 services:
   alpha:
-    image: registry.gitlab.com/ballast-dev/sinkd/arm64:0.1.0
+    image: ghcr.io/ballast-dev/sinkd:0.1.0
     container_name: sinkd-alpha
     hostname: alpha
     entrypoint: [""]
     volumes:
-      - ./configs/alpha.conf:/etc/sinkd.conf
-      - ./configs/alpha-user.conf:/root/.config/sinkd.conf
+      - ./cfg/scenario/alpha.conf:/etc/sinkd.conf
+      - ./cfg/scenario/alpha-user.conf:/root/.config/sinkd.conf
       - .:/workspace
       - ./test_scenarios:/mounted_path/test_scenarios
     working_dir: /workspace
@@ -23,13 +23,13 @@ services:
       retries: 5
 
   bravo:
-    image: registry.gitlab.com/ballast-dev/sinkd/arm64:0.1.0
+    image: ghcr.io/ballast-dev/sinkd:0.1.0
     container_name: sinkd-bravo
     hostname: bravo
     entrypoint: [""]
     volumes:
-      - ./configs/bravo.conf:/etc/sinkd.conf
-      - ./configs/bravo-user.conf:/root/.config/sinkd.conf
+      - ./cfg/scenario/bravo.conf:/etc/sinkd.conf
+      - ./cfg/scenario/bravo-user.conf:/root/.config/sinkd.conf
       - .:/workspace
       - ./test_scenarios:/mounted_path/test_scenarios
     working_dir: /workspace
@@ -44,13 +44,13 @@ services:
       - WORKDIR=/workspace
 
   charlie:
-    image: registry.gitlab.com/ballast-dev/sinkd/arm64:0.1.0
+    image: ghcr.io/ballast-dev/sinkd:0.1.0
     container_name: sinkd-charlie
     hostname: charlie
     entrypoint: [""]
     volumes:
-      - ./configs/charlie.conf:/etc/sinkd.conf
-      - ./configs/charlie-user.conf:/root/.config/sinkd.conf
+      - ./cfg/scenario/charlie.conf:/etc/sinkd.conf
+      - ./cfg/scenario/charlie-user.conf:/root/.config/sinkd.conf
       - .:/workspace
       - ./test_scenarios:/mounted_path/test_scenarios
     working_dir: /workspace
@@ -65,13 +65,13 @@ services:
       - WORKDIR=/workspace
 
   delta:
-    image: registry.gitlab.com/ballast-dev/sinkd/arm64:0.1.0
+    image: ghcr.io/ballast-dev/sinkd:0.1.0
     container_name: sinkd-delta
     hostname: delta
     entrypoint: [""]
     volumes:
-      - ./configs/charlie.conf:/etc/sinkd.conf
-      - ./configs/charlie-user.conf:/root/.config/sinkd.conf
+      - ./cfg/scenario/charlie.conf:/etc/sinkd.conf
+      - ./cfg/scenario/charlie-user.conf:/root/.config/sinkd.conf
       - .:/workspace
       - ./test_scenarios:/mounted_path/test_scenarios
     working_dir: /workspace

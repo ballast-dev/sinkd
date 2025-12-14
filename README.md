@@ -23,6 +23,7 @@ across many computers.
 1. Wraps `rsync` into a daemon keeping track of file events
 1. Physical access to your files
 1. Granular permissions per user  
+1. Uses DDS (Data Distribution Service) for peer-to-peer communication - no broker required
 
 ## Development
 Dependencies:
@@ -30,8 +31,6 @@ Dependencies:
 - `cmake`
 - `make`
 - `cargo` (rust)
-- `perl` (for openssl cross compile)
-- `gcc` C compiler (for openssl cross compile) 
 
 
 ### Roadmap
@@ -44,10 +43,10 @@ Dependencies:
 ##  Development
 
 ### Linux
-Install `gcc cmake perl openssl-dev`
+Install `gcc cmake`
 
-1. Windows install openssl
+### Windows
+Install development tools:
 
         winget install ShiningLight.OpenSSL.Dev
-        winget install EclipseFoundation.Mosquitto
 

@@ -1,27 +1,24 @@
-# FROM rust:1.90-alpine
-FROM rust:1.90-slim
+# Alpine/musl build - testing DDS proc-macro support
+FROM rust:1.92-alpine
 
-RUN apt-get update && apt-get install -y \
-  binutils-aarch64-linux-gnu \
-  build-essential \
-  cmake \
+RUN apk add --no-cache \
+  build-base \
   curl \
-  fd-find \
-  gcc-aarch64-linux-gnu \
+  fd \
   just \
-  libmosquitto-dev \
-  mosquitto \
+  musl-dev \
   openssh-client \
   openssh-server \
+  openssl \
   rsync \
   sudo \
-  && rm -rf /var/lib/apt/lists/*
+  shadow
 
 RUN rustup component add rustfmt clippy
-RUN cargo install cargo-deb
+RUN rustup target add x86_64-unknown-linux-musl
 
-# Allow sudo group to run sudo without password
-RUN echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+# Allow wheel group to run sudo without password
+RUN echo '%wheel ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
 COPY <<'EOF' /entrypoint.sh
 #!/bin/sh
@@ -31,9 +28,9 @@ PASSWORD=$(openssl passwd -1 sinkd)
 RUSTUP_HOME=/usr/local/rustup
 CARGO_HOME=/usr/local/cargo
 
-useradd -m -s /bin/bash -G sudo sinkd
+adduser -D -s /bin/sh -G wheel sinkd
 echo "sinkd:${PASSWORD}" | chpasswd > /dev/null 2>&1
-exec su --pty -l "${USER}" -c "\
+exec su -l "${USER}" -c "\
   cd ${WORKDIR:-~}; \
   PATH=${PATH} \
   RUSTUP_HOME=${RUSTUP_HOME} \
@@ -45,4 +42,5 @@ RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
 
-CMD ["/bin/bash"]
+CMD ["/bin/sh"]
+
