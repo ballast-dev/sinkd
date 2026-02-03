@@ -42,8 +42,8 @@ impl From<&'static str> for Failure {
     }
 }
 
-impl From<dust_dds::infrastructure::error::DdsError> for Failure {
-    fn from(error: dust_dds::infrastructure::error::DdsError) -> Self {
-        Failure(format!("DDS Error: {error:?}"))
+impl From<zenoh::Error> for Failure {
+    fn from(error: zenoh::Error) -> Self {
+        Failure(format!("Zenoh Error: {error:?}"))
     }
 }

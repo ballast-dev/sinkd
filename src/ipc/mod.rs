@@ -8,13 +8,13 @@ use std::{
 use crate::parameters::DaemonType;
 use crate::{config, outcome::Outcome, parameters::Parameters};
 
-mod dds;
+mod zenoh;
 #[cfg(unix)]
 mod unix;
 #[cfg(windows)]
 mod windows;
 
-pub use dds::{DdsClient, Rx, TOPIC_CLIENTS, TOPIC_SERVER};
+pub use zenoh::{Rx, TOPIC_CLIENTS, TOPIC_SERVER, ZenohClient};
 
 #[allow(unused_variables)]
 pub fn daemon(func: fn(&Parameters) -> Outcome<()>, params: &Parameters) -> Outcome<()> {

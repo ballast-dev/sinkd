@@ -25,7 +25,7 @@ use crate::{config, ipc, outcome::Outcome, parameters::Parameters, rsync::rsync}
 //};
 
 pub fn start(params: &Parameters) -> Outcome<()> {
-    // No need to start mosquitto - DDS is peer-to-peer
+    // No need to start mosquitto - Zenoh is peer-to-peer
     println!("logging to: {}", params.log_path.display());
     ipc::daemon(init, params)
 }
@@ -33,8 +33,8 @@ pub fn start(params: &Parameters) -> Outcome<()> {
 pub fn stop() -> Outcome<()> {
     let terminal_topic = format!("sinkd/{}/terminate", config::get_hostname()?);
 
-    // Create a temporary DDS client just to send the terminate message
-    match ipc::DdsClient::new(&[], &terminal_topic) {
+    // Create a temporary Zenoh client just to send the terminate message
+    match ipc::ZenohClient::new(&[], &terminal_topic) {
         Ok((client, _rx)) => {
             let mut payload = ipc::Payload::new()?;
             payload.status = ipc::Status::NotReady(ipc::Reason::Other);
@@ -44,7 +44,7 @@ pub fn stop() -> Outcome<()> {
             client.disconnect();
         }
         Err(e) => {
-            println!("Failed to create DDS client for termination: {e}");
+            println!("Failed to create Zenoh client for termination: {e}");
         }
     }
     Ok(())
@@ -98,11 +98,11 @@ pub fn init(params: &Parameters) -> Outcome<()> {
     // TODO: this needs to be read from file, status + cycle number
     let status = Arc::new(Mutex::new(ipc::Status::Ready));
 
-    let dds_thread = thread::spawn({
+    let zenoh_thread = thread::spawn({
         let fatal = Arc::clone(&fatal);
         let status = Arc::clone(&status);
         move || {
-            if let Err(err) = dds_entry(synch_tx, fatal, status) {
+            if let Err(err) = zenoh_entry(synch_tx, fatal, status) {
                 error!("{err}");
             }
         }
@@ -116,8 +116,8 @@ pub fn init(params: &Parameters) -> Outcome<()> {
         }
     });
 
-    if let Err(dds_thread_err) = dds_thread.join() {
-        error!("server:dds_thread join error! >> {dds_thread_err:?}");
+    if let Err(zenoh_thread_err) = zenoh_thread.join() {
+        error!("server:zenoh_thread join error! >> {zenoh_thread_err:?}");
         process::exit(1);
     }
     if let Err(synch_thread_err) = synch_thread.join() {
@@ -129,20 +129,20 @@ pub fn init(params: &Parameters) -> Outcome<()> {
 
 #[allow(unused_variables)]
 #[allow(clippy::needless_pass_by_value)]
-fn dds_entry(
+fn zenoh_entry(
     synch_tx: mpsc::Sender<ipc::Payload>,
     fatal: Arc<AtomicBool>,
     status: Arc<Mutex<ipc::Status>>,
 ) -> Outcome<()> {
     let terminal_topic = format!("sinkd/{}/terminate", config::get_hostname()?);
-    let (dds_client, dds_rx): (ipc::DdsClient, ipc::Rx) = match ipc::DdsClient::new(
+    let (zenoh_client, zenoh_rx): (ipc::ZenohClient, ipc::Rx) = match ipc::ZenohClient::new(
         &[ipc::TOPIC_CLIENTS, &terminal_topic],
         ipc::TOPIC_SERVER,
     ) {
         Ok((client, rx)) => (client, rx),
         Err(e) => {
             fatal.store(true, Ordering::Relaxed);
-            return bad!("Unable to create DDS client, {}", e);
+            return bad!("Unable to create Zenoh client, {}", e);
         }
     };
 
@@ -152,23 +152,23 @@ fn dds_entry(
 
     loop {
         if fatal.load(Ordering::Relaxed) {
-            dds_client.disconnect();
-            info!("server:dds_entry>> aborting");
+            zenoh_client.disconnect();
+            info!("server:zenoh_entry>> aborting");
             return Ok(());
         }
 
-        if let Err(e) = broadcast_status(&dds_client, &status) {
+        if let Err(e) = broadcast_status(&zenoh_client, &status) {
             error!("{e}");
         }
 
-        match dds_rx.try_recv() {
+        match zenoh_rx.try_recv() {
             Ok(msg) => {
                 if let Some(msg) = msg {
                     if msg.topic == terminal_topic {
-                        debug!("server:dds_entry>> received terminal_topic");
+                        debug!("server:zenoh_entry>> received terminal_topic");
                         fatal.store(true, Ordering::Relaxed);
                     } else {
-                        debug!("server:dds_entry>> ⛵ received payload ⛵");
+                        debug!("server:zenoh_entry>> ⛵ received payload ⛵");
 
                         // TODO
                         // 1. recieve msg from client
@@ -177,23 +177,23 @@ fn dds_entry(
                         // 4. once finished switch state to "ready"
 
                         if let Err(e) =
-                            queue(&synch_tx, &dds_client, msg.payload, &mut cycle, &status)
+                            queue(&synch_tx, &zenoh_client, msg.payload, &mut cycle, &status)
                         {
                             error!("{e}");
                         }
                     }
                 } else {
-                    debug!("server:dds_entry>> recv empty msg");
+                    debug!("server:zenoh_entry>> recv empty msg");
                 }
             }
             Err(err) => match err {
                 mpsc::TryRecvError::Empty => {
                     std::thread::sleep(std::time::Duration::from_secs(1));
-                    debug!("server:dds_entry>> waiting...");
+                    debug!("server:zenoh_entry>> waiting...");
                 }
                 mpsc::TryRecvError::Disconnected => {
                     fatal.store(true, Ordering::Relaxed);
-                    return bad!("server>> dds_rx channel disconnected");
+                    return bad!("server>> zenoh_rx channel disconnected");
                 }
             },
         }
@@ -203,7 +203,7 @@ fn dds_entry(
 // check state of server and queue up payload if ready
 fn queue(
     synch_tx: &mpsc::Sender<ipc::Payload>,
-    dds_client: &ipc::DdsClient,
+    zenoh_client: &ipc::ZenohClient,
     payload: ipc::Payload,
     cycle: &mut u32,
     status: &Arc<Mutex<ipc::Status>>,
@@ -228,7 +228,7 @@ fn queue(
                     std::cmp::Ordering::Less => {
                         let mut response =
                             ipc::Payload::new()?.status(ipc::Status::NotReady(ipc::Reason::Busy));
-                        if let Err(e) = dds_client.publish(&mut response) {
+                        if let Err(e) = zenoh_client.publish(&mut response) {
                             error!("server:queue>> unable to publish response {e}");
                         }
                         Ok(())
@@ -237,7 +237,7 @@ fn queue(
             } else {
                 // TODO: if the client is behind this repsonse tells the client to update
                 let mut response = ipc::Payload::new()?.status(*state);
-                if let Err(e) = dds_client.publish(&mut response) {
+                if let Err(e) = zenoh_client.publish(&mut response) {
                     error!("server:queue>> unable to publish response {e}");
                 }
                 Ok(())
@@ -248,7 +248,7 @@ fn queue(
 }
 
 // The engine behind sinkd is rsync
-// With DDS messages that are relevant invoke this and mirror current client
+// With Zenoh messages that are relevant invoke this and mirror current client
 // to this server. This will handle queued messages one at a time.
 #[allow(unused_variables)]
 #[allow(clippy::needless_pass_by_value)]
@@ -299,14 +299,14 @@ fn synch_entry(
 }
 
 fn broadcast_status(
-    dds_client: &ipc::DdsClient,
+    zenoh_client: &ipc::ZenohClient,
     status: &Arc<Mutex<ipc::Status>>,
 ) -> Outcome<()> {
     if let Ok(state) = status.lock() {
         let mut status_payload = ipc::Payload::new()?
             .dest_path("sinkd_status")
             .status(*state);
-        if let Err(e) = dds_client.publish(&mut status_payload) {
+        if let Err(e) = zenoh_client.publish(&mut status_payload) {
             bad!("server:broadcast_status>> couldn't publish status? '{}'", e)
         } else {
             Ok(())

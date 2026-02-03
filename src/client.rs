@@ -21,8 +21,8 @@ pub fn stop(params: &Parameters) -> Outcome<()> {
     let terminal_topic = format!("sinkd/{}/terminate", config::get_hostname()?);
     let (srv_addr, _) = config::get(params)?;
 
-    // Create a temporary DDS client just to send the terminate message
-    match ipc::DdsClient::new(&[], &terminal_topic) {
+    // Create a temporary Zenoh client just to send the terminate message
+    match ipc::ZenohClient::new(&[], &terminal_topic) {
         Ok((client, _rx)) => {
             let mut payload = ipc::Payload::new()?;
             payload.status = ipc::Status::NotReady(ipc::Reason::Other);
@@ -32,10 +32,10 @@ pub fn stop(params: &Parameters) -> Outcome<()> {
             client.disconnect();
         }
         Err(e) => {
-            println!("Failed to create DDS client for termination: {e}");
+            println!("Failed to create Zenoh client for termination: {e}");
         }
     }
-    let _ = srv_addr; // Acknowledge srv_addr is not used in DDS (peer-to-peer)
+    let _ = srv_addr; // Acknowledge srv_addr is not used in Zenoh (peer-to-peer)
     Ok(())
 }
 
@@ -75,16 +75,16 @@ pub fn init(params: &Parameters) -> Outcome<()> {
         move || watch_entry(inode_map, notify_rx, event_tx, fatal)
     });
 
-    let dds_thread = thread::spawn({
+    let zenoh_thread = thread::spawn({
         let fatal = Arc::clone(&fatal);
         let inode_map = Arc::clone(&inodes);
-        move || dds_entry(inode_map, event_rx, fatal)
+        move || zenoh_entry(inode_map, event_rx, fatal)
     });
 
     if let Err(e) = watch_thread.join().unwrap() {
         error!("{e}");
     }
-    if let Err(e) = dds_thread.join().unwrap() {
+    if let Err(e) = zenoh_thread.join().unwrap() {
         error!("{e}");
     }
     Ok(())
@@ -160,7 +160,7 @@ fn watch_entry(
 }
 
 #[allow(clippy::needless_pass_by_value)]
-fn dds_entry(
+fn zenoh_entry(
     inode_map: Arc<RwLock<config::InodeMap>>,
     event_rx: mpsc::Receiver<PathBuf>,
     fatal: Arc<AtomicBool>,
@@ -168,14 +168,14 @@ fn dds_entry(
     let _payload = ipc::Payload::new();
 
     let terminal_topic = format!("sinkd/{}/terminate", config::get_hostname()?);
-    let (dds_client, dds_rx): (ipc::DdsClient, ipc::Rx) = match ipc::DdsClient::new(
+    let (zenoh_client, zenoh_rx): (ipc::ZenohClient, ipc::Rx) = match ipc::ZenohClient::new(
         &[ipc::TOPIC_SERVER, &terminal_topic],
         ipc::TOPIC_CLIENTS,
     ) {
         Ok((client, rx)) => (client, rx),
         Err(e) => {
             fatal.store(true, Ordering::Relaxed);
-            return bad!("Unable to create DDS client, {}", e);
+            return bad!("Unable to create Zenoh client, {}", e);
         }
     };
 
@@ -186,41 +186,41 @@ fn dds_entry(
     // The server will send status updates to it's clients every 5 seconds
     loop {
         if fatal.load(Ordering::Relaxed) {
-            dds_client.disconnect();
-            info!("client:dds_entry>> aborting");
+            zenoh_client.disconnect();
+            info!("client:zenoh_entry>> aborting");
             return Ok(());
         }
 
-        match dds_rx.try_recv() {
+        match zenoh_rx.try_recv() {
             Ok(message) => {
                 if let Some(msg) = message {
                     if msg.topic == terminal_topic {
-                        debug!("client:dds_entry>> received terminal_topic");
+                        debug!("client:zenoh_entry>> received terminal_topic");
                         fatal.store(true, Ordering::Relaxed);
                     } else {
-                        // process DDS traffic from server
+                        // process Zenoh traffic from server
                         debug!("client>> 👍 recv: {}", msg.payload);
                         if let Err(e) = process(
                             &event_rx,
-                            &dds_client,
+                            &zenoh_client,
                             &inode_map,
                             msg.payload.status,
                             &mut cycle,
                         ) {
-                            error!("client:dds_entry>> process: {e}");
+                            error!("client:zenoh_entry>> process: {e}");
                         }
                     }
                 } else {
-                    error!("client:dds_entry>> empty message?");
+                    error!("client:zenoh_entry>> empty message?");
                 }
             }
             Err(e) => match e {
                 mpsc::TryRecvError::Disconnected => {
                     fatal.store(true, Ordering::Relaxed);
-                    return bad!("client:dds_entry>> dds_rx hung up?");
+                    return bad!("client:zenoh_entry>> zenoh_rx hung up?");
                 }
                 mpsc::TryRecvError::Empty => {
-                    debug!("client:dds_entry>> waiting on message...");
+                    debug!("client:zenoh_entry>> waiting on message...");
                 }
             },
         }
@@ -232,7 +232,7 @@ fn dds_entry(
 
 fn process(
     event_rx: &mpsc::Receiver<PathBuf>,
-    dds_client: &ipc::DdsClient,
+    zenoh_client: &ipc::ZenohClient,
     inode_map: &Arc<RwLock<config::InodeMap>>,
     status: ipc::Status,
     cycle: &mut u32,
@@ -253,7 +253,7 @@ fn process(
                         .status(ipc::Status::NotReady(ipc::Reason::Behind))
                         .src_paths(src_paths);
                     pull(&payload);
-                    dds_client.publish(&mut payload)
+                    zenoh_client.publish(&mut payload)
                 } else {
                     bad!("unable to acquire inode_map read lock")
                 }
@@ -271,7 +271,7 @@ fn process(
                         *cycle += 1;
                         let mut payload =
                             ipc::Payload::new()?.src_paths(filtered_paths).cycle(*cycle);
-                        if let Err(e) = dds_client.publish(&mut payload) {
+                        if let Err(e) = zenoh_client.publish(&mut payload) {
                             error!("unable to publish {e}");
                         } else {
                             info!("published payload: {payload}");
