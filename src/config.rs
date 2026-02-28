@@ -8,12 +8,186 @@ use std::{
 
 use crate::{bad, outcome::Outcome, parameters::Parameters};
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ResolvedRsyncConfig {
+    pub checksum: bool,
+    pub compress: bool,
+    pub bwlimit: Option<String>,
+    pub partial: bool,
+    pub delete_excluded: bool,
+    pub max_size: Option<String>,
+    pub min_size: Option<String>,
+    pub ignore_existing: bool,
+    pub size_only: bool,
+    pub stats: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct RsyncConfig {
+    pub checksum: Option<bool>,
+    pub compress: Option<bool>,
+    pub bwlimit: Option<String>,
+    pub partial: Option<bool>,
+    pub delete_excluded: Option<bool>,
+    pub max_size: Option<String>,
+    pub min_size: Option<String>,
+    pub ignore_existing: Option<bool>,
+    pub size_only: Option<bool>,
+    pub stats: Option<bool>,
+    pub owner: Option<toml::Value>,
+    pub group: Option<toml::Value>,
+    pub devices: Option<toml::Value>,
+    pub specials: Option<toml::Value>,
+    pub super_user: Option<toml::Value>,
+    pub fake_super: Option<toml::Value>,
+    pub rsh: Option<toml::Value>,
+    pub address: Option<toml::Value>,
+    pub port: Option<toml::Value>,
+    pub sockopts: Option<toml::Value>,
+    pub remove_source_files: Option<toml::Value>,
+    pub files_from: Option<toml::Value>,
+    pub include_from: Option<toml::Value>,
+    pub exclude_from: Option<toml::Value>,
+    pub from0: Option<toml::Value>,
+    pub usermap: Option<toml::Value>,
+    pub groupmap: Option<toml::Value>,
+    pub chown: Option<toml::Value>,
+    pub chmod: Option<toml::Value>,
+}
+
+impl RsyncConfig {
+    fn validate(&self) -> Result<(), String> {
+        if self.owner.is_some() {
+            return Err("unsupported rsync flag `owner` in config".to_string());
+        }
+        if self.group.is_some() {
+            return Err("unsupported rsync flag `group` in config".to_string());
+        }
+        if self.devices.is_some() {
+            return Err("unsupported rsync flag `devices` in config".to_string());
+        }
+        if self.specials.is_some() {
+            return Err("unsupported rsync flag `specials` in config".to_string());
+        }
+        if self.super_user.is_some() {
+            return Err("unsupported rsync flag `super_user` in config".to_string());
+        }
+        if self.fake_super.is_some() {
+            return Err("unsupported rsync flag `fake_super` in config".to_string());
+        }
+        if self.rsh.is_some() {
+            return Err("unsupported rsync flag `rsh` in config".to_string());
+        }
+        if self.address.is_some() {
+            return Err("unsupported rsync flag `address` in config".to_string());
+        }
+        if self.port.is_some() {
+            return Err("unsupported rsync flag `port` in config".to_string());
+        }
+        if self.sockopts.is_some() {
+            return Err("unsupported rsync flag `sockopts` in config".to_string());
+        }
+        if self.remove_source_files.is_some() {
+            return Err("unsupported rsync flag `remove_source_files` in config".to_string());
+        }
+        if self.files_from.is_some() {
+            return Err("unsupported rsync flag `files_from` in config".to_string());
+        }
+        if self.include_from.is_some() {
+            return Err("unsupported rsync flag `include_from` in config".to_string());
+        }
+        if self.exclude_from.is_some() {
+            return Err("unsupported rsync flag `exclude_from` in config".to_string());
+        }
+        if self.from0.is_some() {
+            return Err("unsupported rsync flag `from0` in config".to_string());
+        }
+        if self.usermap.is_some() {
+            return Err("unsupported rsync flag `usermap` in config".to_string());
+        }
+        if self.groupmap.is_some() {
+            return Err("unsupported rsync flag `groupmap` in config".to_string());
+        }
+        if self.chown.is_some() {
+            return Err("unsupported rsync flag `chown` in config".to_string());
+        }
+        if self.chmod.is_some() {
+            return Err("unsupported rsync flag `chmod` in config".to_string());
+        }
+        Ok(())
+    }
+
+    fn merge_over(&self, base: &ResolvedRsyncConfig) -> ResolvedRsyncConfig {
+        ResolvedRsyncConfig {
+            checksum: self.checksum.unwrap_or(base.checksum),
+            compress: self.compress.unwrap_or(base.compress),
+            bwlimit: self.bwlimit.clone().or_else(|| base.bwlimit.clone()),
+            partial: self.partial.unwrap_or(base.partial),
+            delete_excluded: self.delete_excluded.unwrap_or(base.delete_excluded),
+            max_size: self.max_size.clone().or_else(|| base.max_size.clone()),
+            min_size: self.min_size.clone().or_else(|| base.min_size.clone()),
+            ignore_existing: self.ignore_existing.unwrap_or(base.ignore_existing),
+            size_only: self.size_only.unwrap_or(base.size_only),
+            stats: self.stats.unwrap_or(base.stats),
+        }
+    }
+}
+
 // these are serially parsable
 #[derive(Debug, Serialize, Deserialize)]
 struct Anchor {
     path: PathBuf,
     interval: Option<u64>,
     excludes: Option<Vec<String>>,
+    rsync: Option<RsyncConfig>,
+    rsync_checksum: Option<bool>,
+    rsync_compress: Option<bool>,
+    rsync_bwlimit: Option<String>,
+    rsync_partial: Option<bool>,
+    rsync_delete_excluded: Option<bool>,
+    rsync_max_size: Option<String>,
+    rsync_min_size: Option<String>,
+    rsync_ignore_existing: Option<bool>,
+    rsync_size_only: Option<bool>,
+    rsync_stats: Option<bool>,
+}
+
+impl Anchor {
+    fn rsync_override(&self) -> RsyncConfig {
+        let mut cfg = self.rsync.clone().unwrap_or_default();
+        if self.rsync_checksum.is_some() {
+            cfg.checksum = self.rsync_checksum;
+        }
+        if self.rsync_compress.is_some() {
+            cfg.compress = self.rsync_compress;
+        }
+        if self.rsync_bwlimit.is_some() {
+            cfg.bwlimit = self.rsync_bwlimit.clone();
+        }
+        if self.rsync_partial.is_some() {
+            cfg.partial = self.rsync_partial;
+        }
+        if self.rsync_delete_excluded.is_some() {
+            cfg.delete_excluded = self.rsync_delete_excluded;
+        }
+        if self.rsync_max_size.is_some() {
+            cfg.max_size = self.rsync_max_size.clone();
+        }
+        if self.rsync_min_size.is_some() {
+            cfg.min_size = self.rsync_min_size.clone();
+        }
+        if self.rsync_ignore_existing.is_some() {
+            cfg.ignore_existing = self.rsync_ignore_existing;
+        }
+        if self.rsync_size_only.is_some() {
+            cfg.size_only = self.rsync_size_only;
+        }
+        if self.rsync_stats.is_some() {
+            cfg.stats = self.rsync_stats;
+        }
+        cfg
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -21,6 +195,7 @@ struct SysConfig {
     server_addr: String,
     users: Vec<String>,
     anchors: Option<Vec<Anchor>>,
+    rsync: Option<RsyncConfig>,
 }
 
 impl SysConfig {
@@ -29,6 +204,7 @@ impl SysConfig {
             server_addr: String::new(),
             users: Vec::new(),
             anchors: Some(Vec::new()),
+            rsync: None,
         }
     }
 }
@@ -36,6 +212,7 @@ impl SysConfig {
 #[derive(Debug, Serialize, Deserialize)]
 struct UserConfig {
     anchors: Vec<Anchor>,
+    rsync: Option<RsyncConfig>,
 }
 
 #[allow(dead_code)]
@@ -104,6 +281,19 @@ impl ConfigParser {
                 Err(error) => Err(ParseError::InvalidSyntax(error.to_string())),
                 Ok(toml_parsed) => {
                     self.sys = toml_parsed; // NOTE: converted into Rust via serde lib
+                    if let Some(rsync) = &self.sys.rsync {
+                        rsync
+                            .validate()
+                            .map_err(ParseError::InvalidSyntax)?;
+                    }
+                    if let Some(anchors) = &self.sys.anchors {
+                        for anchor in anchors {
+                            anchor
+                                .rsync_override()
+                                .validate()
+                                .map_err(ParseError::InvalidSyntax)?;
+                        }
+                    }
                     Ok(())
                 }
             },
@@ -141,6 +331,17 @@ impl ConfigParser {
                 Err(error) => Err(ParseError::InvalidSyntax(error.to_string())),
                 Ok(toml_parsed) => {
                     let user_config: UserConfig = toml_parsed;
+                    if let Some(rsync) = &user_config.rsync {
+                        rsync
+                            .validate()
+                            .map_err(ParseError::InvalidSyntax)?;
+                    }
+                    for anchor in &user_config.anchors {
+                        anchor
+                            .rsync_override()
+                            .validate()
+                            .map_err(ParseError::InvalidSyntax)?;
+                    }
                     Ok(user_config)
                 }
             },
@@ -155,6 +356,7 @@ pub struct Inode {
     pub interval: Duration,
     pub last_event: Instant,
     pub event: bool,
+    pub rsync: ResolvedRsyncConfig,
 }
 
 pub type InodeMap = HashMap<PathBuf, Inode>;
@@ -164,26 +366,41 @@ pub fn get(params: &Parameters) -> Outcome<(String, InodeMap)> {
     parser.parse_configs(params)?;
 
     let mut inode_map: InodeMap = HashMap::new();
+    let sys_rsync = parser
+        .sys
+        .rsync
+        .as_ref()
+        .map_or_else(ResolvedRsyncConfig::default, |cfg| {
+            cfg.merge_over(&ResolvedRsyncConfig::default())
+        });
 
     for cfg in parser.users.values() {
+        let user_rsync = cfg
+            .rsync
+            .as_ref()
+            .map_or_else(|| sys_rsync.clone(), |override_cfg| override_cfg.merge_over(&sys_rsync));
         for anchor in &cfg.anchors {
             // let excludes = anchor.excludes.is_some().or()
+            let resolved_rsync = anchor.rsync_override().merge_over(&user_rsync);
             inode_map.entry(anchor.path.clone()).or_insert(Inode {
                 excludes: anchor.excludes.clone().unwrap_or(vec![]),
                 interval: Duration::from_secs(anchor.interval.unwrap_or(5)),
                 last_event: Instant::now(),
                 event: false,
+                rsync: resolved_rsync,
             });
         }
     }
 
     if let Some(anchors) = &parser.sys.anchors {
         for anchor in anchors {
+            let resolved_rsync = anchor.rsync_override().merge_over(&sys_rsync);
             inode_map.entry(anchor.path.clone()).or_insert(Inode {
                 excludes: anchor.excludes.clone().unwrap_or(vec![]),
                 interval: Duration::from_secs(anchor.interval.unwrap_or(5)),
                 last_event: Instant::now(),
                 event: false,
+                rsync: resolved_rsync,
             });
         }
     }
@@ -317,5 +534,69 @@ pub fn resolve(path: &str) -> Outcome<PathBuf> {
             Ok(resolved) => Ok(resolved),
             Err(e) => bad!("{} '{}'", e, path),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Anchor, ResolvedRsyncConfig, RsyncConfig};
+
+    #[test]
+    fn rsync_config_rejects_unsupported_flags() {
+        let cfg: RsyncConfig =
+            toml::from_str("owner = true").expect("config with known but unsupported field parses");
+        let err = cfg
+            .validate()
+            .expect_err("unsupported field should fail validation");
+        assert!(err.contains("owner"));
+    }
+
+    #[test]
+    fn rsync_config_rejects_unknown_fields() {
+        let err = toml::from_str::<RsyncConfig>("made_up_flag = true")
+            .expect_err("unknown field should be rejected");
+        assert!(err.to_string().contains("unknown field"));
+    }
+
+    #[test]
+    fn rsync_config_merge_applies_anchor_override_on_global_defaults() {
+        let global: RsyncConfig = toml::from_str(
+            r#"
+            partial = true
+            compress = false
+            bwlimit = "8m"
+            "#,
+        )
+        .expect("global rsync should parse");
+        let anchor: RsyncConfig = toml::from_str(
+            r#"
+            compress = true
+            max_size = "10m"
+            "#,
+        )
+        .expect("anchor rsync should parse");
+
+        let resolved_global = global.merge_over(&ResolvedRsyncConfig::default());
+        let resolved_anchor = anchor.merge_over(&resolved_global);
+
+        assert!(resolved_anchor.partial);
+        assert!(resolved_anchor.compress);
+        assert_eq!(resolved_anchor.bwlimit.as_deref(), Some("8m"));
+        assert_eq!(resolved_anchor.max_size.as_deref(), Some("10m"));
+    }
+
+    #[test]
+    fn anchor_flattened_rsync_override_is_parsed() {
+        let anchor: Anchor = toml::from_str(
+            r#"
+            path = "/tmp/a"
+            rsync_compress = true
+            rsync_max_size = "10m"
+            "#,
+        )
+        .expect("anchor with flattened rsync fields should parse");
+        let cfg = anchor.rsync_override();
+        assert_eq!(cfg.compress, Some(true));
+        assert_eq!(cfg.max_size.as_deref(), Some("10m"));
     }
 }

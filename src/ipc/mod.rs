@@ -115,6 +115,7 @@ pub struct Payload {
     pub date: String,
     pub cycle: u32,
     pub status: Status,
+    pub rsync: Option<config::ResolvedRsyncConfig>,
 }
 
 #[allow(dead_code)]
@@ -128,6 +129,7 @@ impl Payload {
             cycle: 0,
             status: Status::Ready,
             dest_path: PathBuf::from("server"),
+            rsync: None,
         })
     }
 
@@ -139,6 +141,7 @@ impl Payload {
         date: String,
         cycle: u32,
         status: Status,
+        rsync: Option<config::ResolvedRsyncConfig>,
     ) -> Payload {
         Payload {
             hostname,
@@ -148,6 +151,7 @@ impl Payload {
             date,
             cycle,
             status,
+            rsync,
         }
     }
 
@@ -183,6 +187,11 @@ impl Payload {
 
     pub fn dest_path<P: AsRef<Path>>(mut self, dest_path: P) -> Self {
         self.dest_path = PathBuf::from(dest_path.as_ref());
+        self
+    }
+
+    pub fn rsync(mut self, rsync: config::ResolvedRsyncConfig) -> Self {
+        self.rsync = Some(rsync);
         self
     }
 }

@@ -402,7 +402,8 @@ fn synch_entry(
                     // FIXME: fatal?
                 }
                 // this call could take a while
-                rsync(&payload.src_paths, &dest);
+                let rsync_cfg = payload.rsync.clone().unwrap_or_default();
+                rsync(&payload.src_paths, &dest, &rsync_cfg);
 
                 if let Ok(mut state) = status.lock() {
                     *state = ipc::Status::Ready;

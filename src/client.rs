@@ -1,6 +1,6 @@
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -268,13 +268,33 @@ fn process(
                     if filtered_paths.is_empty() {
                         debug!("client:process>> nothing to send");
                     } else {
-                        *cycle += 1;
-                        let mut payload =
-                            ipc::Payload::new()?.src_paths(filtered_paths).cycle(*cycle);
-                        if let Err(e) = zenoh_client.publish(&mut payload) {
-                            error!("unable to publish {e}");
+                        let grouped_paths = if let Ok(map_read) = inode_map.read() {
+                            let mut grouped: HashMap<config::ResolvedRsyncConfig, Vec<PathBuf>> =
+                                HashMap::new();
+                            for path in filtered_paths {
+                                let rsync_cfg = map_read
+                                    .get(&path)
+                                    .map_or_else(config::ResolvedRsyncConfig::default, |inode| {
+                                        inode.rsync.clone()
+                                    });
+                                grouped.entry(rsync_cfg).or_default().push(path);
+                            }
+                            grouped
                         } else {
-                            info!("published payload: {payload}");
+                            return bad!("unable to acquire inode_map read lock");
+                        };
+
+                        for (rsync_cfg, paths) in grouped_paths {
+                            *cycle += 1;
+                            let mut payload = ipc::Payload::new()?
+                                .src_paths(paths)
+                                .cycle(*cycle)
+                                .rsync(rsync_cfg);
+                            if let Err(e) = zenoh_client.publish(&mut payload) {
+                                error!("unable to publish {e}");
+                            } else {
+                                info!("published payload: {payload}");
+                            }
                         }
                     }
                     Ok(())
@@ -374,7 +394,8 @@ fn push(payload: &ipc::Payload) {
             .join(", "),
         dest.display()
     );
-    rsync(&payload.src_paths, &dest);
+    let rsync_cfg = payload.rsync.clone().unwrap_or_default();
+    rsync(&payload.src_paths, &dest, &rsync_cfg);
 }
 
 fn pull(payload: &ipc::Payload) {
@@ -393,7 +414,8 @@ fn pull(payload: &ipc::Payload) {
         payload.dest_path.display()
     );
 
-    rsync(&srcs, &payload.dest_path);
+    let rsync_cfg = payload.rsync.clone().unwrap_or_default();
+    rsync(&srcs, &payload.dest_path, &rsync_cfg);
 }
 
 #[cfg(test)]

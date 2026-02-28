@@ -24,6 +24,7 @@ pub struct ZenohPayload {
     pub cycle: u32,
     /// Status encoded as: 0=Ready, 1=Busy, 2=Behind, 3=Other
     pub status_code: u8,
+    pub rsync: Option<crate::config::ResolvedRsyncConfig>,
 }
 
 impl ZenohPayload {
@@ -51,6 +52,7 @@ impl ZenohPayload {
             date: p.date.clone(),
             cycle: p.cycle,
             status_code,
+            rsync: p.rsync.clone(),
         }
     }
 
@@ -80,6 +82,7 @@ impl ZenohPayload {
             date: self.date.clone(),
             cycle: self.cycle,
             status,
+            rsync: self.rsync.clone(),
         }
     }
 }
@@ -308,6 +311,7 @@ mod tests {
             "20260203".to_string(),
             42,
             Status::NotReady(Reason::Behind),
+            None,
         );
 
         let wire = ZenohPayload::from_payload(&payload);
@@ -332,6 +336,7 @@ mod tests {
             "d".to_string(),
             0,
             Status::Ready,
+            None,
         );
         let busy = Payload::from(
             "h".to_string(),
@@ -341,6 +346,7 @@ mod tests {
             "d".to_string(),
             0,
             Status::NotReady(Reason::Busy),
+            None,
         );
         let behind = Payload::from(
             "h".to_string(),
@@ -350,6 +356,7 @@ mod tests {
             "d".to_string(),
             0,
             Status::NotReady(Reason::Behind),
+            None,
         );
         let other = Payload::from(
             "h".to_string(),
@@ -359,6 +366,7 @@ mod tests {
             "d".to_string(),
             0,
             Status::NotReady(Reason::Other),
+            None,
         );
 
         assert_eq!(ZenohPayload::from_payload(&ready).status_code, 0);
@@ -391,6 +399,7 @@ mod tests {
             "20260101".to_string(),
             1,
             Status::Ready,
+            None,
         );
         publisher_client
             .publish(&mut payload)
