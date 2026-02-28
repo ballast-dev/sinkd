@@ -155,19 +155,14 @@ fn zenoh_entry(
     event_rx: mpsc::Receiver<PathBuf>,
     fatal: Arc<AtomicBool>,
 ) -> Outcome<()> {
-    let _payload = ipc::Payload::new();
-
-    let terminal_topic = ipc::terminal_topic()?;
-    let (zenoh_client, zenoh_rx): (ipc::ZenohClient, ipc::Rx) = match ipc::ZenohClient::new(
-        &[ipc::TOPIC_SERVER, &terminal_topic],
-        ipc::TOPIC_CLIENTS,
-    ) {
-        Ok((client, rx)) => (client, rx),
-        Err(e) => {
-            fatal.store(true, Ordering::Relaxed);
-            return bad!("Unable to create Zenoh client, {}", e);
-        }
-    };
+    let (zenoh_client, zenoh_rx, terminal_topic): (ipc::ZenohClient, ipc::Rx, String) =
+        match ipc::connect_with_terminate_topic(&[ipc::TOPIC_SERVER], ipc::TOPIC_CLIENTS) {
+            Ok(conn) => conn,
+            Err(e) => {
+                fatal.store(true, Ordering::Relaxed);
+                return bad!("Unable to create Zenoh client, {}", e);
+            }
+        };
 
     //// assume we are behind
     //let mut server_status = ipc::Status::NotReady(ipc::Reason::Behind);
@@ -183,25 +178,16 @@ fn zenoh_entry(
 
         match zenoh_rx.try_recv() {
             Ok(message) => {
-                if let Some(msg) = message {
-                    if msg.topic == terminal_topic {
-                        debug!("client:zenoh_entry>> received terminal_topic");
-                        fatal.store(true, Ordering::Relaxed);
-                    } else {
-                        // process Zenoh traffic from server
-                        debug!("client>> 👍 recv: {}", msg.payload);
-                        if let Err(e) = process(
-                            &event_rx,
-                            &zenoh_client,
-                            &inode_map,
-                            msg.payload.status,
-                            &mut cycle,
-                        ) {
-                            error!("client:zenoh_entry>> process: {e}");
-                        }
-                    }
-                } else {
-                    error!("client:zenoh_entry>> empty message?");
+                if let Err(e) = handle_incoming_transport_message(
+                    message,
+                    terminal_topic.as_str(),
+                    &fatal,
+                    &event_rx,
+                    &zenoh_client,
+                    &inode_map,
+                    &mut cycle,
+                ) {
+                    error!("client:zenoh_entry>> process: {e}");
                 }
             }
             Err(e) => match e {
@@ -218,6 +204,30 @@ fn zenoh_entry(
         // TODO: add 'system_interval' to config
         std::thread::sleep(Duration::from_secs(1));
     }
+}
+
+fn handle_incoming_transport_message(
+    message: Option<ipc::ZenohMessage>,
+    terminal_topic: &str,
+    fatal: &Arc<AtomicBool>,
+    event_rx: &mpsc::Receiver<PathBuf>,
+    zenoh_client: &ipc::ZenohClient,
+    inode_map: &Arc<RwLock<config::InodeMap>>,
+    cycle: &mut u32,
+) -> Outcome<()> {
+    let Some(msg) = message else {
+        return bad!("client:zenoh_entry>> empty message?");
+    };
+
+    if msg.topic == terminal_topic {
+        debug!("client:zenoh_entry>> received terminal_topic");
+        fatal.store(true, Ordering::Relaxed);
+        return Ok(());
+    }
+
+    // process Zenoh traffic from server
+    debug!("client>> 👍 recv: {}", msg.payload);
+    process(event_rx, zenoh_client, inode_map, msg.payload.status, cycle)
 }
 
 fn process(
@@ -300,7 +310,7 @@ fn setup_watchers(
             },
             notify::Config::default().with_poll_interval(std::time::Duration::from_secs(1)), // Set polling interval
         )
-        .expect("couldn't create watcher");
+        .map_err(|e| format!("couldn't create watcher: {e}"))?;
 
         if watcher.watch(pathbuf, RecursiveMode::Recursive).is_err() {
             warn!("unable to set watcher for: '{}'", pathbuf.display());
@@ -384,4 +394,37 @@ fn pull(payload: &ipc::Payload) {
     );
 
     rsync(&srcs, &payload.dest_path);
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{path::PathBuf, sync::mpsc};
+
+    use super::filter_file_events;
+
+    #[test]
+    fn filter_file_events_deduplicates_paths() {
+        let (tx, rx) = mpsc::channel();
+        let path = PathBuf::from("/tmp/a");
+        tx.send(path.clone()).expect("send should succeed");
+        tx.send(path.clone()).expect("send should succeed");
+        tx.send(PathBuf::from("/tmp/b"))
+            .expect("send should succeed");
+
+        let mut filtered = filter_file_events(&rx).expect("filter should succeed");
+        filtered.sort();
+
+        assert_eq!(filtered.len(), 2);
+        assert_eq!(filtered[0], PathBuf::from("/tmp/a"));
+        assert_eq!(filtered[1], PathBuf::from("/tmp/b"));
+    }
+
+    #[test]
+    fn filter_file_events_returns_error_when_channel_disconnected() {
+        let (tx, rx) = mpsc::channel::<PathBuf>();
+        drop(tx);
+
+        let err = filter_file_events(&rx).expect_err("disconnect should return an error");
+        assert_eq!(err.to_string(), "event_rx disconnected");
+    }
 }

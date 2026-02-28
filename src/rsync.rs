@@ -4,6 +4,20 @@ pub fn rsync<P>(srcs: &Vec<P>, dest: &P)
 where
     P: AsRef<OsStr> + AsRef<Path> + std::fmt::Debug,
 {
+    if std::env::var("SINKD_TEST_RSYNC_FAIL")
+        .ok()
+        .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+    {
+        error!("rsync test hook: forced failure");
+        return;
+    }
+    if let Some(delay_ms) = std::env::var("SINKD_TEST_RSYNC_DELAY_MS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+    {
+        std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+    }
+
     let mut cmd = Command::new("rsync");
 
     cmd.arg("-atR").arg("--delete").args(srcs).arg(dest);

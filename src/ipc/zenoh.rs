@@ -1,4 +1,5 @@
 use std::sync::mpsc;
+use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use zenoh::{key_expr::KeyExpr, sample::SampleKind, Wait};
 
@@ -136,14 +137,43 @@ impl ZenohClient {
 
         // Spawn a thread to handle publishing
         std::thread::spawn(move || {
+            let delay_ms = test_publish_delay_ms();
+            let drop_every_n = test_drop_every_n();
+            let reorder_pairs = test_reorder_pairs();
+            let mut send_count: u64 = 0;
+            let mut pending_for_reorder: Option<ZenohPayload> = None;
+
             while let Ok(payload) = pub_rx.recv() {
-                match bincode::serialize(&payload) {
-                    Ok(bytes) => {
-                        if let Err(e) = publisher.put(bytes).wait() {
-                            error!("Zenoh put error: {e:?}");
+                if reorder_pairs {
+                    if let Some(previous) = pending_for_reorder.take() {
+                        if let Err(e) =
+                            send_payload(&publisher, payload, delay_ms, drop_every_n, &mut send_count)
+                        {
+                            error!("{e}");
                         }
+                        if let Err(e) =
+                            send_payload(&publisher, previous, delay_ms, drop_every_n, &mut send_count)
+                        {
+                            error!("{e}");
+                        }
+                    } else {
+                        pending_for_reorder = Some(payload);
                     }
-                    Err(e) => error!("Zenoh serialize error: {e:?}"),
+                    continue;
+                }
+
+                if let Err(e) =
+                    send_payload(&publisher, payload, delay_ms, drop_every_n, &mut send_count)
+                {
+                    error!("{e}");
+                }
+            }
+
+            if let Some(payload) = pending_for_reorder {
+                if let Err(e) =
+                    send_payload(&publisher, payload, delay_ms, drop_every_n, &mut send_count)
+                {
+                    error!("{e}");
                 }
             }
         });
@@ -216,11 +246,56 @@ impl ZenohClient {
 /// Receiver type alias for Zenoh messages
 pub type Rx = mpsc::Receiver<Option<ZenohMessage>>;
 
+fn send_payload(
+    publisher: &zenoh::pubsub::Publisher<'_>,
+    payload: ZenohPayload,
+    delay_ms: u64,
+    drop_every_n: Option<u64>,
+    send_count: &mut u64,
+) -> Result<(), String> {
+    if delay_ms > 0 {
+        std::thread::sleep(Duration::from_millis(delay_ms));
+    }
+
+    *send_count += 1;
+    if let Some(n) = drop_every_n {
+        if n > 0 && *send_count % n == 0 {
+            warn!("Zenoh test hook dropped outbound payload #{}", send_count);
+            return Ok(());
+        }
+    }
+
+    let bytes = bincode::serialize(&payload).map_err(|e| format!("Zenoh serialize error: {e:?}"))?;
+    publisher
+        .put(bytes)
+        .wait()
+        .map_err(|e| format!("Zenoh put error: {e:?}"))
+}
+
+fn test_publish_delay_ms() -> u64 {
+    std::env::var("SINKD_TEST_PUBLISH_DELAY_MS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(0)
+}
+
+fn test_drop_every_n() -> Option<u64> {
+    std::env::var("SINKD_TEST_DROP_EVERY_N")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+}
+
+fn test_reorder_pairs() -> bool {
+    std::env::var("SINKD_TEST_REORDER_PAIRS")
+        .ok()
+        .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+}
+
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use std::{path::PathBuf, time::{Duration, SystemTime, UNIX_EPOCH}};
 
-    use super::ZenohPayload;
+    use super::{ZenohClient, ZenohPayload};
     use crate::ipc::{Payload, Reason, Status};
 
     #[test]
@@ -290,5 +365,56 @@ mod tests {
         assert_eq!(ZenohPayload::from_payload(&busy).status_code, 1);
         assert_eq!(ZenohPayload::from_payload(&behind).status_code, 2);
         assert_eq!(ZenohPayload::from_payload(&other).status_code, 3);
+    }
+
+    #[test]
+    fn zenoh_sync_pub_sub_smoke() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time should be after epoch")
+            .as_nanos();
+        let topic = format!("sinkd/tests/smoke/{unique}");
+        let topic_ref = topic.as_str();
+
+        let (subscriber_client, subscriber_rx) =
+            ZenohClient::new(&[topic_ref], topic_ref).expect("subscriber client should start");
+        let (publisher_client, _publisher_rx) =
+            ZenohClient::new(&[], topic_ref).expect("publisher client should start");
+
+        std::thread::sleep(Duration::from_millis(200));
+
+        let mut payload = Payload::from(
+            "smoke-host".to_string(),
+            "smoke-user".to_string(),
+            vec![PathBuf::from("/tmp/smoke-file")],
+            PathBuf::from("/srv/smoke"),
+            "20260101".to_string(),
+            1,
+            Status::Ready,
+        );
+        publisher_client
+            .publish(&mut payload)
+            .expect("publish should succeed");
+
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        let mut saw_message = false;
+        while std::time::Instant::now() < deadline {
+            match subscriber_rx.try_recv() {
+                Ok(Some(msg)) if msg.topic == topic_ref => {
+                    saw_message = true;
+                    assert_eq!(msg.payload.hostname, "smoke-host");
+                    break;
+                }
+                Ok(_) => {}
+                Err(std::sync::mpsc::TryRecvError::Empty) => {
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => break,
+            }
+        }
+
+        publisher_client.disconnect();
+        subscriber_client.disconnect();
+        assert!(saw_message, "did not receive smoke message on {}", topic_ref);
     }
 }

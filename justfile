@@ -8,6 +8,25 @@ _:
 lint:
     cargo clippy --all-targets --all-features
 
+# fast local lane: unit + local integration
+test-local:
+    cargo test --workspace
+
+# distributed lane with real container events
+test-e2e:
+    @if docker info > /dev/null 2>&1; then \
+        cargo run -p scenario -- --spec scenario/specs/distributed_edge.toml --root . ; \
+    else \
+        echo "Skipping test-e2e: Docker daemon unavailable" ; \
+    fi
+
+# full suite: local lane + declarative harness smoke
+test:
+    just test-local
+    rm -rf test_scenarios/harness
+    cargo run -p scenario -- --spec scenario/specs/local_smoke.toml --root test_scenarios/harness
+    just test-e2e
+
 # the following commands are purely for debugging
 client:
     cargo run -- -d client -s cfg/opt/sinkd/sinkd.conf -u cfg/user/sinkd.conf start
@@ -51,6 +70,15 @@ build:
     @docker run --rm \
         --hostname sinkd \
         -e WORKDIR=$(pwd) \
+        -e CARGO_TARGET_DIR=$(pwd)/target/docker \
+        -v $(pwd):$(pwd) \
+        -w $(pwd) \
+        {{IMAGE}} \
+        "cargo clean"
+    @docker run --rm \
+        --hostname sinkd \
+        -e WORKDIR=$(pwd) \
+        -e CARGO_TARGET_DIR=$(pwd)/target/docker \
         -v $(pwd):$(pwd) \
         -w $(pwd) \
         {{IMAGE}} \

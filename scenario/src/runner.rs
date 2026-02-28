@@ -1,0 +1,306 @@
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    process::Command,
+    thread::sleep,
+    time::{Duration, Instant},
+};
+
+use log::info;
+use serde::Serialize;
+
+use crate::spec::{ScenarioSpec, Step};
+
+#[derive(Debug)]
+pub struct ScenarioRunner {
+    root: PathBuf,
+}
+
+impl ScenarioRunner {
+    pub fn new<P: AsRef<Path>>(root: P) -> Self {
+        ScenarioRunner {
+            root: root.as_ref().to_path_buf(),
+        }
+    }
+
+    pub fn run(&self, spec: &ScenarioSpec) -> Result<(), String> {
+        let timeout = if spec.timeout_ms == 0 {
+            Duration::from_secs(30)
+        } else {
+            Duration::from_millis(spec.timeout_ms)
+        };
+        let started = Instant::now();
+
+        info!("running scenario '{}'", spec.name);
+        let mut report = ScenarioReport::new(spec.name.clone(), self.root.clone());
+        let mut overall_result: Result<(), String> = Ok(());
+        for (idx, step) in spec.steps.iter().enumerate() {
+            if started.elapsed() > timeout {
+                overall_result = Err(format!(
+                    "scenario '{}' exceeded timeout of {:?}",
+                    spec.name, timeout
+                ));
+                break;
+            }
+            let step_started = Instant::now();
+            match self.execute_step(step) {
+                Ok(()) => report.steps.push(ExecutedStep {
+                    index: idx,
+                    kind: step.kind(),
+                    elapsed_ms: step_started.elapsed().as_millis() as u64,
+                    success: true,
+                    error: None,
+                }),
+                Err(e) => {
+                    report.steps.push(ExecutedStep {
+                        index: idx,
+                        kind: step.kind(),
+                        elapsed_ms: step_started.elapsed().as_millis() as u64,
+                        success: false,
+                        error: Some(e.clone()),
+                    });
+                    overall_result = Err(e);
+                    break;
+                }
+            }
+        }
+
+        report.total_elapsed_ms = started.elapsed().as_millis() as u64;
+        report.success = overall_result.is_ok();
+        report.error = overall_result.clone().err();
+        let _ = self.write_report(&report);
+
+        if overall_result.is_ok() {
+            info!("scenario '{}' completed successfully", spec.name);
+        }
+        overall_result
+    }
+
+    fn execute_step(&self, step: &Step) -> Result<(), String> {
+        match step {
+            Step::CreateDir { path } => {
+                let full = self.root.join(path);
+                fs::create_dir_all(&full)
+                    .map_err(|e| format!("failed to create dir '{}': {e}", full.display()))
+            }
+            Step::WriteFile { path, content } => {
+                let full = self.root.join(path);
+                self.ensure_parent_dir(&full)?;
+                fs::write(&full, content)
+                    .map_err(|e| format!("failed to write file '{}': {e}", full.display()))
+            }
+            Step::AppendFile { path, content } => {
+                use std::io::Write;
+
+                let full = self.root.join(path);
+                self.ensure_parent_dir(&full)?;
+                let mut file = fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&full)
+                    .map_err(|e| format!("failed to open file '{}': {e}", full.display()))?;
+                file.write_all(content.as_bytes())
+                    .map_err(|e| format!("failed to append file '{}': {e}", full.display()))
+            }
+            Step::SleepMs { duration_ms } => {
+                sleep(Duration::from_millis(*duration_ms));
+                Ok(())
+            }
+            Step::RunCommand {
+                command,
+                allow_failure,
+            } => {
+                let status = Command::new("sh")
+                    .arg("-c")
+                    .arg(command)
+                    .status()
+                    .map_err(|e| format!("failed to execute command '{command}': {e}"))?;
+                if status.success() || *allow_failure {
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "command '{command}' failed with status {:?}",
+                        status.code()
+                    ))
+                }
+            }
+            Step::AssertExists { path } => {
+                let full = self.root.join(path);
+                if full.exists() {
+                    Ok(())
+                } else {
+                    Err(format!("expected path to exist: '{}'", full.display()))
+                }
+            }
+            Step::AssertContains { path, contains } => {
+                let full = self.root.join(path);
+                let content = fs::read_to_string(&full)
+                    .map_err(|e| format!("failed reading '{}': {e}", full.display()))?;
+                if content.contains(contains) {
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "expected '{}' to contain '{}'",
+                        full.display(),
+                        contains
+                    ))
+                }
+            }
+            Step::AssertEventuallyExists {
+                path,
+                within_ms,
+                poll_interval_ms,
+            } => self.assert_eventually(
+                || self.root.join(path).exists(),
+                *within_ms,
+                *poll_interval_ms,
+                &format!(
+                    "expected path to eventually exist: '{}'",
+                    self.root.join(path).display()
+                ),
+            ),
+            Step::AssertEventuallyContains {
+                path,
+                contains,
+                within_ms,
+                poll_interval_ms,
+            } => {
+                let full = self.root.join(path);
+                self.assert_eventually(
+                    || {
+                        fs::read_to_string(&full)
+                            .map(|text| text.contains(contains))
+                            .unwrap_or(false)
+                    },
+                    *within_ms,
+                    *poll_interval_ms,
+                    &format!("expected '{}' to eventually contain '{}'", full.display(), contains),
+                )
+            }
+        }
+    }
+
+    fn ensure_parent_dir(&self, path: &Path) -> Result<(), String> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| format!("failed to create parent '{}': {e}", parent.display()))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn assert_eventually<F>(
+        &self,
+        mut predicate: F,
+        within_ms: u64,
+        poll_interval_ms: u64,
+        message: &str,
+    ) -> Result<(), String>
+    where
+        F: FnMut() -> bool,
+    {
+        let started = Instant::now();
+        let timeout = Duration::from_millis(within_ms);
+        let poll = Duration::from_millis(poll_interval_ms.max(1));
+        while started.elapsed() < timeout {
+            if predicate() {
+                return Ok(());
+            }
+            sleep(poll);
+        }
+        if predicate() {
+            Ok(())
+        } else {
+            Err(message.to_string())
+        }
+    }
+
+    fn write_report(&self, report: &ScenarioReport) -> Result<(), String> {
+        let artifacts = self.root.join("_artifacts");
+        fs::create_dir_all(&artifacts)
+            .map_err(|e| format!("failed to create artifacts dir '{}': {e}", artifacts.display()))?;
+        let output = artifacts.join("latest.toml");
+        let serialized =
+            toml::to_string_pretty(report).map_err(|e| format!("failed to serialize report: {e}"))?;
+        fs::write(&output, serialized)
+            .map_err(|e| format!("failed to write report '{}': {e}", output.display()))?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct ScenarioReport {
+    name: String,
+    root: String,
+    success: bool,
+    total_elapsed_ms: u64,
+    error: Option<String>,
+    steps: Vec<ExecutedStep>,
+}
+
+impl ScenarioReport {
+    fn new(name: String, root: PathBuf) -> Self {
+        ScenarioReport {
+            name,
+            root: root.display().to_string(),
+            success: false,
+            total_elapsed_ms: 0,
+            error: None,
+            steps: vec![],
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct ExecutedStep {
+    index: usize,
+    kind: &'static str,
+    elapsed_ms: u64,
+    success: bool,
+    error: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ScenarioRunner;
+    use crate::spec::{ScenarioSpec, Step};
+
+    #[test]
+    fn runner_executes_write_append_and_asserts() {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time should be after epoch")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("sinkd_harness_{unique}"));
+
+        let spec = ScenarioSpec {
+            name: "roundtrip".to_string(),
+            timeout_ms: 5_000,
+            steps: vec![
+                Step::CreateDir {
+                    path: "a".to_string(),
+                },
+                Step::WriteFile {
+                    path: "a/file.txt".to_string(),
+                    content: "hello".to_string(),
+                },
+                Step::AppendFile {
+                    path: "a/file.txt".to_string(),
+                    content: " world".to_string(),
+                },
+                Step::AssertExists {
+                    path: "a/file.txt".to_string(),
+                },
+                Step::AssertContains {
+                    path: "a/file.txt".to_string(),
+                    contains: "hello world".to_string(),
+                },
+            ],
+        };
+
+        let runner = ScenarioRunner::new(&root);
+        runner.run(&spec).expect("scenario should pass");
+        std::fs::remove_dir_all(root).expect("temp root should be removable");
+    }
+}
+

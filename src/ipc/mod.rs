@@ -14,7 +14,7 @@ mod unix;
 #[cfg(windows)]
 mod windows;
 
-pub use zenoh::{Rx, TOPIC_CLIENTS, TOPIC_SERVER, ZenohClient};
+pub use zenoh::{Rx, TOPIC_CLIENTS, TOPIC_SERVER, ZenohClient, ZenohMessage};
 
 pub fn terminal_topic() -> Outcome<String> {
     Ok(format!("sinkd/{}/terminate", config::get_hostname()?))
@@ -35,6 +35,20 @@ pub fn send_terminate_signal() -> Outcome<()> {
         }
     }
     Ok(())
+}
+
+pub fn connect_with_terminate_topic(
+    subscriptions: &[&str],
+    publish_topic: &str,
+) -> Outcome<(ZenohClient, Rx, String)> {
+    let terminal = terminal_topic()?;
+    let mut all_subscriptions = subscriptions.to_vec();
+    all_subscriptions.push(&terminal);
+
+    let (client, rx) = ZenohClient::new(&all_subscriptions, publish_topic)
+        .map_err(|e| format!("unable to create Zenoh client: {e}"))?;
+
+    Ok((client, rx, terminal))
 }
 
 #[allow(unused_variables)]

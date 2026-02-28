@@ -1,0 +1,40 @@
+name = "distributed-edge"
+timeout_ms = 180000
+
+[[steps]]
+kind = "run_command"
+command = "docker compose down"
+allow_failure = true
+
+[[steps]]
+kind = "run_command"
+command = "docker compose up -d"
+
+[[steps]]
+kind = "assert_eventually_exists"
+path = "test_scenarios/bravo"
+within_ms = 30000
+poll_interval_ms = 500
+
+[[steps]]
+kind = "assert_eventually_exists"
+path = "test_scenarios/shared_document.txt"
+within_ms = 60000
+poll_interval_ms = 1000
+
+[[steps]]
+kind = "assert_eventually_exists"
+path = "test_scenarios/_reports/delta_report_latest.toml"
+within_ms = 90000
+poll_interval_ms = 1000
+
+[[steps]]
+kind = "assert_eventually_contains"
+path = "test_scenarios/_reports/delta_report_latest.toml"
+contains = "Latest report:"
+within_ms = 90000
+poll_interval_ms = 1000
+
+[[steps]]
+kind = "run_command"
+command = "docker compose down"
