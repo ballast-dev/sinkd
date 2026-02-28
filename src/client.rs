@@ -18,24 +18,8 @@ pub fn start(params: &Parameters) -> Outcome<()> {
 }
 
 pub fn stop(params: &Parameters) -> Outcome<()> {
-    let terminal_topic = format!("sinkd/{}/terminate", config::get_hostname()?);
-    let (srv_addr, _) = config::get(params)?;
-
-    // Create a temporary Zenoh client just to send the terminate message
-    match ipc::ZenohClient::new(&[], &terminal_topic) {
-        Ok((client, _rx)) => {
-            let mut payload = ipc::Payload::new()?;
-            payload.status = ipc::Status::NotReady(ipc::Reason::Other);
-            if let Err(e) = client.publish(&mut payload) {
-                println!("Failed to send terminate message: {e}");
-            }
-            client.disconnect();
-        }
-        Err(e) => {
-            println!("Failed to create Zenoh client for termination: {e}");
-        }
-    }
-    let _ = srv_addr; // Acknowledge srv_addr is not used in Zenoh (peer-to-peer)
+    let _ = config::get(params)?;
+    ipc::send_terminate_signal()?;
     Ok(())
 }
 
@@ -81,11 +65,15 @@ pub fn init(params: &Parameters) -> Outcome<()> {
         move || zenoh_entry(inode_map, event_rx, fatal)
     });
 
-    if let Err(e) = watch_thread.join().unwrap() {
-        error!("{e}");
+    match watch_thread.join() {
+        Ok(Ok(())) => {}
+        Ok(Err(e)) => error!("{e}"),
+        Err(join_err) => return bad!("client:watch_thread join error! >> {:?}", join_err),
     }
-    if let Err(e) = zenoh_thread.join().unwrap() {
-        error!("{e}");
+    match zenoh_thread.join() {
+        Ok(Ok(())) => {}
+        Ok(Err(e)) => error!("{e}"),
+        Err(join_err) => return bad!("client:zenoh_thread join error! >> {:?}", join_err),
     }
     Ok(())
 }
@@ -109,7 +97,9 @@ fn check_interval(
                 if elapse >= inode.interval {
                     debug!("EVENT>> elapse: {}", elapse.as_secs());
                     inode.last_event = now;
-                    event_tx.send(inode_path.clone()).unwrap(); // to kick off sync thread
+                    if let Err(e) = event_tx.send(inode_path.clone()) {
+                        return bad!("unable to send event path to sync queue: {}", e);
+                    }
                 }
                 break;
             }
@@ -167,7 +157,7 @@ fn zenoh_entry(
 ) -> Outcome<()> {
     let _payload = ipc::Payload::new();
 
-    let terminal_topic = format!("sinkd/{}/terminate", config::get_hostname()?);
+    let terminal_topic = ipc::terminal_topic()?;
     let (zenoh_client, zenoh_rx): (ipc::ZenohClient, ipc::Rx) = match ipc::ZenohClient::new(
         &[ipc::TOPIC_SERVER, &terminal_topic],
         ipc::TOPIC_CLIENTS,

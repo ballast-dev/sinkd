@@ -16,6 +16,27 @@ mod windows;
 
 pub use zenoh::{Rx, TOPIC_CLIENTS, TOPIC_SERVER, ZenohClient};
 
+pub fn terminal_topic() -> Outcome<String> {
+    Ok(format!("sinkd/{}/terminate", config::get_hostname()?))
+}
+
+pub fn send_terminate_signal() -> Outcome<()> {
+    let topic = terminal_topic()?;
+    match ZenohClient::new(&[], &topic) {
+        Ok((client, _rx)) => {
+            let mut payload = Payload::new()?.status(Status::NotReady(Reason::Other));
+            if let Err(e) = client.publish(&mut payload) {
+                error!("failed to send terminate message: {e}");
+            }
+            client.disconnect();
+        }
+        Err(e) => {
+            error!("failed to create Zenoh client for termination: {e}");
+        }
+    }
+    Ok(())
+}
+
 #[allow(unused_variables)]
 pub fn daemon(func: fn(&Parameters) -> Outcome<()>, params: &Parameters) -> Outcome<()> {
     #[cfg(unix)]
@@ -58,13 +79,13 @@ impl fmt::Display for Status {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Status::NotReady(reason) => {
-                write!(f, "NotReady(").unwrap();
+                write!(f, "NotReady(")?;
                 match reason {
-                    Reason::Busy => write!(f, "Sinking").unwrap(),
-                    Reason::Behind => write!(f, "Behind").unwrap(),
-                    Reason::Other => write!(f, "Other").unwrap(),
+                    Reason::Busy => write!(f, "Sinking")?,
+                    Reason::Behind => write!(f, "Behind")?,
+                    Reason::Other => write!(f, "Other")?,
                 }
-                write!(f, ")") // return result of write
+                write!(f, ")")
             }
             Status::Ready => write!(f, "Ready"),
         }
@@ -154,14 +175,9 @@ impl Payload {
 
 impl fmt::Display for Payload {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "hostname: {}, username: {}, src_paths: [",
-            self.hostname, self.username,
-        )
-        .unwrap();
+        write!(f, "hostname: {}, username: {}, src_paths: [", self.hostname, self.username)?;
         for path in &self.src_paths {
-            write!(f, "{}, ", path.display()).unwrap();
+            write!(f, "{}, ", path.display())?;
         }
         write!(
             f,

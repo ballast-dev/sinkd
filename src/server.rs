@@ -3,6 +3,7 @@
 //  _\ \/ -_) __/ |/ / -_) __/
 // /___/\__/_/  |___/\__/_/
 use std::{
+    collections::HashMap,
     fs,
     path::PathBuf,
     process,
@@ -31,23 +32,7 @@ pub fn start(params: &Parameters) -> Outcome<()> {
 }
 
 pub fn stop() -> Outcome<()> {
-    let terminal_topic = format!("sinkd/{}/terminate", config::get_hostname()?);
-
-    // Create a temporary Zenoh client just to send the terminate message
-    match ipc::ZenohClient::new(&[], &terminal_topic) {
-        Ok((client, _rx)) => {
-            let mut payload = ipc::Payload::new()?;
-            payload.status = ipc::Status::NotReady(ipc::Reason::Other);
-            if let Err(e) = client.publish(&mut payload) {
-                println!("Failed to send terminate message: {e}");
-            }
-            client.disconnect();
-        }
-        Err(e) => {
-            println!("Failed to create Zenoh client for termination: {e}");
-        }
-    }
-    Ok(())
+    ipc::send_terminate_signal()
 }
 
 pub fn restart(params: &Parameters) -> Outcome<()> {
@@ -134,7 +119,7 @@ fn zenoh_entry(
     fatal: Arc<AtomicBool>,
     status: Arc<Mutex<ipc::Status>>,
 ) -> Outcome<()> {
-    let terminal_topic = format!("sinkd/{}/terminate", config::get_hostname()?);
+    let terminal_topic = ipc::terminal_topic()?;
     let (zenoh_client, zenoh_rx): (ipc::ZenohClient, ipc::Rx) = match ipc::ZenohClient::new(
         &[ipc::TOPIC_CLIENTS, &terminal_topic],
         ipc::TOPIC_SERVER,
@@ -146,9 +131,8 @@ fn zenoh_entry(
         }
     };
 
-    // TODO: pervious cycle should be read from file
-    // WARN: this needs to be config driven
-    let mut cycle: u32 = 0;
+    // Track last accepted cycle per client hostname.
+    let mut cycle_by_host: HashMap<String, u32> = HashMap::new();
 
     loop {
         if fatal.load(Ordering::Relaxed) {
@@ -177,7 +161,13 @@ fn zenoh_entry(
                         // 4. once finished switch state to "ready"
 
                         if let Err(e) =
-                            queue(&synch_tx, &zenoh_client, msg.payload, &mut cycle, &status)
+                            queue(
+                                &synch_tx,
+                                &zenoh_client,
+                                msg.payload,
+                                &mut cycle_by_host,
+                                &status,
+                            )
                         {
                             error!("{e}");
                         }
@@ -200,32 +190,52 @@ fn zenoh_entry(
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum QueueDecision {
+    Enqueue,
+    Duplicate,
+    Stale,
+}
+
+fn decide_cycle(incoming_cycle: u32, last_cycle_for_host: Option<u32>) -> QueueDecision {
+    match last_cycle_for_host {
+        None => QueueDecision::Enqueue,
+        Some(last) if incoming_cycle > last => QueueDecision::Enqueue,
+        Some(last) if incoming_cycle == last => QueueDecision::Duplicate,
+        Some(_) => QueueDecision::Stale,
+    }
+}
+
 // check state of server and queue up payload if ready
 fn queue(
     synch_tx: &mpsc::Sender<ipc::Payload>,
     zenoh_client: &ipc::ZenohClient,
     payload: ipc::Payload,
-    cycle: &mut u32,
+    cycle_by_host: &mut HashMap<String, u32>,
     status: &Arc<Mutex<ipc::Status>>,
 ) -> Outcome<()> {
     match status.lock() {
         Ok(state) => {
             if *state == ipc::Status::Ready {
-                match payload.cycle.cmp(cycle) {
-                    std::cmp::Ordering::Greater => {
+                let decision = decide_cycle(
+                    payload.cycle,
+                    cycle_by_host.get(&payload.hostname).copied(),
+                );
+                match decision {
+                    QueueDecision::Enqueue => {
                         debug!("queuing payload: {payload:#?}");
-                        *cycle += 1;
+                        cycle_by_host.insert(payload.hostname.clone(), payload.cycle);
                         if let Err(e) = synch_tx.send(payload) {
                             bad!("server:process>> unable to send on synch_tx {}", e)
                         } else {
                             Ok(())
                         }
                     }
-                    std::cmp::Ordering::Equal => {
+                    QueueDecision::Duplicate => {
                         info!("server:queue>> same payload cycle? no-op");
                         Ok(())
                     }
-                    std::cmp::Ordering::Less => {
+                    QueueDecision::Stale => {
                         let mut response =
                             ipc::Payload::new()?.status(ipc::Status::NotReady(ipc::Reason::Busy));
                         if let Err(e) = zenoh_client.publish(&mut response) {
@@ -244,6 +254,31 @@ fn queue(
             }
         }
         Err(e) => bad!("server:queue>> status lock poisoned {}", e),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{decide_cycle, QueueDecision};
+
+    #[test]
+    fn cycle_decision_accepts_first_message() {
+        assert_eq!(decide_cycle(1, None), QueueDecision::Enqueue);
+    }
+
+    #[test]
+    fn cycle_decision_accepts_newer_message() {
+        assert_eq!(decide_cycle(2, Some(1)), QueueDecision::Enqueue);
+    }
+
+    #[test]
+    fn cycle_decision_ignores_duplicate_message() {
+        assert_eq!(decide_cycle(7, Some(7)), QueueDecision::Duplicate);
+    }
+
+    #[test]
+    fn cycle_decision_marks_older_message_as_stale() {
+        assert_eq!(decide_cycle(3, Some(9)), QueueDecision::Stale);
     }
 }
 

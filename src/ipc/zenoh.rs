@@ -215,3 +215,80 @@ impl ZenohClient {
 
 /// Receiver type alias for Zenoh messages
 pub type Rx = mpsc::Receiver<Option<ZenohMessage>>;
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::ZenohPayload;
+    use crate::ipc::{Payload, Reason, Status};
+
+    #[test]
+    fn payload_roundtrip_preserves_fields() {
+        let payload = Payload::from(
+            "host-a".to_string(),
+            "alice".to_string(),
+            vec![PathBuf::from("/tmp/a"), PathBuf::from("/tmp/b")],
+            PathBuf::from("/srv/sinkd"),
+            "20260203".to_string(),
+            42,
+            Status::NotReady(Reason::Behind),
+        );
+
+        let wire = ZenohPayload::from_payload(&payload);
+        let decoded = wire.to_payload();
+
+        assert_eq!(decoded.hostname, payload.hostname);
+        assert_eq!(decoded.username, payload.username);
+        assert_eq!(decoded.src_paths, payload.src_paths);
+        assert_eq!(decoded.dest_path, payload.dest_path);
+        assert_eq!(decoded.date, payload.date);
+        assert_eq!(decoded.cycle, payload.cycle);
+        assert_eq!(decoded.status, payload.status);
+    }
+
+    #[test]
+    fn status_code_mapping_is_stable() {
+        let ready = Payload::from(
+            "h".to_string(),
+            "u".to_string(),
+            vec![],
+            PathBuf::from("x"),
+            "d".to_string(),
+            0,
+            Status::Ready,
+        );
+        let busy = Payload::from(
+            "h".to_string(),
+            "u".to_string(),
+            vec![],
+            PathBuf::from("x"),
+            "d".to_string(),
+            0,
+            Status::NotReady(Reason::Busy),
+        );
+        let behind = Payload::from(
+            "h".to_string(),
+            "u".to_string(),
+            vec![],
+            PathBuf::from("x"),
+            "d".to_string(),
+            0,
+            Status::NotReady(Reason::Behind),
+        );
+        let other = Payload::from(
+            "h".to_string(),
+            "u".to_string(),
+            vec![],
+            PathBuf::from("x"),
+            "d".to_string(),
+            0,
+            Status::NotReady(Reason::Other),
+        );
+
+        assert_eq!(ZenohPayload::from_payload(&ready).status_code, 0);
+        assert_eq!(ZenohPayload::from_payload(&busy).status_code, 1);
+        assert_eq!(ZenohPayload::from_payload(&behind).status_code, 2);
+        assert_eq!(ZenohPayload::from_payload(&other).status_code, 3);
+    }
+}

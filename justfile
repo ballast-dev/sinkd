@@ -63,6 +63,7 @@ build:
 
 # start the multi-instance docker setup
 scenario:
+    just build
     docker compose up -d
 
 # stop the multi-instance docker setup
