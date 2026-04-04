@@ -1,5 +1,10 @@
+//! Composed runtime parameters (shared logging + role-specific fields). Client commands use TOML paths
+//! (`system_config`, `user_configs`); the server daemon uses only [`crate::server`]’s sync root and
+//! persisted generation / client id state — see [`crate::config`] for the split between client and server configuration.
+
 use clap::{parser::ValuesRef, ArgMatches};
 use std::{
+    fmt,
     fs,
     path::{Path, PathBuf},
     sync::Arc,
@@ -16,38 +21,28 @@ pub enum DaemonType {
     WindowsServer,
 }
 
-// TODO: move this into section of /etc/sinkd.conf
-pub struct Parameters {
+#[derive(Clone, Debug)]
+pub struct SharedDaemonParams {
     pub daemon_type: DaemonType,
     pub verbosity: u8,
     pub debug: u8,
     pub log_path: PathBuf,
-    pub system_config: Arc<PathBuf>,
-    pub user_configs: Arc<Vec<PathBuf>>,
 }
 
-impl std::fmt::Display for Parameters {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for SharedDaemonParams {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&fancy::format(
             &format!(
-                r"🎨 Parameters 🔍
+                r"🎨 SharedDaemonParams 🔍
 daemon_type:{:?}
 verbosity:{}
 debug:{}
 log_path:{}
-system_config:{}
-user configs: [{}]
 ",
                 self.daemon_type,
                 self.verbosity,
                 self.debug,
                 self.log_path.display(),
-                self.system_config.display(),
-                self.user_configs
-                    .iter()
-                    .map(|p| p.display().to_string())
-                    .collect::<Vec<_>>()
-                    .join(", "),
             ),
             fancy::Attrs::Bold,
             fancy::Colors::Yellow,
@@ -55,8 +50,71 @@ user configs: [{}]
     }
 }
 
-impl Parameters {
-    pub fn from(matches: &ArgMatches) -> Outcome<Self> {
+#[derive(Clone, Debug)]
+pub struct ClientParameters {
+    pub shared: SharedDaemonParams,
+    pub system_config: Arc<PathBuf>,
+    pub user_configs: Arc<Vec<PathBuf>>,
+    pub client_state_dir_override: Option<PathBuf>,
+}
+
+impl fmt::Display for ClientParameters {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "{}", self.shared)?;
+        write!(
+            f,
+            "system_config:{}\nuser configs: [{}]\nclient_state_dir_override:{}\n",
+            self.system_config.display(),
+            self.user_configs
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", "),
+            self.client_state_dir_override
+                .as_ref()
+                .map(|p| p.display().to_string())
+                .as_deref()
+                .unwrap_or("(default)")
+        )
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ServerParameters {
+    pub shared: SharedDaemonParams,
+}
+
+impl fmt::Display for ServerParameters {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.shared.fmt(f)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum DaemonParameters {
+    Client(ClientParameters),
+    Server(ServerParameters),
+}
+
+impl fmt::Display for DaemonParameters {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Client(c) => c.fmt(f),
+            Self::Server(s) => s.fmt(f),
+        }
+    }
+}
+
+impl DaemonParameters {
+    #[must_use]
+    pub fn shared(&self) -> &SharedDaemonParams {
+        match self {
+            Self::Client(c) => &c.shared,
+            Self::Server(s) => &s.shared,
+        }
+    }
+
+    pub fn from_matches(matches: &ArgMatches) -> Outcome<Self> {
         let (system_config, user_configs, daemon_type) =
             if let Some(("client", submatches)) = matches.subcommand() {
                 let system_config = submatches.get_one("system-config");
@@ -67,6 +125,17 @@ impl Parameters {
                     DaemonType::UnixClient
                 };
                 (system_config, user_configs, daemon_type)
+            } else if subcommand_needs_client_config_paths(matches) {
+                let daemon_type = if matches.get_flag("windows-daemon") {
+                    DaemonType::WindowsClient
+                } else {
+                    DaemonType::UnixClient
+                };
+                (
+                    matches.get_one("system-config"),
+                    matches.get_many("user-configs"),
+                    daemon_type,
+                )
             } else {
                 let daemon_type = if matches.get_flag("windows-daemon") {
                     DaemonType::WindowsServer
@@ -77,165 +146,168 @@ impl Parameters {
             };
 
         let debug = matches.get_count("debug");
-        Self::create_log_dir(debug)?;
+        create_log_dir(debug)?;
 
-        let params = Parameters {
-            daemon_type,
-            verbosity: match (debug, matches.get_count("verbose")) {
-                (d, _) if d > 0 => 4, // if debugging -> full verbosity
-                (_, 0) => 2,          // default to warn log level  TODO: make this obsolete
-                (_, v) => v,
-            },
-            debug: match debug {
-                1 | 2 => debug,
-                d if d > 2 => {
-                    println!("debug only has two levels");
-                    2
-                }
-                _ => 0,
-            },
-            log_path: Self::get_log_path(debug, daemon_type),
-            system_config: match daemon_type {
-                DaemonType::UnixClient | DaemonType::WindowsClient => {
-                    Self::resolve_system_config(system_config)?
-                }
-                DaemonType::UnixServer | DaemonType::WindowsServer => Arc::new(PathBuf::new()),
-            },
-            user_configs: match daemon_type {
-                DaemonType::UnixClient | DaemonType::WindowsClient => {
-                    Self::resolve_user_configs(user_configs)?
-                }
-                DaemonType::UnixServer | DaemonType::WindowsServer => Arc::new(vec![]),
-            },
+        let debug_level = match debug {
+            1 | 2 => debug,
+            d if d > 2 => {
+                println!("debug only has two levels");
+                2
+            }
+            _ => 0,
         };
 
-        if params.debug > 0 {
-            println!("{}", &params);
+        let verbosity = match (debug, matches.get_count("verbose")) {
+            (d, _) if d > 0 => 4,
+            (_, 0) => 2,
+            (_, v) => v,
+        };
+
+        let shared = SharedDaemonParams {
+            daemon_type,
+            verbosity,
+            debug: debug_level,
+            log_path: get_log_path(debug, daemon_type),
+        };
+
+        let client_state_dir_override = matches
+            .get_one::<String>("client-state-dir")
+            .map(|s| PathBuf::from(s.trim()))
+            .filter(|p| !p.as_os_str().is_empty());
+
+        let params = match daemon_type {
+            DaemonType::UnixClient | DaemonType::WindowsClient => {
+                Self::Client(ClientParameters {
+                    shared,
+                    system_config: resolve_system_config(system_config)?,
+                    user_configs: resolve_user_configs(user_configs)?,
+                    client_state_dir_override,
+                })
+            }
+            DaemonType::UnixServer | DaemonType::WindowsServer => {
+                Self::Server(ServerParameters { shared })
+            }
+        };
+
+        if params.shared().debug > 0 {
+            println!("{params}");
         }
 
         Ok(params)
     }
+}
 
-    fn create_log_dir(debug: u8) -> Outcome<()> {
-        let path = if debug >= 1 {
-            Path::new("/tmp/sinkd")
-        } else {
-            Path::new("/var/log/sinkd")
-        };
+fn subcommand_needs_client_config_paths(matches: &ArgMatches) -> bool {
+    matches.subcommand().is_some_and(|(name, _)| {
+        matches!(
+            name,
+            "client" | "add" | "rm" | "remove" | "adduser" | "rmuser" | "ls" | "list"
+        )
+    })
+}
 
-        if path.exists() {
-            Ok(())
-        } else {
-            if debug == 0 && !config::have_permissions() {
-                return bad!("Need elevated permissions to create {}", path.display());
-            }
-            match fs::create_dir_all(path) {
-                Ok(()) => Ok(()),
-                Err(e) => bad!("Unable to create '{}'  {}", path.display(), e),
-            }
+fn create_log_dir(debug: u8) -> Outcome<()> {
+    let path = if debug >= 1 {
+        Path::new("/tmp/sinkd")
+    } else {
+        Path::new("/var/log/sinkd")
+    };
+
+    if path.exists() {
+        Ok(())
+    } else {
+        if debug == 0 && !config::have_permissions() {
+            return bad!("Need elevated permissions to create {}", path.display());
+        }
+        match fs::create_dir_all(path) {
+            Ok(()) => Ok(()),
+            Err(e) => bad!("Unable to create '{}'  {}", path.display(), e),
         }
     }
+}
 
-    fn get_log_path(debug: u8, daemon_type: DaemonType) -> PathBuf {
-        let base_dir = if debug > 0 {
-            "/tmp/sinkd"
-        } else {
-            "/var/log/sinkd"
-        };
+fn get_log_path(debug: u8, daemon_type: DaemonType) -> PathBuf {
+    let base_dir = if debug > 0 {
+        "/tmp/sinkd"
+    } else {
+        "/var/log/sinkd"
+    };
 
-        match daemon_type {
-            DaemonType::UnixClient | DaemonType::WindowsClient => {
-                PathBuf::from(format!("{base_dir}/client.log"))
-            }
-            DaemonType::UnixServer | DaemonType::WindowsServer => {
-                PathBuf::from(format!("{base_dir}/server.log"))
-            }
+    match daemon_type {
+        DaemonType::UnixClient | DaemonType::WindowsClient => {
+            PathBuf::from(format!("{base_dir}/client.log"))
+        }
+        DaemonType::UnixServer | DaemonType::WindowsServer => {
+            PathBuf::from(format!("{base_dir}/server.log"))
         }
     }
+}
 
-    //?  -- server config --
-    //?  this will be outside of client config
-    //?  /srv/sinkd/sinkd_server.conf
-    //?  /opt/sinkd/sinkd_server.conf
-    //?  -> the server files will reside in
-    //?  /opt/sinkd/srv/...
-
-    // If command line argument given, that supercedes precedence
-    // else default path will be read
-    fn resolve_system_config(system_config: Option<&String>) -> Outcome<Arc<PathBuf>> {
-        // FIXME: need to setup "server_config" which is separate from system/user
-        let cfg_path: PathBuf;
-        if let Some(sys_cfg) = system_config {
-            debug!("resolve_system_config>> passed in: {sys_cfg}");
-            match config::resolve(sys_cfg) {
-                Ok(normalized) => {
-                    if normalized.is_dir() {
-                        return bad!(
-                            "{} is a directory not a file, aborting",
-                            normalized.display()
-                        );
-                    } else if normalized.exists() {
-                        cfg_path = normalized;
-                    } else {
-                        return bad!("{} does not exist", normalized.display());
-                    }
-                }
-                Err(e) => return bad!("system config path error: {}", e),
-            }
-        } else if cfg!(target_os = "macos") {
-            cfg_path = PathBuf::from("/opt/sinkd/sinkd.conf");
-        } else if cfg!(target_os = "windows") {
-            cfg_path = PathBuf::from("/somepath/sinkd.conf");
-        } else {
-            cfg_path = PathBuf::from("/etc/sinkd.conf");
-        }
-
-        debug!("system config: {}", cfg_path.display());
-
-        Ok(Arc::new(cfg_path))
-    }
-
-    // If command line argument supplied, system config not read
-    // list of users are supplied from system config
-    pub fn resolve_user_configs(
-        user_configs: Option<ValuesRef<String>>,
-    ) -> Outcome<Arc<Vec<PathBuf>>> {
-        let mut resolved_configs = Vec::<PathBuf>::new();
-
-        // safe unwrap due to default args
-        if let Some(usr_cfgs) = user_configs {
-            for cfg in usr_cfgs {
-                let normalized = config::resolve(cfg)?;
+fn resolve_system_config(system_config: Option<&String>) -> Outcome<Arc<PathBuf>> {
+    let cfg_path: PathBuf;
+    if let Some(sys_cfg) = system_config {
+        debug!("resolve_system_config>> passed in: {sys_cfg}");
+        match config::resolve(sys_cfg) {
+            Ok(normalized) => {
                 if normalized.is_dir() {
                     return bad!(
-                        "{} is a directory, not a file; aborting",
+                        "{} is a directory not a file, aborting",
                         normalized.display()
                     );
+                } else if normalized.exists() {
+                    cfg_path = normalized;
+                } else {
+                    return bad!("{} does not exist", normalized.display());
                 }
-                resolved_configs.push(normalized);
             }
-        } else {
-            let default_cfgs = vec!["~/.config/sinkd/sinkd.conf", "~/sinkd.conf"];
+            Err(e) => return bad!("system config path error: {}", e),
+        }
+    } else if cfg!(target_os = "macos") {
+        cfg_path = PathBuf::from("/opt/sinkd/sinkd.conf");
+    } else if cfg!(target_os = "windows") {
+        cfg_path = PathBuf::from("/somepath/sinkd.conf");
+    } else {
+        cfg_path = PathBuf::from("/etc/sinkd.conf");
+    }
 
-            // WARN: user configs are pulled from system and additionally supplied
-            // through command line arg
-            for cfg in default_cfgs {
-                match config::resolve(cfg) {
-                    Ok(resolved_user_config) => resolved_configs.push(resolved_user_config),
-                    Err(e) => error!("Unable to resolve {cfg}  {e}"),
-                }
+    debug!("system config: {}", cfg_path.display());
+
+    Ok(Arc::new(cfg_path))
+}
+
+pub fn resolve_user_configs(user_configs: Option<ValuesRef<String>>) -> Outcome<Arc<Vec<PathBuf>>> {
+    let mut resolved_configs = Vec::<PathBuf>::new();
+
+    if let Some(usr_cfgs) = user_configs {
+        for cfg in usr_cfgs {
+            let normalized = config::resolve(cfg)?;
+            if normalized.is_dir() {
+                return bad!(
+                    "{} is a directory, not a file; aborting",
+                    normalized.display()
+                );
+            }
+            resolved_configs.push(normalized);
+        }
+    } else {
+        let default_cfgs = vec!["~/.config/sinkd/sinkd.conf", "~/sinkd.conf"];
+
+        for cfg in default_cfgs {
+            match config::resolve(cfg) {
+                Ok(resolved_user_config) => resolved_configs.push(resolved_user_config),
+                Err(e) => error!("Unable to resolve {cfg}  {e}"),
             }
         }
-
-        debug!(
-            "user configs: [{}]",
-            resolved_configs
-                .iter()
-                .map(|p| p.display().to_string())
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
-
-        Ok(Arc::new(resolved_configs))
     }
+
+    debug!(
+        "user configs: [{}]",
+        resolved_configs
+            .iter()
+            .map(|p| p.display().to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+
+    Ok(Arc::new(resolved_configs))
 }

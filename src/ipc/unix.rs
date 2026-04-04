@@ -1,9 +1,12 @@
-use crate::{bad, shiplog, Outcome, Parameters};
+use crate::Outcome;
 use nix::unistd::{fork, setsid, ForkResult};
 use std::fs::File;
 use std::os::fd::IntoRawFd;
 
-pub fn daemon(func: fn(&Parameters) -> Outcome<()>, params: &Parameters) -> Outcome<()> {
+pub fn daemon<F>(f: F) -> Outcome<()>
+where
+    F: FnOnce() -> Outcome<()>,
+{
     match unsafe { fork() } {
         Ok(ForkResult::Parent { .. }) => Ok(()),
         Ok(ForkResult::Child) => {
@@ -18,8 +21,7 @@ pub fn daemon(func: fn(&Parameters) -> Outcome<()>, params: &Parameters) -> Outc
                     }
                     unsafe { libc::umask(0o022) };
                     redirect_stdio_to_null();
-                    shiplog::init(params)?;
-                    func(params)
+                    f()
                 }
                 Err(_) => bad!("Second fork failed"),
             }

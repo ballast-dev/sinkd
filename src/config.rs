@@ -1,3 +1,11 @@
+//! **Two configuration surfaces (by design):**
+//! - **Client** — system TOML (`/etc/sinkd.conf` or `--sys-cfg`) plus per-user TOML files; consumed by
+//!   [`crate::client`] and [`crate::ops`] via [`crate::parameters::ClientParameters`]. `server_addr` in the
+//!   system file is the sync target/description for clients (see also client-side `_srv_addr` note in
+//!   [`crate::client::init`]).
+//! - **Server** — runtime sync root under `/srv/sinkd` (or debug path) and `generation_state.toml` there; the
+//!   server does **not** load client TOML anchor lists for queue/dedup logic.
+
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -16,7 +24,7 @@ macro_rules! reject_unsupported_rsync_fields {
     };
 }
 
-use crate::{bad, outcome::Outcome, parameters::Parameters};
+use crate::{outcome::Outcome, parameters::ClientParameters};
 use log::{error, warn};
 
 #[allow(clippy::struct_excessive_bools)]
@@ -112,8 +120,8 @@ impl RsyncConfig {
 
 // these are serially parsable
 #[derive(Debug, Serialize, Deserialize)]
-struct Anchor {
-    path: PathBuf,
+pub(crate) struct Anchor {
+    pub(crate) path: PathBuf,
     interval: Option<u64>,
     excludes: Option<Vec<String>>,
     rsync: Option<RsyncConfig>,
@@ -130,6 +138,25 @@ struct Anchor {
 }
 
 impl Anchor {
+    pub(crate) fn with_path(path: PathBuf) -> Self {
+        Anchor {
+            path,
+            interval: None,
+            excludes: None,
+            rsync: None,
+            rsync_checksum: None,
+            rsync_compress: None,
+            rsync_bwlimit: None,
+            rsync_partial: None,
+            rsync_delete_excluded: None,
+            rsync_max_size: None,
+            rsync_min_size: None,
+            rsync_ignore_existing: None,
+            rsync_size_only: None,
+            rsync_stats: None,
+        }
+    }
+
     fn rsync_override(&self) -> RsyncConfig {
         let mut cfg = self.rsync.clone().unwrap_or_default();
         if self.rsync_checksum.is_some() {
@@ -167,11 +194,42 @@ impl Anchor {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct SysConfig {
-    server_addr: String,
-    users: Vec<String>,
-    anchors: Option<Vec<Anchor>>,
-    rsync: Option<RsyncConfig>,
+pub(crate) struct SysConfig {
+    pub(crate) server_addr: String,
+    pub(crate) users: Vec<String>,
+    pub(crate) anchors: Option<Vec<Anchor>>,
+    pub(crate) rsync: Option<RsyncConfig>,
+}
+
+pub(crate) fn load_system_config_file(path: &Path) -> Outcome<SysConfig> {
+    let raw = fs::read_to_string(path)
+        .map_err(|e| format!("cannot read system config {}: {e}", path.display()))?;
+    Ok(toml::from_str(&raw).map_err(|e| {
+        format!("cannot parse system config {}: {e}", path.display())
+    })?)
+}
+
+pub(crate) fn save_system_config_file(path: &Path, cfg: &SysConfig) -> Outcome<()> {
+    let serialized = toml::to_string_pretty(cfg)
+        .map_err(|e| format!("cannot serialize system config: {e}"))?;
+    fs::write(path, serialized)?;
+    Ok(())
+}
+
+pub(crate) fn load_user_config_file(path: &Path) -> Outcome<UserConfig> {
+    let raw = fs::read_to_string(path)
+        .map_err(|e| format!("cannot read user config {}: {e}", path.display()))?;
+    Ok(
+        toml::from_str(&raw)
+            .map_err(|e| format!("cannot parse user config {}: {e}", path.display()))?,
+    )
+}
+
+pub(crate) fn save_user_config_file(path: &Path, cfg: &UserConfig) -> Outcome<()> {
+    let serialized =
+        toml::to_string_pretty(cfg).map_err(|e| format!("cannot serialize user config: {e}"))?;
+    fs::write(path, serialized)?;
+    Ok(())
 }
 
 impl SysConfig {
@@ -186,9 +244,9 @@ impl SysConfig {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct UserConfig {
-    anchors: Vec<Anchor>,
-    rsync: Option<RsyncConfig>,
+pub(crate) struct UserConfig {
+    pub(crate) anchors: Vec<Anchor>,
+    pub(crate) rsync: Option<RsyncConfig>,
 }
 
 #[allow(dead_code)]
@@ -214,26 +272,28 @@ impl ConfigParser {
         }
     }
 
-    fn parse_configs(&mut self, params: &Parameters) -> Outcome<()> {
-        if let Err(e) = self.parse_sys_config(params.system_config.as_ref().as_path()) {
+    fn parse_configs_paths(
+        &mut self,
+        system_config: &Path,
+        user_configs: &[PathBuf],
+    ) -> Outcome<()> {
+        if let Err(e) = self.parse_sys_config(system_config) {
             match e {
                 ParseError::InvalidSyntax(syn) => {
                     return bad!(
                         "Invalid sytax in '{}': {}",
-                        &params.system_config.display(),
+                        system_config.display(),
                         syn
                     );
                 }
                 ParseError::FileNotFound => {
-                    return bad!("File not found: '{}'", &params.system_config.display());
+                    return bad!("File not found: '{}'", system_config.display());
                 }
                 ParseError::NoUserFound => return bad!("No user found"),
             }
         }
 
-        // TODO: create a "sinkd group" in /etc/sinkd.conf
-        // TODO: to store the server files in, i.e. /srv/sinkd/<group_name>/<abs_path>
-        if let Err(ParseError::NoUserFound) = self.parse_user_configs(params.user_configs.as_slice()) {
+        if let Err(ParseError::NoUserFound) = self.parse_user_configs(user_configs) {
             warn!("No user was loaded into sinkd, using only system configs");
         }
         Ok(())
@@ -326,9 +386,12 @@ pub struct Inode {
 
 pub type InodeMap = HashMap<PathBuf, Inode>;
 
-pub fn get(params: &Parameters) -> Outcome<(String, InodeMap)> {
+pub fn get(client: &ClientParameters) -> Outcome<(String, InodeMap)> {
     let mut parser = ConfigParser::new();
-    parser.parse_configs(params)?;
+    parser.parse_configs_paths(
+        client.system_config.as_ref().as_path(),
+        client.user_configs.as_ref().as_slice(),
+    )?;
 
     let mut inode_map: InodeMap = HashMap::new();
     let sys_rsync = parser
@@ -372,6 +435,7 @@ pub fn get(params: &Parameters) -> Outcome<(String, InodeMap)> {
     Ok((parser.sys.server_addr, inode_map))
 }
 
+#[must_use]
 pub fn have_permissions() -> bool {
     #[cfg(unix)]
     {
@@ -486,7 +550,10 @@ pub fn resolve(path: &str) -> Outcome<PathBuf> {
                 return bad!("HOME env var not defined: {}", e);
             }
         };
-        p.push(path.strip_prefix("~/").unwrap());
+        let after_tilde = path.strip_prefix("~/").ok_or_else(|| {
+            format!("internal: path was expected to start with '~/': {path}")
+        })?;
+        p.push(after_tilde);
         match p.canonicalize() {
             Ok(resolved) => Ok(resolved),
             Err(e) => bad!("{} '{}'", e, p.display()),

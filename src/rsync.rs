@@ -3,21 +3,17 @@ use log::{debug, error};
 use std::{ffi::OsStr, path::Path, process::Command};
 
 use crate::config::ResolvedRsyncConfig;
+use crate::outcome::Outcome;
 
-pub fn rsync<P>(srcs: &[P], dest: &P, rsync_cfg: &ResolvedRsyncConfig)
+pub fn rsync<P>(srcs: &[P], dest: &P, rsync_cfg: &ResolvedRsyncConfig) -> Outcome<()>
 where
     P: AsRef<OsStr> + AsRef<Path> + std::fmt::Debug,
 {
-    if std::env::var("SINKD_TEST_RSYNC_FAIL")
-        .ok()
-        .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-    {
+    if crate::test_hooks::env_flag_true("SINKD_TEST_RSYNC_FAIL") {
         error!("rsync test hook: forced failure");
-        return;
+        return bad!("rsync test hook: forced failure");
     }
-    if let Some(delay_ms) = std::env::var("SINKD_TEST_RSYNC_DELAY_MS")
-        .ok()
-        .and_then(|v| v.parse::<u64>().ok())
+    if let Some(delay_ms) = crate::test_hooks::env_u64("SINKD_TEST_RSYNC_DELAY_MS")
     {
         std::thread::sleep(std::time::Duration::from_millis(delay_ms));
     }
@@ -26,12 +22,32 @@ where
 
     cmd.args(build_args(rsync_cfg)).args(srcs).arg(dest);
 
-    match cmd.spawn() {
-        Err(x) => error!("{x:#?}"),
-        Ok(_) => debug!("\u{1f6b0} rsync {srcs:#?} {dest:#?} \u{1f919}"),
+    let mut child = match cmd.spawn() {
+        Err(e) => {
+            error!("rsync spawn error: {e:#?}");
+            return bad!("rsync spawn failed: {e}");
+        }
+        Ok(c) => c,
+    };
+
+    let status = match child.wait() {
+        Err(e) => {
+            error!("rsync wait error: {e:#?}");
+            return bad!("rsync wait failed: {e}");
+        }
+        Ok(s) => s,
+    };
+
+    if !status.success() {
+        error!("rsync exited with status {status}");
+        return bad!("rsync failed with status {status}");
     }
+
+    debug!("\u{1f6b0} rsync {srcs:#?} {dest:#?} \u{1f919}");
+    Ok(())
 }
 
+#[must_use]
 pub fn build_args(rsync_cfg: &ResolvedRsyncConfig) -> Vec<String> {
     let mut args = vec!["-atR".to_string(), "--delete".to_string()];
     if rsync_cfg.checksum {

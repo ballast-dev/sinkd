@@ -3,29 +3,171 @@ use log::{debug, error, info, warn};
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use std::{
     collections::{HashMap, HashSet},
+    fs,
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
-        mpsc, Arc, RwLock,
+        mpsc::{self, RecvTimeoutError},
+        Arc, Mutex, RwLock,
     },
     thread,
     time::{Duration, Instant},
 };
 
-use crate::{bad, config, ipc, outcome::Outcome, parameters::Parameters, rsync::rsync};
+use crate::{
+    config,
+    ipc,
+    outcome::Outcome,
+    parameters::{ClientParameters, DaemonParameters},
+    rsync::rsync,
+};
 
-pub fn start(params: &Parameters) -> Outcome<()> {
-    println!("logging to: {}", params.log_path.display());
-    ipc::daemon(init, params)
+struct ClientSyncState {
+    client_id: String,
+    acked_generation: u64,
+    ack_path: PathBuf,
 }
 
-pub fn stop(params: &Parameters) -> Outcome<()> {
-    let _ = config::get(params)?;
-    ipc::send_terminate_signal()?;
+fn client_state_dir(params: &ClientParameters) -> PathBuf {
+    let shared = &params.shared;
+    if shared.debug > 0 {
+        if let Some(p) = &params.client_state_dir_override {
+            if !p.as_os_str().is_empty() {
+                return p.clone();
+            }
+        }
+        if let Ok(p) = std::env::var("SINKD_CLIENT_STATE_DIR") {
+            let p = p.trim();
+            if !p.is_empty() {
+                return PathBuf::from(p);
+            }
+        }
+        PathBuf::from("/tmp/sinkd/client")
+    } else if cfg!(target_os = "windows") {
+        PathBuf::from(r"C:\ProgramData\sinkd\client")
+    } else {
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+        PathBuf::from(home).join(".local/share/sinkd")
+    }
+}
+
+fn ensure_client_state_dir(params: &ClientParameters) -> Outcome<PathBuf> {
+    let dir = client_state_dir(params);
+    if !dir.exists() {
+        fs::create_dir_all(&dir).map_err(|e| format!("client state dir '{}': {e}", dir.display()))?;
+    }
+    Ok(dir)
+}
+
+fn load_or_create_client_id(path: &Path) -> Outcome<String> {
+    if let Ok(s) = fs::read_to_string(path) {
+        let line = s.lines().next().unwrap_or("").trim();
+        if !line.is_empty() {
+            return Ok(line.to_string());
+        }
+    }
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("client_id parent '{}': {e}", parent.display()))?;
+    }
+    let id = uuid::Uuid::new_v4().to_string();
+    fs::write(path, format!("{id}\n"))
+        .map_err(|e| format!("write client_id: {e}"))?;
+    Ok(id)
+}
+
+fn load_acked_generation(path: &Path) -> u64 {
+    fs::read_to_string(path)
+        .ok()
+        .and_then(|s| s.trim().parse().ok())
+        .unwrap_or(0)
+}
+
+fn persist_acked_generation(path: &Path, acked: u64) -> Outcome<()> {
+    fs::write(path, acked.to_string()).map_err(|e| format!("persist acked_generation: {e}"))?;
     Ok(())
 }
 
-pub fn restart(params: &Parameters) -> Outcome<()> {
+fn load_client_sync_state(params: &ClientParameters) -> Outcome<Arc<Mutex<ClientSyncState>>> {
+    let dir = ensure_client_state_dir(params)?;
+    let id_path = dir.join("client_id");
+    let ack_path = dir.join("acked_generation");
+    let client_id = load_or_create_client_id(&id_path)?;
+    let acked_generation = load_acked_generation(&ack_path);
+    Ok(Arc::new(Mutex::new(ClientSyncState {
+        client_id,
+        acked_generation,
+        ack_path,
+    })))
+}
+
+fn attach_client_outbound_basis(
+    payload: &mut ipc::Payload,
+    sync: &Mutex<ClientSyncState>,
+) -> Outcome<()> {
+    let s = sync
+        .lock()
+        .map_err(|e| format!("client sync state lock: {e}"))?;
+    payload.client_id.clear();
+    payload.client_id.push_str(&s.client_id);
+    payload.basis_generation = s.acked_generation;
+    payload.head_generation = 0;
+    payload.last_writer_client_id.clear();
+    Ok(())
+}
+
+fn maybe_record_writer_ack(sync: &Mutex<ClientSyncState>, server_msg: &ipc::Payload) -> Outcome<()> {
+    let mut s = sync
+        .lock()
+        .map_err(|e| format!("client sync state lock: {e}"))?;
+    if server_msg.last_writer_client_id.is_empty() {
+        return Ok(());
+    }
+    if server_msg.last_writer_client_id == s.client_id
+        && server_msg.head_generation > s.acked_generation
+    {
+        s.acked_generation = server_msg.head_generation;
+        persist_acked_generation(&s.ack_path, s.acked_generation)?;
+    }
+    Ok(())
+}
+
+fn record_pull_acked(sync: &Mutex<ClientSyncState>, head_generation: u64) -> Outcome<()> {
+    if head_generation == 0 {
+        return Ok(());
+    }
+    let mut s = sync
+        .lock()
+        .map_err(|e| format!("client sync state lock: {e}"))?;
+    if head_generation > s.acked_generation {
+        s.acked_generation = head_generation;
+        persist_acked_generation(&s.ack_path, s.acked_generation)?;
+    }
+    Ok(())
+}
+
+/// Linux/Android use inotify-style backends without extra polling; other platforms fall back to periodic poll.
+fn notify_config_for_platform() -> notify::Config {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        notify::Config::default()
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    {
+        notify::Config::default().with_poll_interval(Duration::from_secs(1))
+    }
+}
+
+pub fn start(params: &ClientParameters) -> Outcome<()> {
+    println!("logging to: {}", params.shared.log_path.display());
+    ipc::daemon(&DaemonParameters::Client(params.clone()))
+}
+
+pub fn stop(_params: &ClientParameters) -> Outcome<()> {
+    ipc::send_terminate_signal()
+}
+
+pub fn restart(params: &ClientParameters) -> Outcome<()> {
     match stop(params) {
         Ok(()) => {
             start(params)?;
@@ -36,18 +178,24 @@ pub fn restart(params: &Parameters) -> Outcome<()> {
 }
 
 // Daemonized call, stdin/stdout/stderr are closed
-pub fn init(params: &Parameters) -> Outcome<()> {
-    let (_srv_addr, inode_map) = config::get(params)?;
+pub fn init(params: &ClientParameters) -> Outcome<()> {
+    let client_sync = load_client_sync_state(params)?;
+    let params = Arc::new(params.clone());
+    // `_srv_addr`: RSYNC destination / server address from TOML — reserved until the wire protocol
+    // needs it here (currently paths use `Payload.hostname` for remote rsync).
+    let (_srv_addr, inode_map) = config::get(params.as_ref())?;
 
     let (notify_tx, notify_rx): (mpsc::Sender<notify::Event>, mpsc::Receiver<notify::Event>) =
         mpsc::channel();
     let (event_tx, event_rx): (mpsc::Sender<PathBuf>, mpsc::Receiver<PathBuf>) = mpsc::channel();
 
-    // keep the watchers alive!
-    let _watchers = match setup_watchers(&inode_map, notify_tx) {
-        Ok(w) => w,
-        Err(e) => return bad!("{}", e),
-    };
+    let watchers: Arc<Mutex<Vec<RecommendedWatcher>>> = Arc::new(Mutex::new(Vec::new()));
+    {
+        let initial = setup_watchers(&inode_map, notify_tx.clone())?;
+        *watchers
+            .lock()
+            .map_err(|e| format!("watchers lock poisoned: {e}"))? = initial;
+    }
 
     let fatal = Arc::new(AtomicBool::new(false));
     signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&fatal))?;
@@ -64,7 +212,11 @@ pub fn init(params: &Parameters) -> Outcome<()> {
     let zenoh_thread = thread::spawn({
         let fatal = Arc::clone(&fatal);
         let inode_map = Arc::clone(&inodes);
-        move || zenoh_entry(inode_map, event_rx, fatal)
+        let params = Arc::clone(&params);
+        let watchers = Arc::clone(&watchers);
+        let notify_tx = notify_tx.clone();
+        let client_sync = Arc::clone(&client_sync);
+        move || zenoh_entry(inode_map, event_rx, fatal, params, watchers, notify_tx, client_sync)
     });
 
     match watch_thread.join() {
@@ -125,7 +277,7 @@ fn watch_entry(
             return Ok(());
         }
 
-        match notify_rx.try_recv() {
+        match notify_rx.recv_timeout(Duration::from_millis(500)) {
             Ok(event) => {
                 if matches!(
                     event.kind,
@@ -139,12 +291,11 @@ fn watch_entry(
                 }
             }
             Err(err) => match err {
-                mpsc::TryRecvError::Empty => {
-                    std::thread::sleep(std::time::Duration::from_millis(200));
-                }
-                mpsc::TryRecvError::Disconnected => {
+                RecvTimeoutError::Timeout => {}
+                RecvTimeoutError::Disconnected => {
                     error!("FATAL: notify_rx hung up in watch_entry");
                     fatal.store(true, Ordering::Relaxed);
+                    return bad!("client:watch_entry>> notify_rx disconnected");
                 }
             },
         }
@@ -156,6 +307,10 @@ fn zenoh_entry(
     inode_map: Arc<RwLock<config::InodeMap>>,
     event_rx: mpsc::Receiver<PathBuf>,
     fatal: Arc<AtomicBool>,
+    params: Arc<ClientParameters>,
+    watchers: Arc<Mutex<Vec<RecommendedWatcher>>>,
+    notify_tx: mpsc::Sender<Event>,
+    client_sync: Arc<Mutex<ClientSyncState>>,
 ) -> Outcome<()> {
     let (zenoh_client, zenoh_rx, terminal_topic): (ipc::ZenohClient, ipc::Rx, String) =
         match ipc::connect_with_terminate_topic(&[ipc::TOPIC_SERVER], ipc::TOPIC_CLIENTS) {
@@ -166,10 +321,6 @@ fn zenoh_entry(
             }
         };
 
-    //// assume we are behind
-    //let mut server_status = ipc::Status::NotReady(ipc::Reason::Behind);
-    let mut cycle: u32 = 0; // WARN: maybe this should be read from disk
-
     // The server will send status updates to it's clients every 5 seconds
     loop {
         if fatal.load(Ordering::Relaxed) {
@@ -178,7 +329,7 @@ fn zenoh_entry(
             return Ok(());
         }
 
-        match zenoh_rx.try_recv() {
+        match zenoh_rx.recv_timeout(Duration::from_secs(1)) {
             Ok(message) => {
                 if let Err(e) = handle_incoming_transport_message(
                     message,
@@ -187,27 +338,28 @@ fn zenoh_entry(
                     &event_rx,
                     &zenoh_client,
                     &inode_map,
-                    &mut cycle,
+                    params.as_ref(),
+                    &watchers,
+                    &notify_tx,
+                    &client_sync,
                 ) {
                     error!("client:zenoh_entry>> process: {e}");
                 }
             }
             Err(e) => match e {
-                mpsc::TryRecvError::Disconnected => {
+                RecvTimeoutError::Disconnected => {
                     fatal.store(true, Ordering::Relaxed);
                     return bad!("client:zenoh_entry>> zenoh_rx hung up?");
                 }
-                mpsc::TryRecvError::Empty => {
+                RecvTimeoutError::Timeout => {
                     debug!("client:zenoh_entry>> waiting on message...");
                 }
             },
         }
-
-        // TODO: add 'system_interval' to config
-        std::thread::sleep(Duration::from_secs(1));
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn handle_incoming_transport_message(
     message: Option<ipc::ZenohMessage>,
     terminal_topic: &str,
@@ -215,7 +367,10 @@ fn handle_incoming_transport_message(
     event_rx: &mpsc::Receiver<PathBuf>,
     zenoh_client: &ipc::ZenohClient,
     inode_map: &Arc<RwLock<config::InodeMap>>,
-    cycle: &mut u32,
+    params: &ClientParameters,
+    watchers: &Arc<Mutex<Vec<RecommendedWatcher>>>,
+    notify_tx: &mpsc::Sender<Event>,
+    client_sync: &Arc<Mutex<ClientSyncState>>,
 ) -> Outcome<()> {
     let Some(msg) = message else {
         return bad!("client:zenoh_entry>> empty message?");
@@ -227,19 +382,31 @@ fn handle_incoming_transport_message(
         return Ok(());
     }
 
+    if msg.topic == ipc::TOPIC_CONTROL_RELOAD {
+        return apply_client_config_reload(params, inode_map, watchers, notify_tx);
+    }
+
     // process Zenoh traffic from server
     debug!("client>> 👍 recv: {}", msg.payload);
-    process(event_rx, zenoh_client, inode_map, msg.payload.status, cycle)
+    process(
+        event_rx,
+        zenoh_client,
+        inode_map,
+        client_sync,
+        &msg.payload,
+    )
 }
 
 fn process(
     event_rx: &mpsc::Receiver<PathBuf>,
     zenoh_client: &ipc::ZenohClient,
     inode_map: &Arc<RwLock<config::InodeMap>>,
-    status: ipc::Status,
-    cycle: &mut u32,
+    client_sync: &Arc<Mutex<ClientSyncState>>,
+    server_msg: &ipc::Payload,
 ) -> Outcome<()> {
-    match status {
+    maybe_record_writer_ack(client_sync, server_msg)?;
+
+    match server_msg.status {
         ipc::Status::NotReady(reason) => match reason {
             ipc::Reason::Busy => {
                 info!("client:process>> server busy... wait 5 secs");
@@ -250,18 +417,25 @@ fn process(
                 debug!("client:process>> Behind synch up");
                 // let's sync up
                 if let Ok(map_read) = inode_map.read() {
+                    let head = server_msg.head_generation;
                     let src_paths = map_read.keys().cloned().collect();
                     let mut payload = ipc::Payload::new()?
                         .status(ipc::Status::NotReady(ipc::Reason::Behind))
                         .src_paths(src_paths);
-                    pull(&payload);
-                    zenoh_client.publish(&mut payload)
+                    pull(&payload)?;
+                    attach_client_outbound_basis(&mut payload, client_sync)?;
+                    zenoh_client.publish(&mut payload)?;
+                    record_pull_acked(client_sync, head)?;
+                    Ok(())
                 } else {
                     bad!("unable to acquire inode_map read lock")
                 }
             }
 
-            ipc::Reason::Other => todo!(),
+            ipc::Reason::Other => {
+                warn!("client:process>> unhandled NotReady(Other); no action");
+                Ok(())
+            }
         },
         ipc::Status::Ready => {
             debug!("client:process>> ipc::Status::Ready");
@@ -287,11 +461,10 @@ fn process(
                         };
 
                         for (rsync_cfg, paths) in grouped_paths {
-                            *cycle += 1;
                             let mut payload = ipc::Payload::new()?
                                 .src_paths(paths)
-                                .cycle(*cycle)
                                 .rsync(rsync_cfg);
+                            attach_client_outbound_basis(&mut payload, client_sync)?;
                             if let Err(e) = zenoh_client.publish(&mut payload) {
                                 error!("unable to publish {e}");
                             } else {
@@ -309,6 +482,30 @@ fn process(
     }
 }
 
+fn apply_client_config_reload(
+    params: &ClientParameters,
+    inode_map: &Arc<RwLock<config::InodeMap>>,
+    watchers: &Arc<Mutex<Vec<RecommendedWatcher>>>,
+    notify_tx: &mpsc::Sender<Event>,
+) -> Outcome<()> {
+    let (_srv_addr, new_map) = config::get(params)?;
+    let new_watchers = setup_watchers(&new_map, notify_tx.clone())?;
+    {
+        let mut im = inode_map
+            .write()
+            .map_err(|e| format!("inode_map write lock poisoned: {e}"))?;
+        *im = new_map;
+    }
+    {
+        let mut w = watchers
+            .lock()
+            .map_err(|e| format!("watchers lock poisoned: {e}"))?;
+        *w = new_watchers;
+    }
+    info!("client: configuration reloaded from disk");
+    Ok(())
+}
+
 #[allow(clippy::needless_pass_by_value)]
 fn setup_watchers(
     inode_map: &config::InodeMap,
@@ -321,6 +518,7 @@ fn setup_watchers(
         let tx_clone = tx.clone();
 
         // Create a watcher with initial configuration
+        let notify_cfg = notify_config_for_platform();
         let mut watcher = RecommendedWatcher::new(
             move |res| match res {
                 Ok(event) => {
@@ -330,7 +528,7 @@ fn setup_watchers(
                 }
                 Err(err) => error!("watch error: {err:?}"),
             },
-            notify::Config::default().with_poll_interval(std::time::Duration::from_secs(1)), // Set polling interval
+            notify_cfg,
         )
         .map_err(|e| format!("couldn't create watcher: {e}"))?;
 
@@ -373,7 +571,7 @@ fn filter_file_events(event_rx: &mpsc::Receiver<PathBuf>) -> Outcome<Vec<PathBuf
 }
 
 #[allow(dead_code)]
-fn push(payload: &ipc::Payload) {
+fn push(payload: &ipc::Payload) -> Outcome<()> {
     let dest = PathBuf::from(format!(
         "{}:{}",
         payload.hostname,
@@ -390,10 +588,10 @@ fn push(payload: &ipc::Payload) {
         dest.display()
     );
     let rsync_cfg = payload.rsync.clone().unwrap_or_default();
-    rsync(&payload.src_paths, &dest, &rsync_cfg);
+    rsync(&payload.src_paths, &dest, &rsync_cfg)
 }
 
-fn pull(payload: &ipc::Payload) {
+fn pull(payload: &ipc::Payload) -> Outcome<()> {
     let srcs: Vec<PathBuf> = payload
         .src_paths
         .iter()
@@ -410,7 +608,7 @@ fn pull(payload: &ipc::Payload) {
     );
 
     let rsync_cfg = payload.rsync.clone().unwrap_or_default();
-    rsync(&srcs, &payload.dest_path, &rsync_cfg);
+    rsync(&srcs, &payload.dest_path, &rsync_cfg)
 }
 
 #[cfg(test)]

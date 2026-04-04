@@ -4,13 +4,15 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use zenoh::{key_expr::KeyExpr, sample::SampleKind, Wait};
 
-use crate::{bad, outcome::Outcome};
+use crate::outcome::Outcome;
 
 use super::Payload;
 
 /// Topic names - same as the MQTT topics for consistency
 pub const TOPIC_CLIENTS: &str = "sinkd/clients";
 pub const TOPIC_SERVER: &str = "sinkd/server";
+/// Published after CLI config changes so a running daemon can reload from disk.
+pub const TOPIC_CONTROL_RELOAD: &str = "sinkd/control/reload";
 
 /// Zenoh-compatible message type
 /// Uses only primitive types to keep the payload portable
@@ -22,7 +24,10 @@ pub struct ZenohPayload {
     pub src_paths: String,
     pub dest_path: String,
     pub date: String,
-    pub cycle: u32,
+    pub client_id: String,
+    pub basis_generation: u64,
+    pub head_generation: u64,
+    pub last_writer_client_id: String,
     /// Status encoded as: 0=Ready, 1=Busy, 2=Behind, 3=Other
     pub status_code: u8,
     pub rsync: Option<crate::config::ResolvedRsyncConfig>,
@@ -51,7 +56,10 @@ impl ZenohPayload {
             src_paths,
             dest_path: p.dest_path.to_string_lossy().to_string(),
             date: p.date.clone(),
-            cycle: p.cycle,
+            client_id: p.client_id.clone(),
+            basis_generation: p.basis_generation,
+            head_generation: p.head_generation,
+            last_writer_client_id: p.last_writer_client_id.clone(),
             status_code,
             rsync: p.rsync.clone(),
         }
@@ -81,7 +89,10 @@ impl ZenohPayload {
             src_paths,
             dest_path: PathBuf::from(&self.dest_path),
             date: self.date.clone(),
-            cycle: self.cycle,
+            client_id: self.client_id.clone(),
+            basis_generation: self.basis_generation,
+            head_generation: self.head_generation,
+            last_writer_client_id: self.last_writer_client_id.clone(),
             status,
             rsync: self.rsync.clone(),
         }
@@ -277,22 +288,15 @@ fn send_payload(
 }
 
 fn test_publish_delay_ms() -> u64 {
-    std::env::var("SINKD_TEST_PUBLISH_DELAY_MS")
-        .ok()
-        .and_then(|v| v.parse::<u64>().ok())
-        .unwrap_or(0)
+    crate::test_hooks::env_u64("SINKD_TEST_PUBLISH_DELAY_MS").unwrap_or(0)
 }
 
 fn test_drop_every_n() -> Option<u64> {
-    std::env::var("SINKD_TEST_DROP_EVERY_N")
-        .ok()
-        .and_then(|v| v.parse::<u64>().ok())
+    crate::test_hooks::env_u64("SINKD_TEST_DROP_EVERY_N")
 }
 
 fn test_reorder_pairs() -> bool {
-    std::env::var("SINKD_TEST_REORDER_PAIRS")
-        .ok()
-        .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+    crate::test_hooks::env_flag_true("SINKD_TEST_REORDER_PAIRS")
 }
 
 #[cfg(test)]
@@ -310,7 +314,10 @@ mod tests {
             vec![PathBuf::from("/tmp/a"), PathBuf::from("/tmp/b")],
             PathBuf::from("/srv/sinkd"),
             "20260203".to_string(),
-            42,
+            "client-uuid".to_string(),
+            9,
+            11,
+            String::new(),
             Status::NotReady(Reason::Behind),
             None,
         );
@@ -323,7 +330,10 @@ mod tests {
         assert_eq!(decoded.src_paths, payload.src_paths);
         assert_eq!(decoded.dest_path, payload.dest_path);
         assert_eq!(decoded.date, payload.date);
-        assert_eq!(decoded.cycle, payload.cycle);
+        assert_eq!(decoded.client_id, payload.client_id);
+        assert_eq!(decoded.basis_generation, payload.basis_generation);
+        assert_eq!(decoded.head_generation, payload.head_generation);
+        assert_eq!(decoded.last_writer_client_id, payload.last_writer_client_id);
         assert_eq!(decoded.status, payload.status);
     }
 
@@ -335,7 +345,10 @@ mod tests {
             vec![],
             PathBuf::from("x"),
             "d".to_string(),
+            String::new(),
             0,
+            0,
+            String::new(),
             Status::Ready,
             None,
         );
@@ -345,7 +358,10 @@ mod tests {
             vec![],
             PathBuf::from("x"),
             "d".to_string(),
+            String::new(),
             0,
+            0,
+            String::new(),
             Status::NotReady(Reason::Busy),
             None,
         );
@@ -355,7 +371,10 @@ mod tests {
             vec![],
             PathBuf::from("x"),
             "d".to_string(),
+            String::new(),
             0,
+            0,
+            String::new(),
             Status::NotReady(Reason::Behind),
             None,
         );
@@ -365,7 +384,10 @@ mod tests {
             vec![],
             PathBuf::from("x"),
             "d".to_string(),
+            String::new(),
             0,
+            0,
+            String::new(),
             Status::NotReady(Reason::Other),
             None,
         );
@@ -398,7 +420,10 @@ mod tests {
             vec![PathBuf::from("/tmp/smoke-file")],
             PathBuf::from("/srv/smoke"),
             "20260101".to_string(),
-            1,
+            "smoke-client".to_string(),
+            0,
+            0,
+            String::new(),
             Status::Ready,
             None,
         );

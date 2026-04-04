@@ -62,6 +62,7 @@ pub fn println(arg: &str, attr: Attrs, color: Colors) {
 }
 
 #[allow(dead_code)]
+#[must_use]
 pub fn format(arg: &str, attr: Attrs, color: Colors) -> String {
     format!("\u{1b}[{attr};{color}m{arg}\u{1b}[0m")
 }

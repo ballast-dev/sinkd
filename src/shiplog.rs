@@ -2,7 +2,7 @@ use log::{info, Level, LevelFilter, Metadata, Record};
 use std::fs::OpenOptions;
 use std::io::prelude::*;
 
-use crate::{config, outcome::Outcome, parameters::Parameters, time};
+use crate::{config, outcome::Outcome, parameters::SharedDaemonParams, time};
 
 pub struct ShipLog {
     file: std::fs::File,
@@ -10,16 +10,16 @@ pub struct ShipLog {
 }
 
 impl ShipLog {
-    fn new(params: &Parameters) -> Self {
+    fn new(shared: &SharedDaemonParams) -> Self {
         ShipLog {
             file: OpenOptions::new()
                 .write(true)
-                .append(params.debug == 0)
-                .truncate(params.debug > 0)
+                .append(shared.debug == 0)
+                .truncate(shared.debug > 0)
                 .create(true)
-                .open(&params.log_path)
+                .open(&shared.log_path)
                 .expect("couldn't create log file"),
-            debug_level: params.debug,
+            debug_level: shared.debug,
         }
     }
 }
@@ -32,18 +32,20 @@ impl log::Log for ShipLog {
     fn log(&self, record: &Record) {
         if self.enabled(record.metadata()) {
             let target = record.target();
-            if target.starts_with("paho") {
-                if self.debug_level == 2 {
-                    writeln!(
-                        &self.file,
-                        "{}[MQTT][{}]-{}",
-                        time::stamp(None),
-                        record.level(),
-                        record.args()
-                    )
-                    .expect("couldn't write to log file");
-                }
-            } else {
+            let third_party_ipc = target.starts_with("zenoh") || target.starts_with("paho");
+            if third_party_ipc && self.debug_level != 2 {
+                return;
+            }
+            if third_party_ipc && self.debug_level == 2 {
+                writeln!(
+                    &self.file,
+                    "{}[IPC][{}]-{}",
+                    time::stamp(None),
+                    record.level(),
+                    record.args()
+                )
+                .expect("couldn't write to log file");
+            } else if !third_party_ipc {
                 writeln!(
                     &self.file,
                     "{}[{}]-{}",
@@ -59,33 +61,34 @@ impl log::Log for ShipLog {
     fn flush(&self) {}
 }
 
-pub fn init(params: &Parameters) -> Outcome<()> {
-    create_log_file(params)?;
-    log::set_boxed_logger(Box::new(ShipLog::new(params))).expect("unable to create logger");
-    log::set_max_level(match params.verbosity {
+pub fn init(shared: &SharedDaemonParams) -> Outcome<()> {
+    create_log_file(shared)?;
+    log::set_boxed_logger(Box::new(ShipLog::new(shared)))
+        .map_err(|e| format!("unable to create logger: {e}"))?;
+    log::set_max_level(match shared.verbosity {
         1 => LevelFilter::Error,
         2 => LevelFilter::Warn,
         3 => LevelFilter::Info,
         _ => LevelFilter::Debug,
     });
-    println!("Logging to: '{}'", params.log_path.display());
+    println!("Logging to: '{}'", shared.log_path.display());
     info!("======== ⚓ log initialized ⚓ ========");
     Ok(())
 }
 
-fn create_log_file(params: &Parameters) -> Outcome<()> {
-    if params.debug == 0 && !config::have_permissions() {
+fn create_log_file(shared: &SharedDaemonParams) -> Outcome<()> {
+    if shared.debug == 0 && !config::have_permissions() {
         return bad!("Need to be root to create log file");
     }
 
-    if !params.log_path.exists() && params.debug > 0 {
-        if let Err(why) = std::fs::File::create(&params.log_path) {
+    if !shared.log_path.exists() && shared.debug > 0 {
+        if let Err(why) = std::fs::File::create(&shared.log_path) {
             return bad!(
                 "cannot create '{}' {}",
-                params.log_path.display(),
+                shared.log_path.display(),
                 why.kind()
             );
         }
     }
-    Ok(()) // already created
+    Ok(())
 }

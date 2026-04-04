@@ -2564,7 +2564,6 @@ dependencies = [
  "bincode",
  "chrono",
  "clap",
- "crossbeam",
  "libc",
  "log",
  "nix 0.30.1",
@@ -2572,6 +2571,7 @@ dependencies = [
  "serde",
  "signal-hook",
  "toml",
+ "uuid",
  "windows",
  "zenoh",
 ]

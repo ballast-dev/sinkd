@@ -11,6 +11,25 @@ use serde::Serialize;
 
 use crate::spec::{ScenarioSpec, Step};
 
+fn expand_root_template(root: &Path, s: &str) -> String {
+    let resolved = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    s.replace("{{root}}", &resolved.display().to_string())
+}
+
+#[inline]
+fn millis_as_u64(ms: u128) -> u64 {
+    u64::try_from(ms).unwrap_or(u64::MAX)
+}
+
+fn ensure_parent_dir(path: &Path) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("failed to create parent '{}': {e}", parent.display()))
+    } else {
+        Ok(())
+    }
+}
+
 #[derive(Debug)]
 pub struct ScenarioRunner {
     root: PathBuf,
@@ -32,7 +51,7 @@ impl ScenarioRunner {
         let started = Instant::now();
 
         info!("running scenario '{}'", spec.name);
-        let mut report = ScenarioReport::new(spec.name.clone(), self.root.clone());
+        let mut report = ScenarioReport::new(spec.name.clone(), &self.root);
         let mut overall_result: Result<(), String> = Ok(());
         for (idx, step) in spec.steps.iter().enumerate() {
             if started.elapsed() > timeout {
@@ -47,7 +66,7 @@ impl ScenarioRunner {
                 Ok(()) => report.steps.push(ExecutedStep {
                     index: idx,
                     kind: step.kind(),
-                    elapsed_ms: step_started.elapsed().as_millis() as u64,
+                    elapsed_ms: millis_as_u64(step_started.elapsed().as_millis()),
                     success: true,
                     error: None,
                 }),
@@ -55,7 +74,7 @@ impl ScenarioRunner {
                     report.steps.push(ExecutedStep {
                         index: idx,
                         kind: step.kind(),
-                        elapsed_ms: step_started.elapsed().as_millis() as u64,
+                        elapsed_ms: millis_as_u64(step_started.elapsed().as_millis()),
                         success: false,
                         error: Some(e.clone()),
                     });
@@ -65,7 +84,7 @@ impl ScenarioRunner {
             }
         }
 
-        report.total_elapsed_ms = started.elapsed().as_millis() as u64;
+        report.total_elapsed_ms = millis_as_u64(started.elapsed().as_millis());
         report.success = overall_result.is_ok();
         report.error = overall_result.clone().err();
         let _ = self.write_report(&report);
@@ -76,6 +95,7 @@ impl ScenarioRunner {
         overall_result
     }
 
+    #[allow(clippy::too_many_lines)]
     fn execute_step(&self, step: &Step) -> Result<(), String> {
         match step {
             Step::CreateDir { path } => {
@@ -85,7 +105,7 @@ impl ScenarioRunner {
             }
             Step::WriteFile { path, content } => {
                 let full = self.root.join(path);
-                self.ensure_parent_dir(&full)?;
+                ensure_parent_dir(&full)?;
                 fs::write(&full, content)
                     .map_err(|e| format!("failed to write file '{}': {e}", full.display()))
             }
@@ -93,7 +113,7 @@ impl ScenarioRunner {
                 use std::io::Write;
 
                 let full = self.root.join(path);
-                self.ensure_parent_dir(&full)?;
+                ensure_parent_dir(&full)?;
                 let mut file = fs::OpenOptions::new()
                     .create(true)
                     .append(true)
@@ -110,9 +130,10 @@ impl ScenarioRunner {
                 command,
                 allow_failure,
             } => {
+                let command = expand_root_template(&self.root, command);
                 let status = Command::new("sh")
                     .arg("-c")
-                    .arg(command)
+                    .arg(&command)
                     .status()
                     .map_err(|e| format!("failed to execute command '{command}': {e}"))?;
                 if status.success() || *allow_failure {
@@ -150,7 +171,7 @@ impl ScenarioRunner {
                 path,
                 within_ms,
                 poll_interval_ms,
-            } => self.assert_eventually(
+            } => Self::assert_eventually(
                 || self.root.join(path).exists(),
                 *within_ms,
                 *poll_interval_ms,
@@ -166,7 +187,7 @@ impl ScenarioRunner {
                 poll_interval_ms,
             } => {
                 let full = self.root.join(path);
-                self.assert_eventually(
+                Self::assert_eventually(
                     || {
                         fs::read_to_string(&full)
                             .map(|text| text.contains(contains))
@@ -180,17 +201,7 @@ impl ScenarioRunner {
         }
     }
 
-    fn ensure_parent_dir(&self, path: &Path) -> Result<(), String> {
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| format!("failed to create parent '{}': {e}", parent.display()))
-        } else {
-            Ok(())
-        }
-    }
-
     fn assert_eventually<F>(
-        &self,
         mut predicate: F,
         within_ms: u64,
         poll_interval_ms: u64,
@@ -239,10 +250,10 @@ struct ScenarioReport {
 }
 
 impl ScenarioReport {
-    fn new(name: String, root: PathBuf) -> Self {
+    fn new(name: String, root: impl AsRef<Path>) -> Self {
         ScenarioReport {
             name,
-            root: root.display().to_string(),
+            root: root.as_ref().display().to_string(),
             success: false,
             total_elapsed_ms: 0,
             error: None,
@@ -262,8 +273,29 @@ struct ExecutedStep {
 
 #[cfg(test)]
 mod tests {
-    use super::ScenarioRunner;
+    use super::{expand_root_template, ScenarioRunner};
     use crate::spec::{ScenarioSpec, Step};
+
+    #[test]
+    fn expand_root_template_replaces_placeholder() {
+        let tmp = std::env::temp_dir().join(format!(
+            "sinkd_scenario_tpl_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&tmp).expect("mkdir");
+        let resolved = tmp.canonicalize().expect("canonicalize");
+        let out = expand_root_template(&tmp, "pre {{root}} post");
+        assert!(
+            out.contains(resolved.to_str().expect("utf8")),
+            "expected '{}' in '{}'",
+            resolved.display(),
+            out
+        );
+        let _ = std::fs::remove_dir_all(tmp);
+    }
 
     #[test]
     fn runner_executes_write_append_and_asserts() {
