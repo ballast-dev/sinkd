@@ -5,3 +5,5 @@ target/
 test/
 .venv/
 __pycache__/
+
+test_scenarios/

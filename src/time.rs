@@ -8,6 +8,7 @@ use crate::Outcome;
 const DEFAULT_FORMAT: &str = "%T";
 
 /// Function to get the current timestamp as a formatted string
+#[must_use]
 pub fn stamp(fmt: Option<&str>) -> String {
     let now: DateTime<Local> = Local::now();
     now.format(fmt.unwrap_or(DEFAULT_FORMAT)).to_string()
@@ -16,7 +17,7 @@ pub fn stamp(fmt: Option<&str>) -> String {
 #[derive(Debug, PartialEq)]
 struct LastSync {
     timestamp: String,
-    cycle: u32,
+    generation: u64,
 }
 
 #[allow(dead_code)]
@@ -24,11 +25,14 @@ impl LastSync {
     pub fn new() -> Self {
         LastSync {
             timestamp: stamp(None),
-            cycle: 0,
+            generation: 0,
         }
     }
-    pub fn from(timestamp: String, cycle: u32) -> Self {
-        LastSync { timestamp, cycle }
+    pub fn from(timestamp: String, generation: u64) -> Self {
+        LastSync {
+            timestamp,
+            generation,
+        }
     }
 }
 
@@ -47,14 +51,14 @@ where
         _ => return bad!("Missing timestamp"),
     };
 
-    let cycle_str = match lines.next() {
+    let generation_str = match lines.next() {
         Some(Ok(line)) => line.trim().to_string(),
-        _ => "0".to_string(), // Default cycle if not present
+        _ => "0".to_string(),
     };
 
-    let cycle = cycle_str.parse::<u32>().unwrap_or(0);
+    let generation = generation_str.parse::<u64>().unwrap_or(0);
 
-    Ok(LastSync::from(timestamp, cycle))
+    Ok(LastSync::from(timestamp, generation))
 }
 
 /// Function to write `LastSync` to a given file path
@@ -66,7 +70,7 @@ where
     let file = File::create(path)?;
     let mut writer = io::BufWriter::new(file);
     writeln!(writer, "{}", last_sync.timestamp)?;
-    writeln!(writer, "{}", last_sync.cycle)?;
+    writeln!(writer, "{}", last_sync.generation)?;
     Ok(writer.flush()?)
 }
 
@@ -122,15 +126,15 @@ mod tests {
         assert!(ls.is_ok(), "last_sync() returned an error");
 
         let ls = ls.unwrap();
-        assert_eq!(ls.cycle, 0);
+        assert_eq!(ls.generation, 0);
         assert!(!ls.timestamp.is_empty());
 
-        // Now, modify the file to have a different timestamp and cycle
+        // Now, modify the file to have a different timestamp and generation
         {
             let mut file =
                 File::create(&temp_path).expect("Failed to create temporary lastsync file");
             writeln!(file, "2024-04-01 12:00:00").expect("Failed to write timestamp");
-            writeln!(file, "5").expect("Failed to write cycle");
+            writeln!(file, "5").expect("Failed to write generation");
         }
 
         // Call last_sync again, which should read the updated values
@@ -142,7 +146,7 @@ mod tests {
 
         let ls_updated = ls_updated.unwrap();
         println!("Updated Last Sync: {ls_updated:?}");
-        assert_eq!(ls_updated.cycle, 5);
+        assert_eq!(ls_updated.generation, 5);
         assert_eq!(ls_updated.timestamp, "2024-04-01 12:00:00");
         fs::remove_file(&temp_path).expect("Failed to remove temporary lastsync file");
     }

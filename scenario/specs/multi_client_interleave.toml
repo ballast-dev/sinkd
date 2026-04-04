@@ -1,0 +1,7 @@
+# Host-based e2e: two debug clients, interleaved FS writes, generation advances.
+name = "multi-client-interleave"
+timeout_ms = 240000
+
+[[steps]]
+kind = "run_command"
+command = "bash scenario/scripts/multi_client_interleave.sh '{{root}}'"

@@ -1,88 +1,186 @@
 use clap::parser::ValuesRef;
+use log::{info, warn};
 use std::fs;
 
-use crate::{fancy_debug, outcome::Outcome, parameters::Parameters};
-// adds entry to ~/.sinkd/sinkd.conf
-// tells daemon to read config again
-// send a SIGHUP signal
-// unsafe {
-//     let s: libc::sighandler_t = reload_config;
-//     libc::signal(libc::SIGHUP, s);
-// }
+use crate::{
+    config::{self, SysConfig},
+    ipc,
+    outcome::Outcome,
+    parameters::ClientParameters,
+};
 
-pub fn add(share_paths: &[&String], user_paths: &[&String]) {
-    for p in share_paths {
-        println!("share_path: {p}");
-    }
-    for p in user_paths {
-        println!("user_path: {p}");
+fn notify_reload() {
+    if let Err(e) = ipc::publish_config_reload_signal() {
+        warn!("config updated but could not publish reload notification over Zenoh: {e}");
     }
 }
 
-pub fn remove(share_paths: &[&String], user_paths: &[&String]) {
-    for p in share_paths {
-        println!("share_path: {p}");
+/// `--share` updates system-config anchors; bare PATH arguments update each resolved user config.
+pub fn add(params: &ClientParameters, share_paths: &[&String], user_paths: &[&String]) -> Outcome<()> {
+    if share_paths.is_empty() && user_paths.is_empty() {
+        return bad!("add: supply at least one --share and/or PATH");
     }
-    for p in user_paths {
-        println!("user_path: {p}");
-    }
-}
 
-pub fn adduser(users: Option<ValuesRef<String>>) -> Outcome<()> {
-    match users {
-        Some(users) => {
-            for user in users {
-                fancy_debug!("{}", user);
+    let sys_path = params.system_config.as_ref().as_path();
+
+    if !share_paths.is_empty() {
+        let mut sys = config::load_system_config_file(sys_path)?;
+        let anchors = sys.anchors.get_or_insert_with(Vec::new);
+        for p in share_paths {
+            let resolved = config::resolve(p)?;
+            if anchors.iter().any(|a| a.path == resolved) {
+                continue;
             }
-            Ok(())
+            anchors.push(config::Anchor::with_path(resolved));
         }
-        None => bad!("no user(s) were given!"),
+        config::save_system_config_file(sys_path, &sys)?;
+        info!("updated system config {}", sys_path.display());
     }
-}
 
-pub fn rmuser(users: Option<ValuesRef<String>>) -> Outcome<()> {
-    match users {
-        Some(users) => {
-            for user in users {
-                fancy_debug!("{}", user);
+    if !user_paths.is_empty() {
+        if params.user_configs.is_empty() {
+            return bad!(
+                "no user config files resolved; use --usr-cfg or create ~/.config/sinkd/sinkd.conf"
+            );
+        }
+        for user_path in params.user_configs.iter() {
+            let mut usr = config::load_user_config_file(user_path.as_path())?;
+            for p in user_paths {
+                let resolved = config::resolve(p)?;
+                if usr.anchors.iter().any(|a| a.path == resolved) {
+                    continue;
+                }
+                usr.anchors.push(config::Anchor::with_path(resolved));
             }
-            Ok(())
+            config::save_user_config_file(user_path.as_path(), &usr)?;
+            info!("updated user config {}", user_path.display());
         }
-        None => bad!("no user(s) were given!"),
     }
+
+    notify_reload();
+    Ok(())
 }
 
-pub fn list(paths: Option<Vec<&String>>) -> Outcome<bool> {
-    match paths {
-        Some(paths) => {
-            for path in paths {
-                println!("path: {path}");
+pub fn remove(
+    params: &ClientParameters,
+    share_paths: &[&String],
+    user_paths: &[&String],
+) -> Outcome<()> {
+    if share_paths.is_empty() && user_paths.is_empty() {
+        return bad!("remove: supply at least one --share and/or PATH");
+    }
+
+    let sys_path = params.system_config.as_ref().as_path();
+
+    if !share_paths.is_empty() {
+        let mut sys = config::load_system_config_file(sys_path)?;
+        if let Some(anchors) = sys.anchors.as_mut() {
+            for p in share_paths {
+                let resolved = config::resolve(p)?;
+                anchors.retain(|a| a.path != resolved);
             }
-            let user = std::env::var("USER").map_err(|e| e.to_string())?;
-            fancy_debug!("user: {}", user);
-            Ok(true)
         }
-        None => bad!("no paths were given!"),
+        config::save_system_config_file(sys_path, &sys)?;
+        info!("updated system config {}", sys_path.display());
     }
-    // match config::ConfigParser::get_user_config(user) {
-    //     Ok(usr_cfg) => {
-    //         for anchor in &usr_cfg.anchors {
-    //             println!("{}", anchor.path.display());
-    //         }
-    //     },
-    //     Err(e) => {
-    //         eprintln!("user config: {}", e)
-    //     }
-    // }
+
+    if !user_paths.is_empty() {
+        if params.user_configs.is_empty() {
+            return bad!(
+                "no user config files resolved; use --usr-cfg or create ~/.config/sinkd/sinkd.conf"
+            );
+        }
+        for user_path in params.user_configs.iter() {
+            let mut usr = config::load_user_config_file(user_path.as_path())?;
+            for p in user_paths {
+                let resolved = config::resolve(p)?;
+                usr.anchors.retain(|a| a.path != resolved);
+            }
+            config::save_user_config_file(user_path.as_path(), &usr)?;
+            info!("updated user config {}", user_path.display());
+        }
+    }
+
+    notify_reload();
+    Ok(())
 }
 
-pub fn log(params: &Parameters) -> bool {
-    // info!("hello log");
-    // warn!("warning");
-    // error!("oops");
-    print!(
-        "{}",
-        fs::read_to_string(&params.log_path).expect("couldn't read log file, check permissions")
-    );
-    true
+pub fn adduser(params: &ClientParameters, users: Option<ValuesRef<String>>) -> Outcome<()> {
+    let Some(users) = users else {
+        return bad!("no user(s) were given!");
+    };
+    let sys_path = params.system_config.as_ref().as_path();
+    let mut sys: SysConfig = config::load_system_config_file(sys_path)?;
+    for user in users {
+        if !sys.users.iter().any(|u| u == user.as_str()) {
+            sys.users.push(user.as_str().to_string());
+        }
+    }
+    config::save_system_config_file(sys_path, &sys)?;
+    info!("updated system config {}", sys_path.display());
+    notify_reload();
+    Ok(())
+}
+
+pub fn rmuser(params: &ClientParameters, users: Option<ValuesRef<String>>) -> Outcome<()> {
+    let Some(users) = users else {
+        return bad!("no user(s) were given!");
+    };
+    let sys_path = params.system_config.as_ref().as_path();
+    let mut sys: SysConfig = config::load_system_config_file(sys_path)?;
+    for user in users {
+        sys.users.retain(|u| u != user.as_str());
+    }
+    config::save_system_config_file(sys_path, &sys)?;
+    info!("updated system config {}", sys_path.display());
+    notify_reload();
+    Ok(())
+}
+
+pub fn list(
+    params: &ClientParameters,
+    paths: Option<Vec<&String>>,
+    list_server: bool,
+) -> Outcome<()> {
+    if list_server {
+        println!(
+            "listing server-side paths is not implemented; inspect the server sync root (e.g. /srv/sinkd on Linux)."
+        );
+        return Ok(());
+    }
+
+    let (_addr, inode_map) = config::get(params)?;
+    let mut keys: Vec<_> = inode_map.keys().cloned().collect();
+    keys.sort();
+
+    if let Some(filter) = paths {
+        if filter.is_empty() {
+            return bad!("no paths were given!");
+        }
+        let resolved: Vec<std::path::PathBuf> = filter
+            .iter()
+            .map(|p| config::resolve(p))
+            .collect::<Result<_, _>>()?;
+        for k in keys {
+            if resolved.iter().any(|root| k.starts_with(root)) {
+                println!("{}", k.display());
+            }
+        }
+    } else {
+        for k in keys {
+            println!("{}", k.display());
+        }
+    }
+    Ok(())
+}
+
+pub fn log(params: &ClientParameters) -> Outcome<()> {
+    let data = fs::read_to_string(&params.shared.log_path).map_err(|e| {
+        format!(
+            "couldn't read log file {}: {e}",
+            params.shared.log_path.display()
+        )
+    })?;
+    print!("{data}");
+    Ok(())
 }

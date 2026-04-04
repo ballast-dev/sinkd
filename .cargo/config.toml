@@ -9,16 +9,17 @@ rustflags = ["-C", "target-feature=+crt-static"]
 [target.aarch64-unknown-linux-gnu]
 linker = "aarch64-linux-gnu-gcc"
 
-## Re-enable when Tier 2 support is added for proc-macro crates
+# Static musl binaries. Proc-macro crates are built for the host (build) triple and
+# executed at compile time; the Tier-2 `*-linux-musl` targets are normal Cargo targets.
+# If a dependency fails to link static, drop `crt-static` or `link-self-contained` and retry.
+[target.x86_64-unknown-linux-musl]
+rustflags = [
+  "-C", "target-feature=+crt-static",
+  "-C", "link-self-contained=yes",
+]
 
-# [target.x86_64-unknown-linux-musl]
-# rustflags = [
-#   "-C", "target-feature=+crt-static",
-#   "-C", "link-self-contained=yes",
-# ]
-
-# [target.arm-unknown-linux-musl]
-# rustflags = [
-#   "-C", "target-feature=+crt-static",
-#   "-C", "link-self-contained=yes",
-# ]
+[target.aarch64-unknown-linux-musl]
+rustflags = [
+  "-C", "target-feature=+crt-static",
+  "-C", "link-self-contained=yes",
+]

@@ -8,32 +8,43 @@ _:
 lint:
     cargo clippy --all-targets --all-features
 
+# fast local lane: unit + local integration
+test-local:
+    cargo test --workspace
+
+# unit/integration + generation smoke + multi-client interleave (host / Zenoh localhost)
+test:
+    just test-local
+    rm -rf test_scenarios/harness
+    cargo run -p scenario -- --spec scenario/specs/sinkd_generation_smoke.toml --root test_scenarios/harness
+    rm -rf test_scenarios/multi_client
+    cargo run -p scenario -- --spec scenario/specs/multi_client_interleave.toml --root test_scenarios/multi_client
+
+# optional Zenoh router (see docker-compose.yml); use when debugging cross-host peers
+zenoh:
+    docker compose up -d zenoh
+
+zenoh-down:
+    docker compose down
+
 # the following commands are purely for debugging
 client:
-    cargo run -- -d client -s cfg/opt/sinkd/sinkd.conf -u cfg/user/sinkd.conf start
+    cargo run -p sinkd -- -d client -s cfg/opt/sinkd/sinkd.conf -u cfg/user/sinkd.conf start
 
 client-log:
     tail -f /tmp/sinkd/client.log
 
 server:
-    cargo run -- -d server
+    cargo run -p sinkd -- -d server start
 
 server-log:
     tail -f /tmp/sinkd/server.log
 
 
-# build docker image
 img:
     @docker buildx build \
     --platform linux/amd64,linux/arm64 \
     -t {{IMAGE}} \
-    -< Dockerfile
-
-img-push:
-    @docker buildx build \
-    --platform linux/amd64,linux/arm64 \
-    -t {{IMAGE}} \
-    --push \
     -< Dockerfile
 
 
@@ -45,30 +56,3 @@ sh *ARGS:
         -w $(pwd) \
         {{ARGS}} \
         {{IMAGE}}
-
-# build binaries inside container (for Alpine/musl compatibility)
-build:
-    @docker run --rm \
-        --hostname sinkd \
-        -e WORKDIR=$(pwd) \
-        -v $(pwd):$(pwd) \
-        -w $(pwd) \
-        {{IMAGE}} \
-        "cargo build --workspace"
-
-
-##################################
-## Docker Multi-Instance Commands
-##################################
-
-# start the multi-instance docker setup
-scenario:
-    docker compose up -d
-
-# stop the multi-instance docker setup
-scenario-down:
-    docker compose down
-
-# view logs from all instances
-scenario-logs:
-    docker compose logs -f
