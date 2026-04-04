@@ -1,3 +1,4 @@
+use log::error;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt,
@@ -133,6 +134,7 @@ impl Payload {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn from(
         hostname: String,
         username: String,

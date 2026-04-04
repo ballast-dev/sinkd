@@ -1,3 +1,5 @@
+use log::{debug, error, info, warn};
+
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use std::{
     collections::{HashMap, HashSet},
@@ -367,14 +369,7 @@ fn filter_file_events(event_rx: &mpsc::Receiver<PathBuf>) -> Outcome<Vec<PathBuf
         }
     }
 
-    // buffered events
-    let mut event_paths: Vec<PathBuf> = vec![];
-    if !path_set.is_empty() {
-        for path in path_set.drain() {
-            event_paths.push(path);
-        }
-    }
-    Ok(event_paths)
+    Ok(path_set.into_iter().collect())
 }
 
 #[allow(dead_code)]

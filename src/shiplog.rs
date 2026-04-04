@@ -1,10 +1,8 @@
-use log::{Level, LevelFilter, Metadata, Record};
+use log::{info, Level, LevelFilter, Metadata, Record};
 use std::fs::OpenOptions;
 use std::io::prelude::*;
 
 use crate::{config, outcome::Outcome, parameters::Parameters, time};
-
-//const TEN_MEGABYTES: u64 = (1024 ^ 2) * 10;
 
 pub struct ShipLog {
     file: std::fs::File,
@@ -24,16 +22,6 @@ impl ShipLog {
             debug_level: params.debug,
         }
     }
-
-    //fn log_rotate(mut self, path: PathBuf) {
-    //    self.file.flush().expect("unable to flush log file");
-    //    drop(self.file); // drop closes the file
-    //    self.file = OpenOptions::new()
-    //        .append(true)
-    //        .create(true)
-    //        .open(path)
-    //        .expect("couldn't create log file")
-    //}
 }
 
 impl log::Log for ShipLog {
@@ -56,10 +44,6 @@ impl log::Log for ShipLog {
                     .expect("couldn't write to log file");
                 }
             } else {
-                // let file_size = self.file.metadata().unwrap().len();
-                // if file_size < TEN_MEGABYTES {
-                // }
-
                 writeln!(
                     &self.file,
                     "{}[{}]-{}",
@@ -68,12 +52,6 @@ impl log::Log for ShipLog {
                     record.args()
                 )
                 .expect("couldn't write to log file");
-
-                // writeln!(&self.file, "{}[{}]FILESIZE OVER TEN-MEGABYTES({}): {}",
-                //         config::get_timestamp("%T"),
-                //         record.level(),
-                //         &self.file.metadata().unwrap().len(),
-                //         record.args()).expect("couldn't write to log file");
             }
         }
     }
@@ -89,7 +67,6 @@ pub fn init(params: &Parameters) -> Outcome<()> {
         2 => LevelFilter::Warn,
         3 => LevelFilter::Info,
         _ => LevelFilter::Debug,
-        // _ => LevelFilter::Trace,
     });
     println!("Logging to: '{}'", params.log_path.display());
     info!("======== ⚓ log initialized ⚓ ========");

@@ -2,12 +2,24 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::{Duration, Instant},
 };
 
-use crate::{bad, outcome::Outcome, parameters::Parameters};
+macro_rules! reject_unsupported_rsync_fields {
+    ($cfg:expr, $($field:ident),+ $(,)?) => {
+        $(
+            if $cfg.$field.is_some() {
+                return Err(format!("unsupported rsync flag `{}` in config", stringify!($field)));
+            }
+        )+
+    };
+}
 
+use crate::{bad, outcome::Outcome, parameters::Parameters};
+use log::{error, warn};
+
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ResolvedRsyncConfig {
     pub checksum: bool,
@@ -58,63 +70,27 @@ pub struct RsyncConfig {
 
 impl RsyncConfig {
     fn validate(&self) -> Result<(), String> {
-        if self.owner.is_some() {
-            return Err("unsupported rsync flag `owner` in config".to_string());
-        }
-        if self.group.is_some() {
-            return Err("unsupported rsync flag `group` in config".to_string());
-        }
-        if self.devices.is_some() {
-            return Err("unsupported rsync flag `devices` in config".to_string());
-        }
-        if self.specials.is_some() {
-            return Err("unsupported rsync flag `specials` in config".to_string());
-        }
-        if self.super_user.is_some() {
-            return Err("unsupported rsync flag `super_user` in config".to_string());
-        }
-        if self.fake_super.is_some() {
-            return Err("unsupported rsync flag `fake_super` in config".to_string());
-        }
-        if self.rsh.is_some() {
-            return Err("unsupported rsync flag `rsh` in config".to_string());
-        }
-        if self.address.is_some() {
-            return Err("unsupported rsync flag `address` in config".to_string());
-        }
-        if self.port.is_some() {
-            return Err("unsupported rsync flag `port` in config".to_string());
-        }
-        if self.sockopts.is_some() {
-            return Err("unsupported rsync flag `sockopts` in config".to_string());
-        }
-        if self.remove_source_files.is_some() {
-            return Err("unsupported rsync flag `remove_source_files` in config".to_string());
-        }
-        if self.files_from.is_some() {
-            return Err("unsupported rsync flag `files_from` in config".to_string());
-        }
-        if self.include_from.is_some() {
-            return Err("unsupported rsync flag `include_from` in config".to_string());
-        }
-        if self.exclude_from.is_some() {
-            return Err("unsupported rsync flag `exclude_from` in config".to_string());
-        }
-        if self.from0.is_some() {
-            return Err("unsupported rsync flag `from0` in config".to_string());
-        }
-        if self.usermap.is_some() {
-            return Err("unsupported rsync flag `usermap` in config".to_string());
-        }
-        if self.groupmap.is_some() {
-            return Err("unsupported rsync flag `groupmap` in config".to_string());
-        }
-        if self.chown.is_some() {
-            return Err("unsupported rsync flag `chown` in config".to_string());
-        }
-        if self.chmod.is_some() {
-            return Err("unsupported rsync flag `chmod` in config".to_string());
-        }
+        reject_unsupported_rsync_fields!(self,
+            owner,
+            group,
+            devices,
+            specials,
+            super_user,
+            fake_super,
+            rsh,
+            address,
+            port,
+            sockopts,
+            remove_source_files,
+            files_from,
+            include_from,
+            exclude_from,
+            from0,
+            usermap,
+            groupmap,
+            chown,
+            chmod,
+        );
         Ok(())
     }
 
@@ -163,7 +139,7 @@ impl Anchor {
             cfg.compress = self.rsync_compress;
         }
         if self.rsync_bwlimit.is_some() {
-            cfg.bwlimit = self.rsync_bwlimit.clone();
+            cfg.bwlimit.clone_from(&self.rsync_bwlimit);
         }
         if self.rsync_partial.is_some() {
             cfg.partial = self.rsync_partial;
@@ -172,10 +148,10 @@ impl Anchor {
             cfg.delete_excluded = self.rsync_delete_excluded;
         }
         if self.rsync_max_size.is_some() {
-            cfg.max_size = self.rsync_max_size.clone();
+            cfg.max_size.clone_from(&self.rsync_max_size);
         }
         if self.rsync_min_size.is_some() {
-            cfg.min_size = self.rsync_min_size.clone();
+            cfg.min_size.clone_from(&self.rsync_min_size);
         }
         if self.rsync_ignore_existing.is_some() {
             cfg.ignore_existing = self.rsync_ignore_existing;
@@ -223,17 +199,6 @@ enum ParseError {
     NoUserFound,
 }
 
-// impl std::fmt::Display for ParseError {
-//     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-//         match &*self {
-//             ParseError::FileNotFound => write!(f, "file not found"),
-//             ParseError::InvalidSyntax(err) => write!(f, "invalid syntax {}", err),
-//             ParseError::ReadOnly => write!(f, "readonly"),
-//             ParseError::NoUserFound => write!(f, "no user found"),
-//         }
-//     }
-// }
-
 struct ConfigParser {
     sys: SysConfig,
     users: HashMap<PathBuf, UserConfig>,
@@ -250,7 +215,7 @@ impl ConfigParser {
     }
 
     fn parse_configs(&mut self, params: &Parameters) -> Outcome<()> {
-        if let Err(e) = self.parse_sys_config(&params.system_config) {
+        if let Err(e) = self.parse_sys_config(params.system_config.as_ref().as_path()) {
             match e {
                 ParseError::InvalidSyntax(syn) => {
                     return bad!(
@@ -268,13 +233,13 @@ impl ConfigParser {
 
         // TODO: create a "sinkd group" in /etc/sinkd.conf
         // TODO: to store the server files in, i.e. /srv/sinkd/<group_name>/<abs_path>
-        if let Err(ParseError::NoUserFound) = self.parse_user_configs(&params.user_configs) {
+        if let Err(ParseError::NoUserFound) = self.parse_user_configs(params.user_configs.as_slice()) {
             warn!("No user was loaded into sinkd, using only system configs");
         }
         Ok(())
     }
 
-    fn parse_sys_config(&mut self, sys_config: &PathBuf) -> Result<(), ParseError> {
+    fn parse_sys_config(&mut self, sys_config: &Path) -> Result<(), ParseError> {
         match fs::read_to_string(sys_config) {
             Err(_) => Err(ParseError::FileNotFound),
             Ok(output) => match toml::from_str(&output) {
@@ -300,9 +265,9 @@ impl ConfigParser {
         }
     }
 
-    fn parse_user_configs(&mut self, user_configs: &Vec<PathBuf>) -> Result<(), ParseError> {
+    fn parse_user_configs(&mut self, user_configs: &[PathBuf]) -> Result<(), ParseError> {
         for user_config in user_configs {
-            match ConfigParser::get_user_config(user_config) {
+            match ConfigParser::get_user_config(user_config.as_path()) {
                 Ok(usr_cfg) => {
                     let _ = &self.users.insert(user_config.clone(), usr_cfg);
                 }
@@ -324,7 +289,7 @@ impl ConfigParser {
         Ok(())
     }
 
-    fn get_user_config(user_config: &PathBuf) -> Result<UserConfig, ParseError> {
+    fn get_user_config(user_config: &Path) -> Result<UserConfig, ParseError> {
         match fs::read_to_string(user_config) {
             Err(_) => Err(ParseError::FileNotFound),
             Ok(output) => match toml::from_str(&output) {
@@ -442,9 +407,6 @@ pub fn have_permissions() -> bool {
             {
                 return false;
             }
-
-            // Close the token handle
-            // drop(token_handle);
 
             elevation.TokenIsElevated != 0
         }

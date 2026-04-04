@@ -1,12 +1,4 @@
-extern crate clap;
-extern crate crossbeam;
-extern crate notify;
-extern crate serde;
-extern crate toml;
-#[macro_use(debug, info, warn, error)]
-extern crate log;
-extern crate libc;
-extern crate nix;
+use log::{debug, error, info};
 
 #[macro_use]
 mod cli;
@@ -44,14 +36,7 @@ fn check_path(p: &str) -> bool {
 
 fn egress<T>(outcome: Outcome<T>) -> ExitCode {
     match outcome {
-        Ok(_) => {
-            //fancy::println(
-            //    "operation completed successfully",
-            //    fancy::Attrs::Normal,
-            //    fancy::Colors::Green,
-            //);
-            std::process::ExitCode::SUCCESS
-        }
+        Ok(_) => std::process::ExitCode::SUCCESS,
         Err(e) => {
             error!("{e}");
             fancy_error!("ERROR: {}", e);
@@ -75,12 +60,6 @@ fn windoze() -> ExitCode {
     }
     ExitCode::SUCCESS
 }
-
-// FIXME:
-// TODO:
-// NOTE:
-// HACK:
-// WARNING:
 
 #[allow(dead_code)]
 fn main() -> ExitCode {

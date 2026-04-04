@@ -6,8 +6,9 @@ use std::{
 };
 
 use crate::{config, fancy, outcome::Outcome};
+use log::{debug, error};
 
-#[derive(PartialEq, Clone, Debug)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 pub enum DaemonType {
     UnixClient,
     UnixServer,
@@ -79,7 +80,7 @@ impl Parameters {
         Self::create_log_dir(debug)?;
 
         let params = Parameters {
-            daemon_type: daemon_type.clone(),
+            daemon_type,
             verbosity: match (debug, matches.get_count("verbose")) {
                 (d, _) if d > 0 => 4, // if debugging -> full verbosity
                 (_, 0) => 2,          // default to warn log level  TODO: make this obsolete
@@ -93,7 +94,7 @@ impl Parameters {
                 }
                 _ => 0,
             },
-            log_path: Self::get_log_path(debug, &daemon_type),
+            log_path: Self::get_log_path(debug, daemon_type),
             system_config: match daemon_type {
                 DaemonType::UnixClient | DaemonType::WindowsClient => {
                     Self::resolve_system_config(system_config)?
@@ -135,7 +136,7 @@ impl Parameters {
         }
     }
 
-    fn get_log_path(debug: u8, daemon_type: &DaemonType) -> PathBuf {
+    fn get_log_path(debug: u8, daemon_type: DaemonType) -> PathBuf {
         let base_dir = if debug > 0 {
             "/tmp/sinkd"
         } else {
@@ -204,7 +205,7 @@ impl Parameters {
         // safe unwrap due to default args
         if let Some(usr_cfgs) = user_configs {
             for cfg in usr_cfgs {
-                let normalized = config::resolve(&cfg.clone())?;
+                let normalized = config::resolve(cfg)?;
                 if normalized.is_dir() {
                     return bad!(
                         "{} is a directory, not a file; aborting",

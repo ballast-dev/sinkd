@@ -2,13 +2,6 @@ use clap::parser::ValuesRef;
 use std::fs;
 
 use crate::{fancy_debug, outcome::Outcome, parameters::Parameters};
-// adds entry to ~/.sinkd/sinkd.conf
-// tells daemon to read config again
-// send a SIGHUP signal
-// unsafe {
-//     let s: libc::sighandler_t = reload_config;
-//     libc::signal(libc::SIGHUP, s);
-// }
 
 pub fn add(share_paths: &[&String], user_paths: &[&String]) {
     for p in share_paths {
@@ -64,22 +57,9 @@ pub fn list(paths: Option<Vec<&String>>) -> Outcome<bool> {
         }
         None => bad!("no paths were given!"),
     }
-    // match config::ConfigParser::get_user_config(user) {
-    //     Ok(usr_cfg) => {
-    //         for anchor in &usr_cfg.anchors {
-    //             println!("{}", anchor.path.display());
-    //         }
-    //     },
-    //     Err(e) => {
-    //         eprintln!("user config: {}", e)
-    //     }
-    // }
 }
 
 pub fn log(params: &Parameters) -> bool {
-    // info!("hello log");
-    // warn!("warning");
-    // error!("oops");
     print!(
         "{}",
         fs::read_to_string(&params.log_path).expect("couldn't read log file, check permissions")

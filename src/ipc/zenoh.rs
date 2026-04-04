@@ -1,3 +1,4 @@
+use log::{debug, error, info, warn};
 use std::sync::mpsc;
 use std::time::Duration;
 use serde::{Deserialize, Serialize};
@@ -150,12 +151,12 @@ impl ZenohClient {
                 if reorder_pairs {
                     if let Some(previous) = pending_for_reorder.take() {
                         if let Err(e) =
-                            send_payload(&publisher, payload, delay_ms, drop_every_n, &mut send_count)
+                            send_payload(&publisher, &payload, delay_ms, drop_every_n, &mut send_count)
                         {
                             error!("{e}");
                         }
                         if let Err(e) =
-                            send_payload(&publisher, previous, delay_ms, drop_every_n, &mut send_count)
+                            send_payload(&publisher, &previous, delay_ms, drop_every_n, &mut send_count)
                         {
                             error!("{e}");
                         }
@@ -166,7 +167,7 @@ impl ZenohClient {
                 }
 
                 if let Err(e) =
-                    send_payload(&publisher, payload, delay_ms, drop_every_n, &mut send_count)
+                    send_payload(&publisher, &payload, delay_ms, drop_every_n, &mut send_count)
                 {
                     error!("{e}");
                 }
@@ -174,7 +175,7 @@ impl ZenohClient {
 
             if let Some(payload) = pending_for_reorder {
                 if let Err(e) =
-                    send_payload(&publisher, payload, delay_ms, drop_every_n, &mut send_count)
+                    send_payload(&publisher, &payload, delay_ms, drop_every_n, &mut send_count)
                 {
                     error!("{e}");
                 }
@@ -251,7 +252,7 @@ pub type Rx = mpsc::Receiver<Option<ZenohMessage>>;
 
 fn send_payload(
     publisher: &zenoh::pubsub::Publisher<'_>,
-    payload: ZenohPayload,
+    payload: &ZenohPayload,
     delay_ms: u64,
     drop_every_n: Option<u64>,
     send_count: &mut u64,
@@ -262,8 +263,8 @@ fn send_payload(
 
     *send_count += 1;
     if let Some(n) = drop_every_n {
-        if n > 0 && *send_count % n == 0 {
-            warn!("Zenoh test hook dropped outbound payload #{}", send_count);
+        if n > 0 && (*send_count).is_multiple_of(n) {
+            warn!("Zenoh test hook dropped outbound payload #{send_count}");
             return Ok(());
         }
     }
@@ -424,6 +425,6 @@ mod tests {
 
         publisher_client.disconnect();
         subscriber_client.disconnect();
-        assert!(saw_message, "did not receive smoke message on {}", topic_ref);
+        assert!(saw_message, "did not receive smoke message on {topic_ref}");
     }
 }

@@ -2,10 +2,12 @@
 //   / __/__ _____  _____ ____
 //  _\ \/ -_) __/ |/ / -_) __/
 // /___/\__/_/  |___/\__/_/
+use log::{debug, error, info, warn};
+
 use std::{
     collections::HashMap,
     fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -17,15 +19,6 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::{config, ipc, outcome::Outcome, parameters::Parameters, rsync::rsync};
-
-//static SRV_PATH: &str = {
-//    #[cfg(target_os = "windows")]
-//    { "/Program Files/sinkd/srv" }
-//    #[cfg(target_os = "macos")]
-//    { "/opt/sinkd/srv" }
-//    #[cfg(target_os = "linux")]
-//    { "/srv/sinkd" }
-//};
 
 pub fn start(params: &Parameters) -> Outcome<()> {
     // No need to start mosquitto - Zenoh is peer-to-peer
@@ -58,7 +51,7 @@ fn get_srv_dir(debug: u8) -> PathBuf {
     }
 }
 
-fn create_srv_dir(debug: u8, path: &PathBuf) -> Outcome<()> {
+fn create_srv_dir(debug: u8, path: &Path) -> Outcome<()> {
     if path.exists() {
         Ok(())
     } else {
@@ -77,7 +70,7 @@ struct PersistedCycles {
     cycle_by_host: HashMap<String, u32>,
 }
 
-fn load_cycle_state(cycle_state_path: &PathBuf) -> HashMap<String, u32> {
+fn load_cycle_state(cycle_state_path: &Path) -> HashMap<String, u32> {
     match fs::read_to_string(cycle_state_path) {
         Ok(content) => match toml::from_str::<PersistedCycles>(&content) {
             Ok(state) => state.cycle_by_host,
@@ -94,7 +87,7 @@ fn load_cycle_state(cycle_state_path: &PathBuf) -> HashMap<String, u32> {
     }
 }
 
-fn persist_cycle_state(cycle_state_path: &PathBuf, cycle_by_host: &HashMap<String, u32>) -> Outcome<()> {
+fn persist_cycle_state(cycle_state_path: &Path, cycle_by_host: &HashMap<String, u32>) -> Outcome<()> {
     let state = PersistedCycles {
         cycle_by_host: cycle_by_host.clone(),
     };
@@ -188,7 +181,7 @@ fn zenoh_entry(
                     &synch_tx,
                     &zenoh_client,
                     &mut cycle_by_host,
-                    &cycle_state_path,
+                    cycle_state_path.as_path(),
                     &status,
                 ) {
                     error!("{e}");
@@ -216,7 +209,7 @@ fn handle_incoming_transport_message(
     synch_tx: &mpsc::Sender<ipc::Payload>,
     zenoh_client: &ipc::ZenohClient,
     cycle_by_host: &mut HashMap<String, u32>,
-    cycle_state_path: &PathBuf,
+    cycle_state_path: &Path,
     status: &Arc<Mutex<ipc::Status>>,
 ) -> Outcome<()> {
     let Some(msg) = message else {
@@ -263,7 +256,7 @@ fn queue(
     zenoh_client: &ipc::ZenohClient,
     payload: ipc::Payload,
     cycle_by_host: &mut HashMap<String, u32>,
-    cycle_state_path: &PathBuf,
+    cycle_state_path: &Path,
     status: &Arc<Mutex<ipc::Status>>,
 ) -> Outcome<()> {
     match status.lock() {
@@ -313,53 +306,6 @@ fn queue(
             }
         }
         Err(e) => bad!("server:queue>> status lock poisoned {}", e),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::{collections::HashMap, time::{SystemTime, UNIX_EPOCH}};
-
-    use super::{decide_cycle, load_cycle_state, persist_cycle_state, QueueDecision};
-
-    #[test]
-    fn cycle_decision_accepts_first_message() {
-        assert_eq!(decide_cycle(1, None), QueueDecision::Enqueue);
-    }
-
-    #[test]
-    fn cycle_decision_accepts_newer_message() {
-        assert_eq!(decide_cycle(2, Some(1)), QueueDecision::Enqueue);
-    }
-
-    #[test]
-    fn cycle_decision_ignores_duplicate_message() {
-        assert_eq!(decide_cycle(7, Some(7)), QueueDecision::Duplicate);
-    }
-
-    #[test]
-    fn cycle_decision_marks_older_message_as_stale() {
-        assert_eq!(decide_cycle(3, Some(9)), QueueDecision::Stale);
-    }
-
-    #[test]
-    fn cycle_state_roundtrip_persists_data() {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system time should be after unix epoch")
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!("sinkd_cycle_state_{unique}.toml"));
-
-        let mut map = HashMap::new();
-        map.insert("alpha".to_string(), 3);
-        map.insert("bravo".to_string(), 9);
-
-        persist_cycle_state(&path, &map).expect("persist should succeed");
-        let loaded = load_cycle_state(&path);
-        std::fs::remove_file(path).expect("temp file should be removable");
-
-        assert_eq!(loaded.get("alpha"), Some(&3));
-        assert_eq!(loaded.get("bravo"), Some(&9));
     }
 }
 
@@ -433,6 +379,49 @@ fn broadcast_status(
     }
 }
 
-//fn check_time(srv_state: &ipc::Status, payload: &ipc::Payload) {
-//
-//}
+#[cfg(test)]
+mod tests {
+    use std::{collections::HashMap, time::{SystemTime, UNIX_EPOCH}};
+
+    use super::{decide_cycle, load_cycle_state, persist_cycle_state, QueueDecision};
+
+    #[test]
+    fn cycle_decision_accepts_first_message() {
+        assert_eq!(decide_cycle(1, None), QueueDecision::Enqueue);
+    }
+
+    #[test]
+    fn cycle_decision_accepts_newer_message() {
+        assert_eq!(decide_cycle(2, Some(1)), QueueDecision::Enqueue);
+    }
+
+    #[test]
+    fn cycle_decision_ignores_duplicate_message() {
+        assert_eq!(decide_cycle(7, Some(7)), QueueDecision::Duplicate);
+    }
+
+    #[test]
+    fn cycle_decision_marks_older_message_as_stale() {
+        assert_eq!(decide_cycle(3, Some(9)), QueueDecision::Stale);
+    }
+
+    #[test]
+    fn cycle_state_roundtrip_persists_data() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time should be after unix epoch")
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("sinkd_cycle_state_{unique}.toml"));
+
+        let mut map = HashMap::new();
+        map.insert("alpha".to_string(), 3);
+        map.insert("bravo".to_string(), 9);
+
+        persist_cycle_state(&path, &map).expect("persist should succeed");
+        let loaded = load_cycle_state(&path);
+        std::fs::remove_file(path).expect("temp file should be removable");
+
+        assert_eq!(loaded.get("alpha"), Some(&3));
+        assert_eq!(loaded.get("bravo"), Some(&9));
+    }
+}
