@@ -6,7 +6,7 @@ use std::{
 };
 
 #[cfg(windows)]
-use crate::{bad, parameters::DaemonType};
+use crate::parameters::DaemonType;
 use crate::{
     config,
     outcome::Outcome,
