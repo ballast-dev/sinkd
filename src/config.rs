@@ -1,6 +1,6 @@
 //! **Two configuration surfaces (by design):**
 //! - **Client** — system TOML (`/etc/sinkd.conf` or `--sys-cfg`) plus per-user TOML files; consumed by
-//!   [`crate::client`] and [`crate::ops`] via [`crate::parameters::ClientParameters`]. `server_addr` in the
+//!   [`crate::client`] via [`crate::parameters::ClientParameters`]. `server_addr` in the
 //!   system file is the sync target/description for clients (see also client-side `_srv_addr` note in
 //!   [`crate::client::init`]).
 //! - **Server** — runtime sync root under `/srv/sinkd` (or debug path) and `generation_state.toml` there; the

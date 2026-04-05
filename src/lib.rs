@@ -3,7 +3,7 @@
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::missing_panics_doc)]
 //!
-//! **Binary**: `sinkd` — CLI with `sinkd server` / `sinkd client` (and `add`, `rm`, …).
+//! **Binary**: `sinkd` — `sinkd client …` for the sync client, `sinkd server …` for the server daemon.
 
 #[macro_use]
 pub mod fancy;
@@ -13,7 +13,6 @@ pub mod cli;
 pub mod client;
 pub mod config;
 pub mod ipc;
-pub mod ops;
 pub mod parameters;
 pub mod rsync;
 pub mod server;

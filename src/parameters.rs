@@ -115,35 +115,27 @@ impl DaemonParameters {
     }
 
     pub fn from_matches(matches: &ArgMatches) -> Outcome<Self> {
-        let (system_config, user_configs, daemon_type) =
-            if let Some(("client", submatches)) = matches.subcommand() {
-                let system_config = submatches.get_one("system-config");
-                let user_configs = submatches.get_many("user-configs");
-                let daemon_type = if matches.get_flag("windows-daemon") {
+        let windows = matches.get_flag("windows-daemon");
+        let (system_config, user_configs, daemon_type) = match matches.subcommand() {
+            Some(("client", client_m)) => (
+                client_m.get_one("system-config"),
+                client_m.get_many("user-configs"),
+                if windows {
                     DaemonType::WindowsClient
                 } else {
                     DaemonType::UnixClient
-                };
-                (system_config, user_configs, daemon_type)
-            } else if subcommand_needs_client_config_paths(matches) {
-                let daemon_type = if matches.get_flag("windows-daemon") {
-                    DaemonType::WindowsClient
-                } else {
-                    DaemonType::UnixClient
-                };
-                (
-                    matches.get_one("system-config"),
-                    matches.get_many("user-configs"),
-                    daemon_type,
-                )
-            } else {
-                let daemon_type = if matches.get_flag("windows-daemon") {
+                },
+            ),
+            _ => (
+                None,
+                None,
+                if windows {
                     DaemonType::WindowsServer
                 } else {
                     DaemonType::UnixServer
-                };
-                (None, None, daemon_type)
-            };
+                },
+            ),
+        };
 
         let debug = matches.get_count("debug");
         create_log_dir(debug)?;
@@ -197,50 +189,34 @@ impl DaemonParameters {
     }
 }
 
-fn subcommand_needs_client_config_paths(matches: &ArgMatches) -> bool {
-    matches.subcommand().is_some_and(|(name, _)| {
-        matches!(
-            name,
-            "client" | "add" | "rm" | "remove" | "adduser" | "rmuser" | "ls" | "list"
-        )
-    })
-}
-
-fn create_log_dir(debug: u8) -> Outcome<()> {
-    let path = if debug >= 1 {
+fn log_base_dir(debug: u8) -> &'static Path {
+    if debug >= 1 {
         Path::new("/tmp/sinkd")
     } else {
         Path::new("/var/log/sinkd")
-    };
+    }
+}
 
+fn create_log_dir(debug: u8) -> Outcome<()> {
+    let path = log_base_dir(debug);
     if path.exists() {
-        Ok(())
-    } else {
-        if debug == 0 && !config::have_permissions() {
-            return bad!("Need elevated permissions to create {}", path.display());
-        }
-        match fs::create_dir_all(path) {
-            Ok(()) => Ok(()),
-            Err(e) => bad!("Unable to create '{}'  {}", path.display(), e),
-        }
+        return Ok(());
+    }
+    if debug == 0 && !config::have_permissions() {
+        return bad!("Need elevated permissions to create {}", path.display());
+    }
+    match fs::create_dir_all(path) {
+        Ok(()) => Ok(()),
+        Err(e) => bad!("Unable to create '{}'  {}", path.display(), e),
     }
 }
 
 fn get_log_path(debug: u8, daemon_type: DaemonType) -> PathBuf {
-    let base_dir = if debug > 0 {
-        "/tmp/sinkd"
-    } else {
-        "/var/log/sinkd"
+    let file = match daemon_type {
+        DaemonType::UnixClient | DaemonType::WindowsClient => "client.log",
+        DaemonType::UnixServer | DaemonType::WindowsServer => "server.log",
     };
-
-    match daemon_type {
-        DaemonType::UnixClient | DaemonType::WindowsClient => {
-            PathBuf::from(format!("{base_dir}/client.log"))
-        }
-        DaemonType::UnixServer | DaemonType::WindowsServer => {
-            PathBuf::from(format!("{base_dir}/server.log"))
-        }
-    }
+    log_base_dir(debug).join(file)
 }
 
 fn resolve_system_config(system_config: Option<&String>) -> Outcome<Arc<PathBuf>> {

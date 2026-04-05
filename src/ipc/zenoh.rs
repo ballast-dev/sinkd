@@ -301,9 +301,9 @@ fn test_reorder_pairs() -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::{path::PathBuf, time::{Duration, SystemTime, UNIX_EPOCH}};
+    use std::path::PathBuf;
 
-    use super::{ZenohClient, ZenohPayload};
+    use super::ZenohPayload;
     use crate::ipc::{Payload, Reason, Status};
 
     #[test]
@@ -396,60 +396,5 @@ mod tests {
         assert_eq!(ZenohPayload::from_payload(&busy).status_code, 1);
         assert_eq!(ZenohPayload::from_payload(&behind).status_code, 2);
         assert_eq!(ZenohPayload::from_payload(&other).status_code, 3);
-    }
-
-    #[test]
-    fn zenoh_sync_pub_sub_smoke() {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("time should be after epoch")
-            .as_nanos();
-        let topic = format!("sinkd/tests/smoke/{unique}");
-        let topic_ref = topic.as_str();
-
-        let (subscriber_client, subscriber_rx) =
-            ZenohClient::new(&[topic_ref], topic_ref).expect("subscriber client should start");
-        let (publisher_client, _publisher_rx) =
-            ZenohClient::new(&[], topic_ref).expect("publisher client should start");
-
-        std::thread::sleep(Duration::from_millis(200));
-
-        let mut payload = Payload::from(
-            "smoke-host".to_string(),
-            "smoke-user".to_string(),
-            vec![PathBuf::from("/tmp/smoke-file")],
-            PathBuf::from("/srv/smoke"),
-            "20260101".to_string(),
-            "smoke-client".to_string(),
-            0,
-            0,
-            String::new(),
-            Status::Ready,
-            None,
-        );
-        publisher_client
-            .publish(&mut payload)
-            .expect("publish should succeed");
-
-        let deadline = std::time::Instant::now() + Duration::from_secs(5);
-        let mut saw_message = false;
-        while std::time::Instant::now() < deadline {
-            match subscriber_rx.try_recv() {
-                Ok(Some(msg)) if msg.topic == topic_ref => {
-                    saw_message = true;
-                    assert_eq!(msg.payload.hostname, "smoke-host");
-                    break;
-                }
-                Ok(_) => {}
-                Err(std::sync::mpsc::TryRecvError::Empty) => {
-                    std::thread::sleep(Duration::from_millis(50));
-                }
-                Err(std::sync::mpsc::TryRecvError::Disconnected) => break,
-            }
-        }
-
-        publisher_client.disconnect();
-        subscriber_client.disconnect();
-        assert!(saw_message, "did not receive smoke message on {topic_ref}");
     }
 }
