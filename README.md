@@ -25,28 +25,9 @@ across many computers.
 1. Granular permissions per user  
 1. Uses DDS (Data Distribution Service) for peer-to-peer communication - no broker required
 
-## Development
-Dependencies:
-
-- `cmake`
-- `make`
-- `cargo` (rust)
-
-
 ### Roadmap
 
 - use `btrfs` on a virtual mount for ease of snapshotting
 - add encryption to files watched by sinkd
 - access from outside the LAN firewall
 - use `git-lfs` to enable data restore (manual tagging)
-
-##  Development
-
-### Linux
-Install `gcc cmake`
-
-### Windows
-Install development tools:
-
-        winget install ShiningLight.OpenSSL.Dev
-
