@@ -22,17 +22,10 @@ where
         std::thread::sleep(std::time::Duration::from_millis(delay_ms));
     }
 
-    let mut args = build_args(rsync_cfg);
-    if let Some(dir) = backup_dir {
-        args.push("--backup".to_string());
-        args.push(format!(
-            "--backup-dir={}",
-            dir.as_os_str().to_string_lossy()
-        ));
-    }
-
     let mut cmd = Command::new("rsync");
-    cmd.args(args).args(srcs).arg(dest);
+    cmd.args(build_pull_args(rsync_cfg, backup_dir))
+        .args(srcs)
+        .arg(dest);
 
     let mut child = match cmd.spawn() {
         Err(e) => {
@@ -95,11 +88,27 @@ pub fn build_args(rsync_cfg: &ResolvedRsyncConfig) -> Vec<String> {
     args
 }
 
+/// Full rsync argv for a pull (baseline flags plus optional `--backup` / `--backup-dir`).
+#[must_use]
+pub fn build_pull_args(rsync_cfg: &ResolvedRsyncConfig, backup_dir: Option<&Path>) -> Vec<String> {
+    let mut args = build_args(rsync_cfg);
+    if let Some(dir) = backup_dir {
+        args.push("--backup".to_string());
+        args.push(format!(
+            "--backup-dir={}",
+            dir.as_os_str().to_string_lossy()
+        ));
+    }
+    args
+}
+
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use crate::config::ResolvedRsyncConfig;
 
-    use super::build_args;
+    use super::{build_args, build_pull_args};
 
     #[test]
     fn build_args_keeps_baseline_defaults() {
@@ -138,6 +147,26 @@ mod tests {
                 "--size-only",
                 "--stats",
             ]
+        );
+    }
+
+    #[test]
+    fn build_pull_args_matches_build_args_without_backup() {
+        let cfg = ResolvedRsyncConfig::default();
+        assert_eq!(build_pull_args(&cfg, None), build_args(&cfg));
+    }
+
+    #[test]
+    fn build_pull_args_appends_backup_flags_with_absolute_dir() {
+        let cfg = ResolvedRsyncConfig::default();
+        let backup = Path::new("/tmp/sinkd/client/behind_backups/0");
+        let args = build_pull_args(&cfg, Some(backup));
+        assert!(
+            args.ends_with(&[
+                "--backup".to_string(),
+                "--backup-dir=/tmp/sinkd/client/behind_backups/0".to_string(),
+            ]),
+            "args={args:?}"
         );
     }
 }

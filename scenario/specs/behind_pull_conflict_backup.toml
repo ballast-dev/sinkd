@@ -1,0 +1,9 @@
+# E2E: stale client + local dirty edit → behind pull with rsync --backup-dir under
+# `behind_backups/N` (see scenario/scripts/behind_pull_conflict_backup.sh).
+# Requires: Zenoh on localhost, bash, cargo, git, writable /tmp/sinkd.
+name = "behind-pull-conflict-backup"
+timeout_ms = 300000
+
+[[steps]]
+kind = "run_command"
+command = "bash scenario/scripts/behind_pull_conflict_backup.sh '{{root}}'"

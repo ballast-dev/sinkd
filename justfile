@@ -12,13 +12,15 @@ lint:
 test-local:
     cargo test --workspace
 
-# unit/integration + generation smoke + multi-client interleave (host / Zenoh localhost)
+# unit/integration + generation smoke + multi-client interleave + behind-pull backup tree
 test:
     just test-local
     rm -rf test_scenarios/harness
     cargo run -p scenario -- --spec scenario/specs/sinkd_generation_smoke.toml --root test_scenarios/harness
     rm -rf test_scenarios/multi_client
     cargo run -p scenario -- --spec scenario/specs/multi_client_interleave.toml --root test_scenarios/multi_client
+    rm -rf test_scenarios/behind_conflict
+    cargo run -p scenario -- --spec scenario/specs/behind_pull_conflict_backup.toml --root test_scenarios/behind_conflict
 
 # optional Zenoh router (see docker-compose.yml); use when debugging cross-host peers
 zenoh:

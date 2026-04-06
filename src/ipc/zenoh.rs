@@ -122,6 +122,7 @@ impl ZenohClient {
     ///
     /// # Returns
     /// A tuple of (`ZenohClient`, Receiver) where Receiver receives `ZenohMessage`
+    #[allow(clippy::too_many_lines)]
     pub fn new(
         subscriptions: &[&str],
         publish_topic: &str,

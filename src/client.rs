@@ -890,3 +890,101 @@ mod tests {
         assert_eq!(err.to_string(), "event_rx disconnected");
     }
 }
+
+#[cfg(test)]
+mod conflict_resolution_tests {
+    use std::collections::HashSet;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::sync::Mutex;
+
+    use crate::ipc;
+
+    use super::{mark_local_dirty, maybe_record_writer_ack, ClientSyncState};
+
+    fn sample_payload(
+        last_writer: &str,
+        head_generation: u64,
+    ) -> ipc::Payload {
+        ipc::Payload::from(
+            String::from("h"),
+            String::from("u"),
+            vec![],
+            PathBuf::from("sinkd_status"),
+            String::from("d"),
+            String::new(),
+            0,
+            head_generation,
+            last_writer.to_string(),
+            ipc::Status::Ready,
+            None,
+        )
+    }
+
+    #[test]
+    fn mark_local_dirty_inserts_resolved_path_for_existing_file() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let file = tmp.path().join("edited.txt");
+        fs::write(&file, b"x").expect("write");
+        let dirty = Mutex::new(HashSet::<PathBuf>::new());
+        mark_local_dirty(&dirty, &file);
+        let paths = dirty.lock().expect("lock");
+        assert_eq!(paths.len(), 1);
+        let p = paths.iter().next().expect("one path");
+        assert!(p.ends_with("edited.txt"), "got {}", p.display());
+    }
+
+    #[test]
+    fn writer_ack_clears_local_dirty_when_last_writer_matches_us() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let ack_path = tmp.path().join("acked_generation");
+        fs::write(&ack_path, "5").expect("seed ack");
+        let sync = Mutex::new(ClientSyncState {
+            client_id: "our-id".to_string(),
+            acked_generation: 5,
+            ack_path,
+        });
+        let dirty = Mutex::new(HashSet::from([PathBuf::from("/nope/unrelated")]));
+        let msg = sample_payload("our-id", 7);
+        maybe_record_writer_ack(&sync, &msg, &dirty).expect("ack");
+        assert!(dirty.lock().expect("lock").is_empty());
+        assert_eq!(sync.lock().expect("lock").acked_generation, 7);
+    }
+
+    #[test]
+    fn writer_ack_leaves_dirty_set_when_last_writer_is_other_client() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let ack_path = tmp.path().join("acked_generation");
+        fs::write(&ack_path, "5").expect("seed ack");
+        let sync = Mutex::new(ClientSyncState {
+            client_id: "our-id".to_string(),
+            acked_generation: 5,
+            ack_path,
+        });
+        let marker = PathBuf::from("/tmp/marker");
+        let dirty = Mutex::new(HashSet::from([marker.clone()]));
+        let msg = sample_payload("other-id", 7);
+        maybe_record_writer_ack(&sync, &msg, &dirty).expect("ack");
+        assert_eq!(sync.lock().expect("lock").acked_generation, 5);
+        assert!(dirty.lock().expect("lock").contains(&marker));
+    }
+
+    #[test]
+    fn writer_ack_does_not_clear_dirty_when_last_writer_empty() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let ack_path = tmp.path().join("acked_generation");
+        fs::write(&ack_path, "5").expect("seed ack");
+        let sync = Mutex::new(ClientSyncState {
+            client_id: "our-id".to_string(),
+            acked_generation: 5,
+            ack_path,
+        });
+        let marker = PathBuf::from("/tmp/marker2");
+        let dirty = Mutex::new(HashSet::from([marker.clone()]));
+        let msg = sample_payload("", 7);
+        maybe_record_writer_ack(&sync, &msg, &dirty).expect("ack");
+        assert_eq!(sync.lock().expect("lock").acked_generation, 5);
+        assert!(dirty.lock().expect("lock").contains(&marker));
+    }
+
+}

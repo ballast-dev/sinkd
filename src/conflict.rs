@@ -3,6 +3,7 @@
 use std::{
     ffi::OsStr,
     fs,
+    io::ErrorKind,
     path::{Path, PathBuf},
 };
 
@@ -45,9 +46,23 @@ pub fn next_behind_backup_dir(client_state_dir: &Path) -> Outcome<PathBuf> {
         n = n.saturating_add(1);
     }
 
-    let run = behind.join(n.to_string());
-    fs::create_dir(&run).map_err(|e| format!("create backup run '{}': {e}", run.display()))?;
-    Ok(run)
+    loop {
+        let run = behind.join(n.to_string());
+        match fs::create_dir(&run) {
+            Ok(()) => return Ok(run),
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => {
+                // Another Behind handler may have created this slot between scan and mkdir.
+                used.insert(n);
+                n = n.saturating_add(1);
+                while used.contains(&n) {
+                    n = n.saturating_add(1);
+                }
+            }
+            Err(e) => {
+                return bad!("create backup run '{}': {e}", run.display());
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -75,6 +90,15 @@ mod tests {
     fn next_behind_backup_dir_ignores_non_numeric_siblings() {
         let tmp = tempfile::tempdir().expect("tempdir");
         fs::create_dir_all(tmp.path().join("behind_backups/notes")).expect("mkdir");
+        let p = next_behind_backup_dir(tmp.path()).expect("next");
+        assert!(p.ends_with("behind_backups/0") || p.ends_with("behind_backups\\0"));
+    }
+
+    /// Directory name `01` is treated as integer `1` (same as Rust `str::parse`), so `0` stays free.
+    #[test]
+    fn next_behind_backup_dir_leading_zero_name_occupies_numeric_slot_one() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        fs::create_dir_all(tmp.path().join("behind_backups/01")).expect("mkdir");
         let p = next_behind_backup_dir(tmp.path()).expect("next");
         assert!(p.ends_with("behind_backups/0") || p.ends_with("behind_backups\\0"));
     }
