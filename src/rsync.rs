@@ -5,7 +5,12 @@ use std::{ffi::OsStr, path::Path, process::Command};
 use crate::config::ResolvedRsyncConfig;
 use crate::outcome::Outcome;
 
-pub fn rsync<P>(srcs: &[P], dest: &P, rsync_cfg: &ResolvedRsyncConfig) -> Outcome<()>
+pub fn rsync<P>(
+    srcs: &[P],
+    dest: &P,
+    rsync_cfg: &ResolvedRsyncConfig,
+    backup_dir: Option<&Path>,
+) -> Outcome<()>
 where
     P: AsRef<OsStr> + AsRef<Path> + std::fmt::Debug,
 {
@@ -13,14 +18,21 @@ where
         error!("rsync test hook: forced failure");
         return bad!("rsync test hook: forced failure");
     }
-    if let Some(delay_ms) = crate::test_hooks::env_u64("SINKD_TEST_RSYNC_DELAY_MS")
-    {
+    if let Some(delay_ms) = crate::test_hooks::env_u64("SINKD_TEST_RSYNC_DELAY_MS") {
         std::thread::sleep(std::time::Duration::from_millis(delay_ms));
     }
 
-    let mut cmd = Command::new("rsync");
+    let mut args = build_args(rsync_cfg);
+    if let Some(dir) = backup_dir {
+        args.push("--backup".to_string());
+        args.push(format!(
+            "--backup-dir={}",
+            dir.as_os_str().to_string_lossy()
+        ));
+    }
 
-    cmd.args(build_args(rsync_cfg)).args(srcs).arg(dest);
+    let mut cmd = Command::new("rsync");
+    cmd.args(args).args(srcs).arg(dest);
 
     let mut child = match cmd.spawn() {
         Err(e) => {
@@ -43,7 +55,7 @@ where
         return bad!("rsync failed with status {status}");
     }
 
-    debug!("\u{1f6b0} rsync {srcs:#?} {dest:#?} \u{1f919}");
+    debug!("\u{1f6b0} rsync {srcs:#?} {dest:#?} backup:{backup_dir:?} \u{1f919}");
     Ok(())
 }
 

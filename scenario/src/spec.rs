@@ -78,7 +78,7 @@ pub fn parse_spec(contents: &str) -> Result<ScenarioSpec, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_spec, Step};
+    use super::{Step, parse_spec};
 
     #[test]
     fn parse_spec_works_for_basic_file_flow() {
@@ -111,4 +111,3 @@ path = "alpha/data.txt"
         }
     }
 }
-

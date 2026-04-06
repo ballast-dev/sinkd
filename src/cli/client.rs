@@ -1,8 +1,8 @@
 use clap::ArgMatches;
 use std::{path::Path, process::ExitCode};
 
-use crate::parameters::ClientParameters;
 use crate::client;
+use crate::parameters::ClientParameters;
 
 use super::common::{egress, print_subcommand_help};
 

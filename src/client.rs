@@ -17,7 +17,7 @@ use std::{
 
 use crate::{
     config::{self, SysConfig},
-    ipc,
+    conflict, ipc,
     outcome::Outcome,
     parameters::{ClientParameters, DaemonParameters},
     rsync::rsync,
@@ -55,7 +55,8 @@ fn client_state_dir(params: &ClientParameters) -> PathBuf {
 fn ensure_client_state_dir(params: &ClientParameters) -> Outcome<PathBuf> {
     let dir = client_state_dir(params);
     if !dir.exists() {
-        fs::create_dir_all(&dir).map_err(|e| format!("client state dir '{}': {e}", dir.display()))?;
+        fs::create_dir_all(&dir)
+            .map_err(|e| format!("client state dir '{}': {e}", dir.display()))?;
     }
     Ok(dir)
 }
@@ -72,8 +73,7 @@ fn load_or_create_client_id(path: &Path) -> Outcome<String> {
             .map_err(|e| format!("client_id parent '{}': {e}", parent.display()))?;
     }
     let id = uuid::Uuid::new_v4().to_string();
-    fs::write(path, format!("{id}\n"))
-        .map_err(|e| format!("write client_id: {e}"))?;
+    fs::write(path, format!("{id}\n")).map_err(|e| format!("write client_id: {e}"))?;
     Ok(id)
 }
 
@@ -117,7 +117,11 @@ fn attach_client_outbound_basis(
     Ok(())
 }
 
-fn maybe_record_writer_ack(sync: &Mutex<ClientSyncState>, server_msg: &ipc::Payload) -> Outcome<()> {
+fn maybe_record_writer_ack(
+    sync: &Mutex<ClientSyncState>,
+    server_msg: &ipc::Payload,
+    local_dirty: &Mutex<HashSet<PathBuf>>,
+) -> Outcome<()> {
     let mut s = sync
         .lock()
         .map_err(|e| format!("client sync state lock: {e}"))?;
@@ -129,8 +133,18 @@ fn maybe_record_writer_ack(sync: &Mutex<ClientSyncState>, server_msg: &ipc::Payl
     {
         s.acked_generation = server_msg.head_generation;
         persist_acked_generation(&s.ack_path, s.acked_generation)?;
+        if let Ok(mut dirty) = local_dirty.lock() {
+            dirty.clear();
+        }
     }
     Ok(())
+}
+
+fn mark_local_dirty(local_dirty: &Mutex<HashSet<PathBuf>>, path: &Path) {
+    if let Ok(mut dirty) = local_dirty.lock() {
+        let p = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+        dirty.insert(p);
+    }
 }
 
 fn record_pull_acked(sync: &Mutex<ClientSyncState>, head_generation: u64) -> Outcome<()> {
@@ -382,12 +396,14 @@ pub fn init(params: &ClientParameters) -> Outcome<()> {
     signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&fatal))?;
 
     let inodes = Arc::new(RwLock::new(inode_map));
+    let local_dirty = Arc::new(Mutex::new(HashSet::<PathBuf>::new()));
 
     let watch_thread = thread::spawn({
         let fatal = Arc::clone(&fatal);
         let inode_map = Arc::clone(&inodes);
+        let local_dirty = Arc::clone(&local_dirty);
         // watch_thread needs a mutable map to assign "last event" to inode
-        move || watch_entry(inode_map, notify_rx, event_tx, fatal)
+        move || watch_entry(inode_map, notify_rx, event_tx, fatal, local_dirty)
     });
 
     let zenoh_thread = thread::spawn({
@@ -397,7 +413,19 @@ pub fn init(params: &ClientParameters) -> Outcome<()> {
         let watchers = Arc::clone(&watchers);
         let notify_tx = notify_tx.clone();
         let client_sync = Arc::clone(&client_sync);
-        move || zenoh_entry(inode_map, event_rx, fatal, params, watchers, notify_tx, client_sync)
+        let local_dirty = Arc::clone(&local_dirty);
+        move || {
+            zenoh_entry(
+                inode_map,
+                event_rx,
+                fatal,
+                params,
+                watchers,
+                notify_tx,
+                client_sync,
+                local_dirty,
+            )
+        }
     });
 
     match watch_thread.join() {
@@ -451,6 +479,7 @@ fn watch_entry(
     notify_rx: mpsc::Receiver<notify::Event>,
     event_tx: mpsc::Sender<PathBuf>,
     fatal: Arc<AtomicBool>,
+    local_dirty: Arc<Mutex<HashSet<PathBuf>>>,
 ) -> Outcome<()> {
     loop {
         if fatal.load(Ordering::Relaxed) {
@@ -466,7 +495,14 @@ fn watch_entry(
                         | notify::EventKind::Modify(_)
                         | notify::EventKind::Remove(_)
                 ) {
+                    let track_dirty = matches!(
+                        event.kind,
+                        notify::EventKind::Create(_) | notify::EventKind::Modify(_)
+                    );
                     for path in &event.paths {
+                        if track_dirty {
+                            mark_local_dirty(local_dirty.as_ref(), path);
+                        }
                         check_interval(path, &inode_map, &event_tx)?;
                     }
                 }
@@ -483,7 +519,7 @@ fn watch_entry(
     }
 }
 
-#[allow(clippy::needless_pass_by_value)]
+#[allow(clippy::needless_pass_by_value, clippy::too_many_arguments)]
 fn zenoh_entry(
     inode_map: Arc<RwLock<config::InodeMap>>,
     event_rx: mpsc::Receiver<PathBuf>,
@@ -492,6 +528,7 @@ fn zenoh_entry(
     watchers: Arc<Mutex<Vec<RecommendedWatcher>>>,
     notify_tx: mpsc::Sender<Event>,
     client_sync: Arc<Mutex<ClientSyncState>>,
+    local_dirty: Arc<Mutex<HashSet<PathBuf>>>,
 ) -> Outcome<()> {
     let (zenoh_client, zenoh_rx, terminal_topic): (ipc::ZenohClient, ipc::Rx, String) =
         match ipc::connect_with_terminate_topic(&[ipc::TOPIC_SERVER], ipc::TOPIC_CLIENTS) {
@@ -523,6 +560,7 @@ fn zenoh_entry(
                     &watchers,
                     &notify_tx,
                     &client_sync,
+                    local_dirty.as_ref(),
                 ) {
                     error!("client:zenoh_entry>> process: {e}");
                 }
@@ -552,6 +590,7 @@ fn handle_incoming_transport_message(
     watchers: &Arc<Mutex<Vec<RecommendedWatcher>>>,
     notify_tx: &mpsc::Sender<Event>,
     client_sync: &Arc<Mutex<ClientSyncState>>,
+    local_dirty: &Mutex<HashSet<PathBuf>>,
 ) -> Outcome<()> {
     let Some(msg) = message else {
         return bad!("client:zenoh_entry>> empty message?");
@@ -574,18 +613,23 @@ fn handle_incoming_transport_message(
         zenoh_client,
         inode_map,
         client_sync,
+        local_dirty,
+        params,
         &msg.payload,
     )
 }
 
+#[allow(clippy::too_many_lines)]
 fn process(
     event_rx: &mpsc::Receiver<PathBuf>,
     zenoh_client: &ipc::ZenohClient,
     inode_map: &Arc<RwLock<config::InodeMap>>,
     client_sync: &Arc<Mutex<ClientSyncState>>,
+    local_dirty: &Mutex<HashSet<PathBuf>>,
+    params: &ClientParameters,
     server_msg: &ipc::Payload,
 ) -> Outcome<()> {
-    maybe_record_writer_ack(client_sync, server_msg)?;
+    maybe_record_writer_ack(client_sync.as_ref(), server_msg, local_dirty)?;
 
     match server_msg.status {
         ipc::Status::NotReady(reason) => match reason {
@@ -603,10 +647,32 @@ fn process(
                     let mut payload = ipc::Payload::new()?
                         .status(ipc::Status::NotReady(ipc::Reason::Behind))
                         .src_paths(src_paths);
-                    pull(&payload)?;
-                    attach_client_outbound_basis(&mut payload, client_sync)?;
+                    let has_dirty = local_dirty.lock().map(|d| !d.is_empty()).unwrap_or(false);
+                    let state_dir = client_state_dir(params);
+                    let backup_run = if has_dirty {
+                        let dir = conflict::next_behind_backup_dir(&state_dir)?;
+                        warn!(
+                            "client: behind pull with local edits pending; rsync backups will use {}",
+                            dir.display()
+                        );
+                        Some(dir)
+                    } else {
+                        None
+                    };
+                    pull(&payload, backup_run.as_deref())?;
+                    if let Some(ref dir) = backup_run {
+                        info!(
+                            "client: behind pull finished; pre-replace copies (if any) are under {} (head_generation={})",
+                            dir.display(),
+                            head
+                        );
+                    }
+                    attach_client_outbound_basis(&mut payload, client_sync.as_ref())?;
                     zenoh_client.publish(&mut payload)?;
-                    record_pull_acked(client_sync, head)?;
+                    record_pull_acked(client_sync.as_ref(), head)?;
+                    if let Ok(mut dirty) = local_dirty.lock() {
+                        dirty.clear();
+                    }
                     Ok(())
                 } else {
                     bad!("unable to acquire inode_map read lock")
@@ -642,10 +708,9 @@ fn process(
                         };
 
                         for (rsync_cfg, paths) in grouped_paths {
-                            let mut payload = ipc::Payload::new()?
-                                .src_paths(paths)
-                                .rsync(rsync_cfg);
-                            attach_client_outbound_basis(&mut payload, client_sync)?;
+                            let mut payload =
+                                ipc::Payload::new()?.src_paths(paths).rsync(rsync_cfg);
+                            attach_client_outbound_basis(&mut payload, client_sync.as_ref())?;
                             if let Err(e) = zenoh_client.publish(&mut payload) {
                                 error!("unable to publish {e}");
                             } else {
@@ -769,10 +834,10 @@ fn push(payload: &ipc::Payload) -> Outcome<()> {
         dest.display()
     );
     let rsync_cfg = payload.rsync.clone().unwrap_or_default();
-    rsync(&payload.src_paths, &dest, &rsync_cfg)
+    rsync(&payload.src_paths, &dest, &rsync_cfg, None)
 }
 
-fn pull(payload: &ipc::Payload) -> Outcome<()> {
+fn pull(payload: &ipc::Payload, backup_dir: Option<&Path>) -> Outcome<()> {
     let srcs: Vec<PathBuf> = payload
         .src_paths
         .iter()
@@ -780,16 +845,17 @@ fn pull(payload: &ipc::Payload) -> Outcome<()> {
         .collect();
 
     debug!(
-        "pulling srcs:[{}] dest:{}",
+        "pulling srcs:[{}] dest:{} backup:{:?}",
         srcs.iter()
             .map(|p| p.display().to_string())
             .collect::<Vec<_>>()
             .join(", "),
-        payload.dest_path.display()
+        payload.dest_path.display(),
+        backup_dir
     );
 
     let rsync_cfg = payload.rsync.clone().unwrap_or_default();
-    rsync(&srcs, &payload.dest_path, &rsync_cfg)
+    rsync(&srcs, &payload.dest_path, &rsync_cfg, backup_dir)
 }
 
 #[cfg(test)]

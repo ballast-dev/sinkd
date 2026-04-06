@@ -4,8 +4,7 @@
 
 use clap::{parser::ValuesRef, ArgMatches};
 use std::{
-    fmt,
-    fs,
+    fmt, fs,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -168,14 +167,12 @@ impl DaemonParameters {
             .filter(|p| !p.as_os_str().is_empty());
 
         let params = match daemon_type {
-            DaemonType::UnixClient | DaemonType::WindowsClient => {
-                Self::Client(ClientParameters {
-                    shared,
-                    system_config: resolve_system_config(system_config)?,
-                    user_configs: resolve_user_configs(user_configs)?,
-                    client_state_dir_override,
-                })
-            }
+            DaemonType::UnixClient | DaemonType::WindowsClient => Self::Client(ClientParameters {
+                shared,
+                system_config: resolve_system_config(system_config)?,
+                user_configs: resolve_user_configs(user_configs)?,
+                client_state_dir_override,
+            }),
             DaemonType::UnixServer | DaemonType::WindowsServer => {
                 Self::Server(ServerParameters { shared })
             }

@@ -12,6 +12,7 @@ pub mod outcome;
 pub mod cli;
 pub mod client;
 pub mod config;
+pub mod conflict;
 pub mod ipc;
 pub mod parameters;
 pub mod rsync;

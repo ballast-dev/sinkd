@@ -7,20 +7,15 @@ use std::{
 
 #[cfg(windows)]
 use crate::parameters::DaemonType;
-use crate::{
-    config,
-    outcome::Outcome,
-    parameters::DaemonParameters,
-    shiplog,
-};
+use crate::{config, outcome::Outcome, parameters::DaemonParameters, shiplog};
 
-mod zenoh;
 #[cfg(unix)]
 mod unix;
 #[cfg(windows)]
 mod windows;
+mod zenoh;
 
-pub use zenoh::{Rx, TOPIC_CLIENTS, TOPIC_CONTROL_RELOAD, TOPIC_SERVER, ZenohClient, ZenohMessage};
+pub use zenoh::{Rx, ZenohClient, ZenohMessage, TOPIC_CLIENTS, TOPIC_CONTROL_RELOAD, TOPIC_SERVER};
 
 pub fn terminal_topic() -> Outcome<String> {
     Ok(format!("sinkd/{}/terminate", config::get_hostname()?))
@@ -282,7 +277,11 @@ impl Payload {
 
 impl fmt::Display for Payload {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "hostname: {}, username: {}, src_paths: [", self.hostname, self.username)?;
+        write!(
+            f,
+            "hostname: {}, username: {}, src_paths: [",
+            self.hostname, self.username
+        )?;
         for path in &self.src_paths {
             write!(f, "{}, ", path.display())?;
         }
@@ -299,4 +298,3 @@ impl fmt::Display for Payload {
         )
     }
 }
-

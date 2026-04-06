@@ -195,7 +195,11 @@ impl ScenarioRunner {
                     },
                     *within_ms,
                     *poll_interval_ms,
-                    &format!("expected '{}' to eventually contain '{}'", full.display(), contains),
+                    &format!(
+                        "expected '{}' to eventually contain '{}'",
+                        full.display(),
+                        contains
+                    ),
                 )
             }
         }
@@ -228,11 +232,15 @@ impl ScenarioRunner {
 
     fn write_report(&self, report: &ScenarioReport) -> Result<(), String> {
         let artifacts = self.root.join("_artifacts");
-        fs::create_dir_all(&artifacts)
-            .map_err(|e| format!("failed to create artifacts dir '{}': {e}", artifacts.display()))?;
+        fs::create_dir_all(&artifacts).map_err(|e| {
+            format!(
+                "failed to create artifacts dir '{}': {e}",
+                artifacts.display()
+            )
+        })?;
         let output = artifacts.join("latest.toml");
-        let serialized =
-            toml::to_string_pretty(report).map_err(|e| format!("failed to serialize report: {e}"))?;
+        let serialized = toml::to_string_pretty(report)
+            .map_err(|e| format!("failed to serialize report: {e}"))?;
         fs::write(&output, serialized)
             .map_err(|e| format!("failed to write report '{}': {e}", output.display()))?;
         Ok(())
@@ -273,7 +281,7 @@ struct ExecutedStep {
 
 #[cfg(test)]
 mod tests {
-    use super::{expand_root_template, ScenarioRunner};
+    use super::{ScenarioRunner, expand_root_template};
     use crate::spec::{ScenarioSpec, Step};
 
     #[test]
@@ -335,4 +343,3 @@ mod tests {
         std::fs::remove_dir_all(root).expect("temp root should be removable");
     }
 }
-
