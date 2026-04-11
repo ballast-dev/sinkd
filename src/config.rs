@@ -78,7 +78,8 @@ pub struct RsyncConfig {
 
 impl RsyncConfig {
     fn validate(&self) -> Result<(), String> {
-        reject_unsupported_rsync_fields!(self,
+        reject_unsupported_rsync_fields!(
+            self,
             owner,
             group,
             devices,
@@ -204,14 +205,13 @@ pub(crate) struct SysConfig {
 pub(crate) fn load_system_config_file(path: &Path) -> Outcome<SysConfig> {
     let raw = fs::read_to_string(path)
         .map_err(|e| format!("cannot read system config {}: {e}", path.display()))?;
-    Ok(toml::from_str(&raw).map_err(|e| {
-        format!("cannot parse system config {}: {e}", path.display())
-    })?)
+    Ok(toml::from_str(&raw)
+        .map_err(|e| format!("cannot parse system config {}: {e}", path.display()))?)
 }
 
 pub(crate) fn save_system_config_file(path: &Path, cfg: &SysConfig) -> Outcome<()> {
-    let serialized = toml::to_string_pretty(cfg)
-        .map_err(|e| format!("cannot serialize system config: {e}"))?;
+    let serialized =
+        toml::to_string_pretty(cfg).map_err(|e| format!("cannot serialize system config: {e}"))?;
     fs::write(path, serialized)?;
     Ok(())
 }
@@ -219,10 +219,8 @@ pub(crate) fn save_system_config_file(path: &Path, cfg: &SysConfig) -> Outcome<(
 pub(crate) fn load_user_config_file(path: &Path) -> Outcome<UserConfig> {
     let raw = fs::read_to_string(path)
         .map_err(|e| format!("cannot read user config {}: {e}", path.display()))?;
-    Ok(
-        toml::from_str(&raw)
-            .map_err(|e| format!("cannot parse user config {}: {e}", path.display()))?,
-    )
+    Ok(toml::from_str(&raw)
+        .map_err(|e| format!("cannot parse user config {}: {e}", path.display()))?)
 }
 
 pub(crate) fn save_user_config_file(path: &Path, cfg: &UserConfig) -> Outcome<()> {
@@ -280,11 +278,7 @@ impl ConfigParser {
         if let Err(e) = self.parse_sys_config(system_config) {
             match e {
                 ParseError::InvalidSyntax(syn) => {
-                    return bad!(
-                        "Invalid sytax in '{}': {}",
-                        system_config.display(),
-                        syn
-                    );
+                    return bad!("Invalid sytax in '{}': {}", system_config.display(), syn);
                 }
                 ParseError::FileNotFound => {
                     return bad!("File not found: '{}'", system_config.display());
@@ -307,9 +301,7 @@ impl ConfigParser {
                 Ok(toml_parsed) => {
                     self.sys = toml_parsed; // NOTE: converted into Rust via serde lib
                     if let Some(rsync) = &self.sys.rsync {
-                        rsync
-                            .validate()
-                            .map_err(ParseError::InvalidSyntax)?;
+                        rsync.validate().map_err(ParseError::InvalidSyntax)?;
                     }
                     if let Some(anchors) = &self.sys.anchors {
                         for anchor in anchors {
@@ -357,9 +349,7 @@ impl ConfigParser {
                 Ok(toml_parsed) => {
                     let user_config: UserConfig = toml_parsed;
                     if let Some(rsync) = &user_config.rsync {
-                        rsync
-                            .validate()
-                            .map_err(ParseError::InvalidSyntax)?;
+                        rsync.validate().map_err(ParseError::InvalidSyntax)?;
                     }
                     for anchor in &user_config.anchors {
                         anchor
@@ -403,10 +393,10 @@ pub fn get(client: &ClientParameters) -> Outcome<(String, InodeMap)> {
         });
 
     for cfg in parser.users.values() {
-        let user_rsync = cfg
-            .rsync
-            .as_ref()
-            .map_or_else(|| sys_rsync.clone(), |override_cfg| override_cfg.merge_over(&sys_rsync));
+        let user_rsync = cfg.rsync.as_ref().map_or_else(
+            || sys_rsync.clone(),
+            |override_cfg| override_cfg.merge_over(&sys_rsync),
+        );
         for anchor in &cfg.anchors {
             // let excludes = anchor.excludes.is_some().or()
             let resolved_rsync = anchor.rsync_override().merge_over(&user_rsync);
@@ -550,9 +540,9 @@ pub fn resolve(path: &str) -> Outcome<PathBuf> {
                 return bad!("HOME env var not defined: {}", e);
             }
         };
-        let after_tilde = path.strip_prefix("~/").ok_or_else(|| {
-            format!("internal: path was expected to start with '~/': {path}")
-        })?;
+        let after_tilde = path
+            .strip_prefix("~/")
+            .ok_or_else(|| format!("internal: path was expected to start with '~/': {path}"))?;
         p.push(after_tilde);
         match p.canonicalize() {
             Ok(resolved) => Ok(resolved),

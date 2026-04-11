@@ -195,7 +195,11 @@ impl ScenarioRunner {
                     },
                     *within_ms,
                     *poll_interval_ms,
-                    &format!("expected '{}' to eventually contain '{}'", full.display(), contains),
+                    &format!(
+                        "expected '{}' to eventually contain '{}'",
+                        full.display(),
+                        contains
+                    ),
                 )
             }
         }
@@ -228,11 +232,15 @@ impl ScenarioRunner {
 
     fn write_report(&self, report: &ScenarioReport) -> Result<(), String> {
         let artifacts = self.root.join("_artifacts");
-        fs::create_dir_all(&artifacts)
-            .map_err(|e| format!("failed to create artifacts dir '{}': {e}", artifacts.display()))?;
+        fs::create_dir_all(&artifacts).map_err(|e| {
+            format!(
+                "failed to create artifacts dir '{}': {e}",
+                artifacts.display()
+            )
+        })?;
         let output = artifacts.join("latest.toml");
-        let serialized =
-            toml::to_string_pretty(report).map_err(|e| format!("failed to serialize report: {e}"))?;
+        let serialized = toml::to_string_pretty(report)
+            .map_err(|e| format!("failed to serialize report: {e}"))?;
         fs::write(&output, serialized)
             .map_err(|e| format!("failed to write report '{}': {e}", output.display()))?;
         Ok(())
@@ -273,8 +281,11 @@ struct ExecutedStep {
 
 #[cfg(test)]
 mod tests {
-    use super::{expand_root_template, ScenarioRunner};
-    use crate::spec::{ScenarioSpec, Step};
+    use std::fs;
+    use std::path::PathBuf;
+
+    use super::{ScenarioRunner, expand_root_template};
+    use crate::spec::parse_spec;
 
     #[test]
     fn expand_root_template_replaces_placeholder() {
@@ -297,42 +308,23 @@ mod tests {
         let _ = std::fs::remove_dir_all(tmp);
     }
 
+    /// Runs `scenario/specs/local_smoke.toml` so step definitions stay in one place.
     #[test]
-    fn runner_executes_write_append_and_asserts() {
+    fn local_smoke_spec_runs() {
+        let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let spec_path = manifest.join("specs/local_smoke.toml");
+        let raw = fs::read_to_string(&spec_path)
+            .unwrap_or_else(|e| panic!("read {}: {e}", spec_path.display()));
+        let spec = parse_spec(&raw).expect("parse local_smoke.toml");
+
         let unique = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .expect("time should be after epoch")
             .as_nanos();
-        let root = std::env::temp_dir().join(format!("sinkd_harness_{unique}"));
-
-        let spec = ScenarioSpec {
-            name: "roundtrip".to_string(),
-            timeout_ms: 5_000,
-            steps: vec![
-                Step::CreateDir {
-                    path: "a".to_string(),
-                },
-                Step::WriteFile {
-                    path: "a/file.txt".to_string(),
-                    content: "hello".to_string(),
-                },
-                Step::AppendFile {
-                    path: "a/file.txt".to_string(),
-                    content: " world".to_string(),
-                },
-                Step::AssertExists {
-                    path: "a/file.txt".to_string(),
-                },
-                Step::AssertContains {
-                    path: "a/file.txt".to_string(),
-                    contains: "hello world".to_string(),
-                },
-            ],
-        };
+        let root = std::env::temp_dir().join(format!("sinkd_local_smoke_{unique}"));
 
         let runner = ScenarioRunner::new(&root);
-        runner.run(&spec).expect("scenario should pass");
-        std::fs::remove_dir_all(root).expect("temp root should be removable");
+        runner.run(&spec).expect("local_smoke scenario should pass");
+        let _ = std::fs::remove_dir_all(&root);
     }
 }
-

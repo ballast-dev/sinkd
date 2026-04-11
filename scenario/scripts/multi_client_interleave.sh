@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Two clients (alice / bob), interleaved writes, shared Zenoh on localhost.
-# Uses `sinkd --client-state-dir` so each daemon has its own client_id (see `client::client_state_dir`).
+# Uses `sinkd client --client-state-dir` so each daemon has its own client_id (see `client::client_state_dir`).
 set -euo pipefail
 
 HARNESS="${1:?usage: multi_client_interleave.sh HARNESS_DIR}"
@@ -50,15 +50,15 @@ TARGET_DIR="${CARGO_TARGET_DIR:-$REPO_ROOT/target}"
 SINKD="$TARGET_DIR/debug/sinkd"
 
 cleanup() {
-  "$SINKD" -d --client-state-dir "$STATE_A" client -s "$SYS_TOML" -u "$USER_ALICE" stop 2>/dev/null || true
-  "$SINKD" -d --client-state-dir "$STATE_B" client -s "$SYS_TOML" -u "$USER_BOB" stop 2>/dev/null || true
+  "$SINKD" -d client --client-state-dir "$STATE_A" -s "$SYS_TOML" -u "$USER_ALICE" stop 2>/dev/null || true
+  "$SINKD" -d client --client-state-dir "$STATE_B" -s "$SYS_TOML" -u "$USER_BOB" stop 2>/dev/null || true
   "$SINKD" -d server stop 2>/dev/null || true
 }
 trap cleanup EXIT
 
 "$SINKD" -d server start
-"$SINKD" -d --client-state-dir "$STATE_A" client -s "$SYS_TOML" -u "$USER_ALICE" start
-"$SINKD" -d --client-state-dir "$STATE_B" client -s "$SYS_TOML" -u "$USER_BOB" start
+"$SINKD" -d client --client-state-dir "$STATE_A" -s "$SYS_TOML" -u "$USER_ALICE" start
+"$SINKD" -d client --client-state-dir "$STATE_B" -s "$SYS_TOML" -u "$USER_BOB" start
 
 sleep 6
 

@@ -1,7 +1,7 @@
 use log::{debug, error, info, warn};
+use serde::{Deserialize, Serialize};
 use std::sync::mpsc;
 use std::time::Duration;
-use serde::{Deserialize, Serialize};
 use zenoh::{key_expr::KeyExpr, sample::SampleKind, Wait};
 
 use crate::outcome::Outcome;
@@ -122,6 +122,7 @@ impl ZenohClient {
     ///
     /// # Returns
     /// A tuple of (`ZenohClient`, Receiver) where Receiver receives `ZenohMessage`
+    #[allow(clippy::too_many_lines)]
     pub fn new(
         subscriptions: &[&str],
         publish_topic: &str,
@@ -161,14 +162,22 @@ impl ZenohClient {
             while let Ok(payload) = pub_rx.recv() {
                 if reorder_pairs {
                     if let Some(previous) = pending_for_reorder.take() {
-                        if let Err(e) =
-                            send_payload(&publisher, &payload, delay_ms, drop_every_n, &mut send_count)
-                        {
+                        if let Err(e) = send_payload(
+                            &publisher,
+                            &payload,
+                            delay_ms,
+                            drop_every_n,
+                            &mut send_count,
+                        ) {
                             error!("{e}");
                         }
-                        if let Err(e) =
-                            send_payload(&publisher, &previous, delay_ms, drop_every_n, &mut send_count)
-                        {
+                        if let Err(e) = send_payload(
+                            &publisher,
+                            &previous,
+                            delay_ms,
+                            drop_every_n,
+                            &mut send_count,
+                        ) {
                             error!("{e}");
                         }
                     } else {
@@ -177,17 +186,25 @@ impl ZenohClient {
                     continue;
                 }
 
-                if let Err(e) =
-                    send_payload(&publisher, &payload, delay_ms, drop_every_n, &mut send_count)
-                {
+                if let Err(e) = send_payload(
+                    &publisher,
+                    &payload,
+                    delay_ms,
+                    drop_every_n,
+                    &mut send_count,
+                ) {
                     error!("{e}");
                 }
             }
 
             if let Some(payload) = pending_for_reorder {
-                if let Err(e) =
-                    send_payload(&publisher, &payload, delay_ms, drop_every_n, &mut send_count)
-                {
+                if let Err(e) = send_payload(
+                    &publisher,
+                    &payload,
+                    delay_ms,
+                    drop_every_n,
+                    &mut send_count,
+                ) {
                     error!("{e}");
                 }
             }
@@ -280,7 +297,8 @@ fn send_payload(
         }
     }
 
-    let bytes = bincode::serialize(&payload).map_err(|e| format!("Zenoh serialize error: {e:?}"))?;
+    let bytes =
+        bincode::serialize(&payload).map_err(|e| format!("Zenoh serialize error: {e:?}"))?;
     publisher
         .put(bytes)
         .wait()

@@ -5,7 +5,12 @@ use std::{ffi::OsStr, path::Path, process::Command};
 use crate::config::ResolvedRsyncConfig;
 use crate::outcome::Outcome;
 
-pub fn rsync<P>(srcs: &[P], dest: &P, rsync_cfg: &ResolvedRsyncConfig) -> Outcome<()>
+pub fn rsync<P>(
+    srcs: &[P],
+    dest: &P,
+    rsync_cfg: &ResolvedRsyncConfig,
+    backup_dir: Option<&Path>,
+) -> Outcome<()>
 where
     P: AsRef<OsStr> + AsRef<Path> + std::fmt::Debug,
 {
@@ -13,14 +18,14 @@ where
         error!("rsync test hook: forced failure");
         return bad!("rsync test hook: forced failure");
     }
-    if let Some(delay_ms) = crate::test_hooks::env_u64("SINKD_TEST_RSYNC_DELAY_MS")
-    {
+    if let Some(delay_ms) = crate::test_hooks::env_u64("SINKD_TEST_RSYNC_DELAY_MS") {
         std::thread::sleep(std::time::Duration::from_millis(delay_ms));
     }
 
     let mut cmd = Command::new("rsync");
-
-    cmd.args(build_args(rsync_cfg)).args(srcs).arg(dest);
+    cmd.args(build_pull_args(rsync_cfg, backup_dir))
+        .args(srcs)
+        .arg(dest);
 
     let mut child = match cmd.spawn() {
         Err(e) => {
@@ -43,7 +48,7 @@ where
         return bad!("rsync failed with status {status}");
     }
 
-    debug!("\u{1f6b0} rsync {srcs:#?} {dest:#?} \u{1f919}");
+    debug!("\u{1f6b0} rsync {srcs:#?} {dest:#?} backup:{backup_dir:?} \u{1f919}");
     Ok(())
 }
 
@@ -83,11 +88,27 @@ pub fn build_args(rsync_cfg: &ResolvedRsyncConfig) -> Vec<String> {
     args
 }
 
+/// Full rsync argv for a pull (baseline flags plus optional `--backup` / `--backup-dir`).
+#[must_use]
+pub fn build_pull_args(rsync_cfg: &ResolvedRsyncConfig, backup_dir: Option<&Path>) -> Vec<String> {
+    let mut args = build_args(rsync_cfg);
+    if let Some(dir) = backup_dir {
+        args.push("--backup".to_string());
+        args.push(format!(
+            "--backup-dir={}",
+            dir.as_os_str().to_string_lossy()
+        ));
+    }
+    args
+}
+
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use crate::config::ResolvedRsyncConfig;
 
-    use super::build_args;
+    use super::{build_args, build_pull_args};
 
     #[test]
     fn build_args_keeps_baseline_defaults() {
@@ -126,6 +147,26 @@ mod tests {
                 "--size-only",
                 "--stats",
             ]
+        );
+    }
+
+    #[test]
+    fn build_pull_args_matches_build_args_without_backup() {
+        let cfg = ResolvedRsyncConfig::default();
+        assert_eq!(build_pull_args(&cfg, None), build_args(&cfg));
+    }
+
+    #[test]
+    fn build_pull_args_appends_backup_flags_with_absolute_dir() {
+        let cfg = ResolvedRsyncConfig::default();
+        let backup = Path::new("/tmp/sinkd/client/behind_backups/0");
+        let args = build_pull_args(&cfg, Some(backup));
+        assert!(
+            args.ends_with(&[
+                "--backup".to_string(),
+                "--backup-dir=/tmp/sinkd/client/behind_backups/0".to_string(),
+            ]),
+            "args={args:?}"
         );
     }
 }

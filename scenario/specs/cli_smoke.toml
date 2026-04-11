@@ -1,0 +1,8 @@
+# Fast CLI contract checks: help, subcommand_required, server ls, client ls + --client-state-dir.
+# Does not start long-running daemons or require Zenoh.
+name = "cli-smoke"
+timeout_ms = 120000
+
+[[steps]]
+kind = "run_command"
+command = "bash scenario/scripts/cli_smoke.sh '{{root}}'"

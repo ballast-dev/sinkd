@@ -20,8 +20,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    config,
-    ipc,
+    config, ipc,
     outcome::Outcome,
     parameters::{DaemonParameters, ServerParameters},
     rsync::rsync,
@@ -139,6 +138,19 @@ pub fn restart(params: &ServerParameters) -> Outcome<()> {
     }
 }
 
+pub fn ls(params: &ServerParameters) -> Outcome<()> {
+    let srv_dir = get_srv_dir(params.shared.debug);
+    println!("server sync root: {}", srv_dir.display());
+    let gen_path = srv_dir.join("generation_state.toml");
+    if gen_path.exists() {
+        let st = load_generation_state(&gen_path);
+        println!("current_generation: {}", st.current_generation);
+    } else {
+        println!("(no generation_state.toml yet)");
+    }
+    Ok(())
+}
+
 fn get_srv_dir(debug: u8) -> PathBuf {
     if debug > 0 {
         PathBuf::from("/tmp/sinkd/srv")
@@ -180,9 +192,7 @@ pub fn init(params: &ServerParameters) -> Outcome<()> {
     let fatal = Arc::new(AtomicBool::new(false));
     signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&fatal))?;
     let status = Arc::new(Mutex::new(ipc::Status::Ready));
-    let generation_state = Arc::new(Mutex::new(load_generation_state(
-        &generation_state_path,
-    )));
+    let generation_state = Arc::new(Mutex::new(load_generation_state(&generation_state_path)));
 
     let zenoh_thread = thread::spawn({
         let fatal = Arc::clone(&fatal);
@@ -233,10 +243,7 @@ pub fn init(params: &ServerParameters) -> Outcome<()> {
     Ok(())
 }
 
-fn publish_post_apply(
-    zenoh_client: &ipc::ZenohClient,
-    pa: PostApply,
-) -> Outcome<()> {
+fn publish_post_apply(zenoh_client: &ipc::ZenohClient, pa: PostApply) -> Outcome<()> {
     match pa {
         PostApply::Applied {
             writer_client_id,
@@ -301,9 +308,7 @@ fn zenoh_entry(
             return Err(e);
         }
 
-        if let Err(e) =
-            broadcast_status(&zenoh_client, &status, &generation_state)
-        {
+        if let Err(e) = broadcast_status(&zenoh_client, &status, &generation_state) {
             error!("{e}");
             fatal.store(true, Ordering::Relaxed);
             zenoh_client.disconnect();
@@ -507,7 +512,9 @@ fn synch_entry(
                         }
                         let head = generation_state
                             .lock()
-                            .map_err(|e| format!("server:synch_entry>> generation_state lock: {e}"))?
+                            .map_err(|e| {
+                                format!("server:synch_entry>> generation_state lock: {e}")
+                            })?
                             .current_generation;
                         let _ = post_apply_tx.send(PostApply::StaleAtApply {
                             head_generation: head,
@@ -527,7 +534,7 @@ fn synch_entry(
                     }
                 }
                 let rsync_cfg = payload.rsync.clone().unwrap_or_default();
-                let rsync_ok = rsync(&payload.src_paths, &dest, &rsync_cfg).is_ok();
+                let rsync_ok = rsync(&payload.src_paths, &dest, &rsync_cfg, None).is_ok();
                 if !rsync_ok {
                     error!("server:synch_entry>> rsync failed");
                 }
@@ -546,9 +553,7 @@ fn synch_entry(
                     let new_gen = match generation_state.lock() {
                         Ok(mut st) => {
                             let new_gen = st.bump(now_unix_secs());
-                            if let Err(e) =
-                                persist_generation_state(&generation_state_path, &st)
-                            {
+                            if let Err(e) = persist_generation_state(&generation_state_path, &st) {
                                 error!(
                                     "server: unable to persist generation state '{}': {}",
                                     generation_state_path.display(),
@@ -608,8 +613,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("system time should be after unix epoch")
             .as_nanos();
-        let path =
-            std::env::temp_dir().join(format!("sinkd_generation_state_{unique}.toml"));
+        let path = std::env::temp_dir().join(format!("sinkd_generation_state_{unique}.toml"));
 
         let mut st = GenerationState {
             current_generation: 4,
