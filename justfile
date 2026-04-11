@@ -12,9 +12,11 @@ lint:
 test-local:
     cargo test --workspace
 
-# unit/integration + generation smoke + multi-client interleave + behind-pull backup tree
+# unit/integration + CLI contract + generation smoke + multi-client interleave + behind-pull backup tree
 test:
     just test-local
+    rm -rf test_scenarios/cli
+    cargo run -p scenario -- --spec scenario/specs/cli_smoke.toml --root test_scenarios/cli
     rm -rf test_scenarios/harness
     cargo run -p scenario -- --spec scenario/specs/sinkd_generation_smoke.toml --root test_scenarios/harness
     rm -rf test_scenarios/multi_client
