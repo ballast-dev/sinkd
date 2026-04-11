@@ -64,8 +64,8 @@ wait_gen_at_least() {
 }
 
 cleanup() {
-  "$SINKD" -d --client-state-dir "$STATE_V" client -s "$SYS_TOML" -u "$USER_TOML" stop 2>/dev/null || true
-  "$SINKD" -d --client-state-dir "$STATE_P" client -s "$SYS_TOML" -u "$USER_TOML" stop 2>/dev/null || true
+  "$SINKD" -d client --client-state-dir "$STATE_V" -s "$SYS_TOML" -u "$USER_TOML" stop 2>/dev/null || true
+  "$SINKD" -d client --client-state-dir "$STATE_P" -s "$SYS_TOML" -u "$USER_TOML" stop 2>/dev/null || true
   "$SINKD" -d server stop 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -73,12 +73,12 @@ trap cleanup EXIT
 echo "phase1: server + victim → generation >= 1"
 "$SINKD" -d server start
 sleep 2
-"$SINKD" -d --client-state-dir "$STATE_V" client -s "$SYS_TOML" -u "$USER_TOML" start
+"$SINKD" -d client --client-state-dir "$STATE_V" -s "$SYS_TOML" -u "$USER_TOML" start
 sleep 6
 echo "victim boot $(date +%s)" > "$HARNESS/watch/conflict.txt"
 wait_gen_at_least 1
 
-"$SINKD" -d --client-state-dir "$STATE_V" client -s "$SYS_TOML" -u "$USER_TOML" stop 2>/dev/null || true
+"$SINKD" -d client --client-state-dir "$STATE_V" -s "$SYS_TOML" -u "$USER_TOML" stop 2>/dev/null || true
 sleep 2
 
 if [[ ! -f "$STATE_V/acked_generation" ]]; then
@@ -88,7 +88,7 @@ fi
 echo "victim acked_generation=$(cat "$STATE_V/acked_generation")"
 
 echo "phase2: pusher advances server (Behind pull then push → gen >= 2)"
-"$SINKD" -d --client-state-dir "$STATE_P" client -s "$SYS_TOML" -u "$USER_TOML" start
+"$SINKD" -d client --client-state-dir "$STATE_P" -s "$SYS_TOML" -u "$USER_TOML" start
 sleep 10
 echo "pusher line $(date +%s)" >> "$HARNESS/watch/conflict.txt"
 sleep 6
@@ -96,12 +96,12 @@ echo "pusher line2 $(date +%s)" >> "$HARNESS/watch/conflict.txt"
 sleep 18
 wait_gen_at_least 2
 
-"$SINKD" -d --client-state-dir "$STATE_P" client -s "$SYS_TOML" -u "$USER_TOML" stop 2>/dev/null || true
+"$SINKD" -d client --client-state-dir "$STATE_P" -s "$SYS_TOML" -u "$USER_TOML" stop 2>/dev/null || true
 sleep 2
 
 echo "phase3: victim returns (stale basis), local append → behind pull with backup dir"
 : > /tmp/sinkd/client.log
-"$SINKD" -d --client-state-dir "$STATE_V" client -s "$SYS_TOML" -u "$USER_TOML" start
+"$SINKD" -d client --client-state-dir "$STATE_V" -s "$SYS_TOML" -u "$USER_TOML" start
 sleep 8
 echo "local dirty $(date +%s)" >> "$HARNESS/watch/conflict.txt"
 

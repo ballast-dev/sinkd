@@ -27,6 +27,22 @@ pub(super) fn build_command() -> Command {
     Command::new("client")
         .about("Client side daemon")
         .visible_alias("c")
+        .arg(
+            Arg::new("windows-daemon")
+                .long("windows-daemon")
+                .action(ArgAction::SetTrue)
+                .hide(true)
+                .global(true),
+        )
+        .arg(
+            Arg::new("client-state-dir")
+                .long("client-state-dir")
+                .value_name("DIR")
+                .num_args(1)
+                .hide(true)
+                .global(true)
+                .help("store client_id / ack state under DIR (tests / multi-instance)"),
+        )
         .arg(Arg::new("system-config")
             .help("system TOML (overrides default path)")
             .long_help("overrides default system config path")
@@ -56,10 +72,12 @@ pub(super) fn build_command() -> Command {
         .subcommand(Command::new("rmuser")
             .about("Remove USER(s) from watch list")
             .arg(&user_arg))
-        .subcommand(Command::new("ls")
-            .visible_alias("list")
-            .about("List watched files for PATH(s)")
-            .arg(&path_arg))
+        .subcommand(
+            Command::new("ls")
+                .visible_alias("list")
+                .about("List watched files for PATH(s)")
+                .arg(&path_arg),
+        )
         .subcommand(Command::new("log").about("Show client log output"))
         .subcommand(Command::new("start").about("Start the client daemon"))
         .subcommand(Command::new("restart").about("Restart the client daemon"))
@@ -108,11 +126,10 @@ pub fn dispatch(sub: &ArgMatches, params: &ClientParameters) -> ExitCode {
         Some(("adduser", s)) => egress(client::adduser(params, s.get_many::<String>("user"))),
         Some(("rmuser", s)) => egress(client::rmuser(params, s.get_many::<String>("user"))),
         Some(("ls", s)) => {
-            let list_server = s.get_flag("server");
             let paths = s
                 .get_many::<String>("path")
                 .map(|ps| ps.filter(|p| check_path_exists(p)).collect());
-            egress(client::ls(params, paths, list_server))
+            egress(client::ls(params, paths))
         }
         Some(("log", _)) => egress(client::log(params)),
         _ => {

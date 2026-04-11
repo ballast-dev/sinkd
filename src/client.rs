@@ -324,18 +324,7 @@ pub fn rmuser(params: &ClientParameters, users: Option<ValuesRef<String>>) -> Ou
     Ok(())
 }
 
-pub fn ls(
-    params: &ClientParameters,
-    paths: Option<Vec<&String>>,
-    list_server: bool,
-) -> Outcome<()> {
-    if list_server {
-        println!(
-            "listing server-side paths is not implemented; inspect the server sync root (e.g. /srv/sinkd on Linux)."
-        );
-        return Ok(());
-    }
-
+pub fn ls(params: &ClientParameters, paths: Option<Vec<&String>>) -> Outcome<()> {
     let (_addr, inode_map) = config::get(params)?;
     let mut keys: Vec<_> = inode_map.keys().cloned().collect();
     keys.sort();

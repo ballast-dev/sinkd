@@ -114,30 +114,40 @@ impl DaemonParameters {
     }
 
     pub fn from_matches(matches: &ArgMatches) -> Outcome<Self> {
-        let windows = matches.get_flag("windows-daemon");
-        let (system_config, user_configs, daemon_type) = match matches.subcommand() {
-            Some(("client", client_m)) => (
-                client_m.get_one("system-config"),
-                client_m.get_many("user-configs"),
-                if windows {
-                    DaemonType::WindowsClient
-                } else {
-                    DaemonType::UnixClient
-                },
-            ),
-            _ => (
-                None,
-                None,
-                if windows {
-                    DaemonType::WindowsServer
-                } else {
-                    DaemonType::UnixServer
-                },
-            ),
-        };
-
         let debug = matches.get_count("debug");
         create_log_dir(debug)?;
+
+        let (daemon_type, system_config, user_configs, client_state_dir_override) =
+            match matches.subcommand() {
+                Some(("client", client_m)) => {
+                    let windows = client_m.get_flag("windows-daemon");
+                    let daemon_type = if windows {
+                        DaemonType::WindowsClient
+                    } else {
+                        DaemonType::UnixClient
+                    };
+                    let client_state_dir_override = client_m
+                        .get_one::<String>("client-state-dir")
+                        .map(|s| PathBuf::from(s.trim()))
+                        .filter(|p| !p.as_os_str().is_empty());
+                    (
+                        daemon_type,
+                        client_m.get_one("system-config"),
+                        client_m.get_many("user-configs"),
+                        client_state_dir_override,
+                    )
+                }
+                Some(("server", server_m)) => {
+                    let windows = server_m.get_flag("windows-daemon");
+                    let daemon_type = if windows {
+                        DaemonType::WindowsServer
+                    } else {
+                        DaemonType::UnixServer
+                    };
+                    (daemon_type, None, None, None)
+                }
+                _ => return bad!("expected `client` or `server` subcommand"),
+            };
 
         let debug_level = match debug {
             1 | 2 => debug,
@@ -160,11 +170,6 @@ impl DaemonParameters {
             debug: debug_level,
             log_path: get_log_path(debug, daemon_type),
         };
-
-        let client_state_dir_override = matches
-            .get_one::<String>("client-state-dir")
-            .map(|s| PathBuf::from(s.trim()))
-            .filter(|p| !p.as_os_str().is_empty());
 
         let params = match daemon_type {
             DaemonType::UnixClient | DaemonType::WindowsClient => Self::Client(ClientParameters {

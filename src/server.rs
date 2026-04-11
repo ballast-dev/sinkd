@@ -138,6 +138,19 @@ pub fn restart(params: &ServerParameters) -> Outcome<()> {
     }
 }
 
+pub fn ls(params: &ServerParameters) -> Outcome<()> {
+    let srv_dir = get_srv_dir(params.shared.debug);
+    println!("server sync root: {}", srv_dir.display());
+    let gen_path = srv_dir.join("generation_state.toml");
+    if gen_path.exists() {
+        let st = load_generation_state(&gen_path);
+        println!("current_generation: {}", st.current_generation);
+    } else {
+        println!("(no generation_state.toml yet)");
+    }
+    Ok(())
+}
+
 fn get_srv_dir(debug: u8) -> PathBuf {
     if debug > 0 {
         PathBuf::from("/tmp/sinkd/srv")
