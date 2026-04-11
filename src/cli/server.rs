@@ -4,7 +4,6 @@ use std::process::ExitCode;
 use crate::parameters::ServerParameters;
 use crate::server;
 
-// use super::common::{egress, print_subcommand_help};
 use super::egress;
 
 pub(super) fn build_command() -> Command {
@@ -16,7 +15,8 @@ pub(super) fn build_command() -> Command {
         .subcommand(Command::new("stop").about("Stop the server daemon"))
 }
 
-pub(super) fn dispatch(sub: &ArgMatches, server: &ServerParameters) -> ExitCode {
+#[must_use]
+pub fn dispatch(sub: &ArgMatches, server: &ServerParameters) -> ExitCode {
     match sub.subcommand() {
         Some(("start", _)) => egress(server::start(server)),
         Some(("restart", _)) => egress(server::restart(server)),

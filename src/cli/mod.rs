@@ -2,13 +2,10 @@ use clap::{Arg, ArgAction, Command};
 use std::process::ExitCode;
 use crate::outcome::Outcome;
 
-mod client;
-mod server;
+pub mod client;
+pub mod server;
 
-// pub use build::build_sinkd;
-// pub use dispatch::{dispatch_sinkd_matches, run_sinkd};
-
-pub(super) fn egress<T>(outcome: Outcome<T>) -> ExitCode {
+pub fn egress<T>(outcome: Outcome<T>) -> ExitCode {
     match outcome {
         Ok(_) => ExitCode::SUCCESS,
         Err(e) => {

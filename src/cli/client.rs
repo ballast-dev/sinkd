@@ -91,7 +91,8 @@ fn collect_share_user_paths(submatches: &ArgMatches) -> (Vec<&String>, Vec<&Stri
     (share_paths, user_paths)
 }
 
-pub(super) fn dispatch(sub: &ArgMatches, params: &ClientParameters) -> ExitCode {
+#[must_use]
+pub fn dispatch(sub: &ArgMatches, params: &ClientParameters) -> ExitCode {
     match sub.subcommand() {
         Some(("start", _)) => egress(client::start(params)),
         Some(("restart", _)) => egress(client::restart(params)),
