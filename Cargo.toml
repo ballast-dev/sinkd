@@ -1,6 +1,6 @@
 [package]
 name = "sinkd"
-version = "0.0.3"
+version = "0.0.3+f64be3a"
 authors = ["Tony <krakjn@gmail.com>"]
 edition = "2021"
 
@@ -56,3 +56,10 @@ tempfile = "3"
 
 [lints]
 workspace = true
+
+[profile.release]
+strip = true
+lto = true
+opt-level = 2
+panic = "abort"
+codegen-units = 1

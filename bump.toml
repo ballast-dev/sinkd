@@ -1,0 +1,34 @@
+#  ____  __  __  __  __  ____ 
+# (  _ \(  )(  )(  \/  )(  _ \
+#  ) _ < )(__)(  )    (  )___/
+# (____/(______)(_/\/\_)(__)  
+#
+# https://github.com/launchfirestorm/bump
+
+[semver.format]
+prefix = ""
+delimiter = "."
+timestamp = "%Y-%m-%d %H:%M:%S %Z"   # [optional] strftime syntax for build timestamp
+
+# NOTE: This section is modified by the bump command
+[semver.version]
+major = 0
+minor = 0
+patch = 3
+candidate = 0
+
+# Candidate promotion strategies:  (when creating first candidate)
+#  - "major" : increment major, zero minor and patch
+#  - "minor" : increment minor, zero patch
+#  - "patch" : increment patch
+[semver.candidate]
+promotion = "minor"
+delimiter = "-rc"
+
+# Development suffix strategies:
+#  - "git_sha" : append 7 char sha1 of the current commit (default)
+#  - "branch"  : append the current git branch name
+#  - "full"    : append <branch>_<sha1>
+[semver.development]
+promotion = "git_sha"
+delimiter = "+"
