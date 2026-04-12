@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build a .deb with a static musl sinkd (amd64/arm64) into artifacts/.
-# Requires: dpkg-deb, cargo, rustup, musl toolchain (e.g. apt install musl-tools).
+# Requires: dpkg-deb, bump. Binary: target/*/release/sinkd for the musl triple, or set SINKD_BIN.
 set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
@@ -34,7 +34,12 @@ install -d "${STAGE}/usr/bin" \
   "${STAGE}/DEBIAN"
 
 TARGET_DIR="${CARGO_TARGET_DIR:-${ROOT}/target}"
-BIN="${TARGET_DIR}/${MUSL_TARGET}/release/sinkd"
+BIN="${SINKD_BIN:-${TARGET_DIR}/${MUSL_TARGET}/release/sinkd}"
+
+if [[ ! -f "${BIN}" ]]; then
+  echo "Missing binary at ${BIN}. Build sinkd for ${MUSL_TARGET} first or set SINKD_BIN." >&2
+  exit 1
+fi
 
 install "${BIN}" "${STAGE}/usr/bin/sinkd"
 install -m 644 LICENSE "${STAGE}/usr/share/doc/sinkd/copyright"

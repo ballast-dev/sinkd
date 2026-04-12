@@ -7,6 +7,9 @@ on:
       - main
       - release/*
 
+permissions:
+  contents: write
+
 jobs:
   merge-bump:
     if: github.event.pull_request.merged

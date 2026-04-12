@@ -1,5 +1,5 @@
-# Build sinkd and zip the release binary + configs from cfg/ (+ LICENSE, README) into artifacts/.
-# Run on Windows with Rust and bump installed. PowerShell 5+.
+# Zip the release binary + configs from cfg/ (+ LICENSE, README) into artifacts/.
+# Set SINKD_EXE to a prebuilt sinkd.exe to skip cargo; otherwise Rust + bump on PATH. PowerShell 5+.
 $ErrorActionPreference = 'Stop'
 
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -15,28 +15,31 @@ if (-not $Version) { throw 'bump -b returned empty version' }
 $Artifacts = Join-Path $Root 'artifacts'
 New-Item -ItemType Directory -Force -Path $Artifacts | Out-Null
 
-$cargo = Get-Command cargo -ErrorAction SilentlyContinue
-if (-not $cargo) { throw 'cargo not found in PATH' }
-
 $cfgSystem = Join-Path $Root 'cfg\system\sinkd.conf'
 $cfgUser = Join-Path $Root 'cfg\user\sinkd.conf'
 foreach ($p in @($cfgSystem, $cfgUser)) { if (-not (Test-Path $p)) { throw "Missing $p" } }
 
-$Triple = $env:CARGO_BUILD_TARGET
-if ($Triple) {
-  cargo build -p sinkd --release --locked --target $Triple
+$exe = $env:SINKD_EXE
+if ($exe -and (Test-Path $exe)) {
+  $exe = (Resolve-Path $exe).Path
 } else {
-  cargo build -p sinkd --release --locked
+  $cargo = Get-Command cargo -ErrorAction SilentlyContinue
+  if (-not $cargo) { throw 'cargo not found in PATH (set SINKD_EXE to a prebuilt sinkd.exe to skip build)' }
+  $Triple = $env:CARGO_BUILD_TARGET
+  if ($Triple) {
+    cargo build -p sinkd --release --locked --target $Triple
+  } else {
+    cargo build -p sinkd --release --locked
+  }
+  $cargoTarget = $env:CARGO_TARGET_DIR
+  if (-not $cargoTarget) { $cargoTarget = Join-Path $Root 'target' }
+  if ($Triple) {
+    $exe = [IO.Path]::Combine($cargoTarget, $Triple, 'release', 'sinkd.exe')
+  } else {
+    $exe = Join-Path $cargoTarget 'release\sinkd.exe'
+  }
+  if (-not (Test-Path $exe)) { throw "Expected $exe after build" }
 }
-
-$cargoTarget = $env:CARGO_TARGET_DIR
-if (-not $cargoTarget) { $cargoTarget = Join-Path $Root 'target' }
-if ($Triple) {
-  $exe = [IO.Path]::Combine($cargoTarget, $Triple, 'release', 'sinkd.exe')
-} else {
-  $exe = Join-Path $cargoTarget 'release\sinkd.exe'
-}
-if (-not (Test-Path $exe)) { throw "Expected $exe after build" }
 
 $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'amd64' }
 $staging = Join-Path $env:TEMP ("sinkd-win-{0}" -f [Guid]::NewGuid().ToString('N'))

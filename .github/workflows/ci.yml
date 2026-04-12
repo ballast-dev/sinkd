@@ -31,43 +31,12 @@ jobs:
   build-linux:
     needs: lint
     strategy:
-      matrix:
-        include:
-          - { runner: ubuntu-22.04, target: x86_64-unknown-linux-musl, platform: linux-amd64 }
-          - { runner: ubuntu-22.04-arm, target: aarch64-unknown-linux-musl, platform: linux-arm64 }
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - uses: actions/checkout@v6
-      - uses: launchfirestorm/bump@v6
-      - name: musl toolchain (apt)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y musl-tools
-      - uses: dtolnay/rust-toolchain@v1
-        with:
-          toolchain: stable
-          targets: ${{ matrix.target }}
-      - name: Build ${{ matrix.target }}
-        run: |
-          mkdir -p artifacts
-          cargo build -p sinkd --release --target ${{ matrix.target }}
-          cp "target/${{ matrix.target }}/release/sinkd" "artifacts/sinkd-${{ matrix.platform }}"
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: sinkd-${{ matrix.platform }}
-          path: artifacts/sinkd-*
-          retention-days: 7
-
-  package-linux:
-    needs: lint
-    strategy:
       fail-fast: false
       matrix:
         include:
-          - { pkg: deb, runner: ubuntu-22.04, container: 'ubuntu:22.04', platform: linux-amd64, target: x86_64-unknown-linux-musl }
-          - { pkg: deb, runner: ubuntu-22.04-arm, container: 'ubuntu:22.04', platform: linux-arm64, target: aarch64-unknown-linux-musl }
-          - { pkg: arch, runner: ubuntu-22.04, container: 'archlinux:latest', platform: linux-amd64, target: x86_64-unknown-linux-musl }
+          - { pkg: deb, runner: ubuntu-22.04, container: 'ubuntu:22.04', target: x86_64-unknown-linux-musl, platform: linux-amd64 }
+          - { pkg: deb, runner: ubuntu-22.04-arm, container: 'ubuntu:22.04', target: aarch64-unknown-linux-musl, platform: linux-arm64 }
+          - { pkg: arch, runner: ubuntu-22.04, container: 'archlinux:latest', target: x86_64-unknown-linux-musl, platform: linux-amd64 }
     runs-on: ${{ matrix.runner }}
     container:
       image: ${{ matrix.container }}
@@ -79,12 +48,11 @@ jobs:
         run: |
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            ca-certificates curl git build-essential musl-tools pkg-config dpkg-dev
+            ca-certificates curl git musl-tools dpkg-dev
 
       - name: Install OS packages (Arch)
         if: matrix.pkg == 'arch'
         run: |
-          # archlinux-keyring post-upgrade hooks need a local keyring secret; init before -Sy (see logs).
           pacman-key --init
           pacman -Sy --noconfirm archlinux-keyring
           pacman-key --populate archlinux
@@ -92,18 +60,40 @@ jobs:
 
       - uses: launchfirestorm/bump@v6
 
-      - name: Rust toolchain (musl, .deb)
+      - uses: dtolnay/rust-toolchain@v1
         if: matrix.pkg == 'deb'
-        uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
           targets: ${{ matrix.target }}
 
-      - name: Sync version and build .deb
-        if: matrix.pkg == 'deb'
+      - name: Rust (Arch, root)
+        if: matrix.pkg == 'arch'
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+          . ~/.cargo/env
+          rustup target add ${{ matrix.target }}
+
+      - name: Build ${{ matrix.target }}
         run: |
           mkdir -p artifacts
+          if [[ "${{ matrix.pkg }}" == "arch" ]]; then
+            . ~/.cargo/env
+          fi
           cargo build -p sinkd --release --target ${{ matrix.target }}
+          cp "target/${{ matrix.target }}/release/sinkd" "artifacts/sinkd-${{ matrix.platform }}"
+
+      # One sinkd-linux-amd64 binary (Ubuntu musl); Arch row builds its own for makepkg but skips this upload to avoid duplicate artifact names.
+      - uses: actions/upload-artifact@v7
+        if: matrix.pkg == 'deb'
+        with:
+          name: sinkd-${{ matrix.platform }}
+          path: artifacts/sinkd-*
+          retention-days: 7
+
+      - name: Build .deb
+        if: matrix.pkg == 'deb'
+        run: |
+          rm -f artifacts/sinkd-*
           bash pkg/debian/create.sh
 
       - name: Create builder user (Arch)
@@ -113,16 +103,25 @@ jobs:
           useradd -m -s /bin/bash builder
           chown -R builder:builder .
 
-      - name: Sync version, Rust, and Arch package
+      - name: Arch package (makepkg)
         if: matrix.pkg == 'arch'
         run: |
-          sudo -u builder bash -c 'curl --proto https --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable'
-          sudo -u builder bash -lc 'source ~/.cargo/env && rustup target add ${{ matrix.target }}'
-          sudo -u builder bash -lc "source ~/.cargo/env && cd \"$GITHUB_WORKSPACE\" && bash pkg/arch/create.sh"
+          rm -f artifacts/sinkd-*
+          sudo -u builder bash -lc "cd \"$GITHUB_WORKSPACE\" && bash pkg/arch/create.sh"
 
-      - uses: actions/upload-artifact@v7
+      - name: Upload package artifact
+        if: matrix.pkg == 'deb'
+        uses: actions/upload-artifact@v7
         with:
-          name: sinkd-pkg-${{ matrix.pkg }}-${{ matrix.platform }}
+          name: sinkd-pkg-deb-${{ matrix.platform }}
+          path: artifacts/*
+          retention-days: 7
+
+      - name: Upload package artifact (Arch)
+        if: matrix.pkg == 'arch'
+        uses: actions/upload-artifact@v7
+        with:
+          name: sinkd-pkg-arch-${{ matrix.platform }}
           path: artifacts/*
           retention-days: 7
 
@@ -178,32 +177,16 @@ jobs:
           name: sinkd-${{ matrix.platform }}
           path: artifacts/sinkd-*
           retention-days: 7
-
-  package-windows:
-    needs: lint
-    strategy:
-      matrix:
-        include:
-          - { runner: windows-latest, target: x86_64-pc-windows-msvc, platform: windows-amd64 }
-          - { runner: windows-11-arm, target: aarch64-pc-windows-msvc, platform: windows-arm64 }
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - uses: actions/checkout@v6
-      - uses: launchfirestorm/bump@v6
-      - uses: dtolnay/rust-toolchain@v1
-        with:
-          toolchain: stable
-          targets: ${{ matrix.target }}
-      - name: Sync version from bump.toml (Cargo.toml + lockfile)
+      - name: Sync version from bump.toml (Cargo.toml)
         shell: bash
-        run: |
-          bump update Cargo.toml
-          cargo update -p sinkd
-      - name: Build Windows zip (binary + cfg + LICENSE + README)
+        run: bump update Cargo.toml
+      - name: Windows zip (binary + cfg + LICENSE + README)
         shell: pwsh
-        env:
-          CARGO_BUILD_TARGET: ${{ matrix.target }}
-        run: ./pkg/windows/create.ps1
+        run: |
+          Remove-Item artifacts/sinkd-*.exe -ErrorAction SilentlyContinue
+          $exe = Join-Path $env:GITHUB_WORKSPACE "target/${{ matrix.target }}/release/sinkd.exe"
+          $env:SINKD_EXE = (Resolve-Path $exe).Path
+          ./pkg/windows/create.ps1
       - uses: actions/upload-artifact@v7
         with:
           name: sinkd-pkg-windows-${{ matrix.platform }}
@@ -211,7 +194,7 @@ jobs:
           retention-days: 7
 
   release:
-    needs: [build-linux, build-macos, build-windows, package-linux, package-windows]
+    needs: [build-linux, build-macos, build-windows]
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     permissions:

@@ -58,6 +58,10 @@ options=('!lto' '!debug')
 
 build() {
   cd "$ROOT"
+  _bin="\${CARGO_TARGET_DIR:-$ROOT/target}/${MUSL_TARGET}/release/sinkd"
+  if [[ -s "\$_bin" ]]; then
+    return 0
+  fi
   export PATH="\$HOME/.cargo/bin:\$PATH"
   if command -v rustup >/dev/null 2>&1; then
     rustup target add ${MUSL_TARGET} 2>/dev/null || true
