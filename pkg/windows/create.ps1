@@ -22,11 +22,20 @@ $cfgSystem = Join-Path $Root 'cfg\system\sinkd.conf'
 $cfgUser = Join-Path $Root 'cfg\user\sinkd.conf'
 foreach ($p in @($cfgSystem, $cfgUser)) { if (-not (Test-Path $p)) { throw "Missing $p" } }
 
-cargo build -p sinkd --release --locked
+$Triple = $env:CARGO_BUILD_TARGET
+if ($Triple) {
+  cargo build -p sinkd --release --locked --target $Triple
+} else {
+  cargo build -p sinkd --release --locked
+}
 
 $cargoTarget = $env:CARGO_TARGET_DIR
 if (-not $cargoTarget) { $cargoTarget = Join-Path $Root 'target' }
-$exe = Join-Path $cargoTarget 'release\sinkd.exe'
+if ($Triple) {
+  $exe = [IO.Path]::Combine($cargoTarget, $Triple, 'release', 'sinkd.exe')
+} else {
+  $exe = Join-Path $cargoTarget 'release\sinkd.exe'
+}
 if (-not (Test-Path $exe)) { throw "Expected $exe after build" }
 
 $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'amd64' }

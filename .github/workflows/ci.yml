@@ -18,7 +18,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
@@ -37,7 +37,9 @@ jobs:
           - { runner: ubuntu-22.04-arm, target: aarch64-unknown-linux-musl, platform: linux-arm64 }
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
+      - name: Install bump
+        run: curl -sSL https://raw.githubusercontent.com/launchfirestorm/bump/main/install/get_bump.sh | bash
       - name: musl toolchain (apt)
         run: |
           sudo apt-get update
@@ -58,6 +60,70 @@ jobs:
           path: artifacts/sinkd-*
           retention-days: 7
 
+  package-linux:
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { pkg: deb, runner: ubuntu-22.04, container: 'ubuntu:22.04', platform: linux-amd64, target: x86_64-unknown-linux-musl }
+          - { pkg: deb, runner: ubuntu-22.04-arm, container: 'ubuntu:22.04', platform: linux-arm64, target: aarch64-unknown-linux-musl }
+          - { pkg: arch, runner: ubuntu-22.04, container: 'archlinux:latest', platform: linux-amd64, target: x86_64-unknown-linux-musl }
+          - { pkg: arch, runner: ubuntu-22.04-arm, container: 'archlinux:latest', platform: linux-arm64, target: aarch64-unknown-linux-musl }
+    runs-on: ${{ matrix.runner }}
+    container:
+      image: ${{ matrix.container }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install OS packages (Ubuntu)
+        if: matrix.pkg == 'deb'
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            ca-certificates curl git build-essential musl-tools pkg-config dpkg-dev
+
+      - name: Install OS packages (Arch)
+        if: matrix.pkg == 'arch'
+        run: |
+          pacman -Sy --noconfirm archlinux-keyring base-devel git sudo curl ca-certificates musl
+
+      - name: Install bump
+        run: curl -sSL https://raw.githubusercontent.com/launchfirestorm/bump/main/install/get_bump.sh | bash
+
+      - name: Rust toolchain (musl, .deb)
+        if: matrix.pkg == 'deb'
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+
+      - name: Sync version and build .deb
+        if: matrix.pkg == 'deb'
+        run: |
+          mkdir -p artifacts
+          cargo build -p sinkd --release --target ${{ matrix.target }}
+          bash pkg/debian/create.sh
+
+      - name: Create builder user (Arch)
+        if: matrix.pkg == 'arch'
+        run: |
+          useradd -m -s /bin/bash builder
+          chown -R builder:builder "${{ github.workspace }}"
+
+      - name: Sync version, Rust, and Arch package
+        if: matrix.pkg == 'arch'
+        run: |
+          sudo -u builder bash -c 'curl --proto https --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable'
+          sudo -u builder bash -lc 'source ~/.cargo/env && rustup target add ${{ matrix.target }}'
+          sudo -u builder bash -lc 'source ~/.cargo/env && cd "${{ github.workspace }}" && bash pkg/arch/create.sh'
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sinkd-pkg-${{ matrix.pkg }}-${{ matrix.platform }}
+          path: artifacts/*
+          retention-days: 7
+
   build-macos:
     needs: lint
     strategy:
@@ -67,7 +133,9 @@ jobs:
           - { runner: macos-latest, target: aarch64-apple-darwin, platform: darwin-arm64 }
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
+      - name: Install bump
+        run: curl -sSL https://raw.githubusercontent.com/launchfirestorm/bump/main/install/get_bump.sh | bash
       - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
@@ -83,6 +151,36 @@ jobs:
           path: artifacts/sinkd-*
           retention-days: 7
 
+  package-macos:
+    needs: lint
+    strategy:
+      matrix:
+        include:
+          - { runner: macos-15-intel, target: x86_64-apple-darwin, platform: darwin-amd64 }
+          - { runner: macos-latest, target: aarch64-apple-darwin, platform: darwin-arm64 }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install bump
+        run: curl -sSL https://raw.githubusercontent.com/launchfirestorm/bump/main/install/get_bump.sh | bash
+      - uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+      - name: Sync version from bump.toml (Cargo.toml + lockfile)
+        run: |
+          bump update Cargo.toml
+          cargo update -p sinkd
+      - name: Build macOS tarball (binary + cfg + LICENSE + README)
+        env:
+          CARGO_BUILD_TARGET: ${{ matrix.target }}
+        run: bash pkg/macos/create.sh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sinkd-pkg-macos-${{ matrix.platform }}
+          path: artifacts/*
+          retention-days: 7
+
   build-windows:
     needs: lint
     strategy:
@@ -92,7 +190,10 @@ jobs:
           - { runner: windows-11-arm, target: aarch64-pc-windows-msvc, platform: windows-arm64 }
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
+      - name: Install bump
+        shell: powershell
+        run: irm https://raw.githubusercontent.com/launchfirestorm/bump/main/install/get_bump.ps1 | iex
       - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
@@ -109,24 +210,59 @@ jobs:
           path: artifacts/sinkd-*
           retention-days: 7
 
+  package-windows:
+    needs: lint
+    strategy:
+      matrix:
+        include:
+          - { runner: windows-latest, target: x86_64-pc-windows-msvc, platform: windows-amd64 }
+          - { runner: windows-11-arm, target: aarch64-pc-windows-msvc, platform: windows-arm64 }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install bump
+        shell: powershell
+        run: irm https://raw.githubusercontent.com/launchfirestorm/bump/main/install/get_bump.ps1 | iex
+      - uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+      - name: Sync version from bump.toml (Cargo.toml + lockfile)
+        shell: bash
+        run: |
+          bump update Cargo.toml
+          cargo update -p sinkd
+      - name: Build Windows zip (binary + cfg + LICENSE + README)
+        shell: pwsh
+        env:
+          CARGO_BUILD_TARGET: ${{ matrix.target }}
+        run: ./pkg/windows/create.ps1
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sinkd-pkg-windows-${{ matrix.platform }}
+          path: artifacts/*
+          retention-days: 7
+
   release:
-    needs: [build-linux, build-macos, build-windows]
+    needs: [build-linux, build-macos, build-windows, package-linux, package-macos, package-windows]
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
+      - name: Install bump
+        run: curl -sSL https://raw.githubusercontent.com/launchfirestorm/bump/main/install/get_bump.sh | bash
       - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
+      - name: Version for release metadata
+        run: echo "version=$(bump --print)" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@v8
         with:
           pattern: sinkd-*
           merge-multiple: true
           path: artifacts/
-      - name: Version from Cargo.toml
-        run: echo "version=$(cargo pkgid | cut -d# -f2)" >> "$GITHUB_ENV"
       - uses: softprops/action-gh-release@v2
         with:
           name: ${{ env.version }}
