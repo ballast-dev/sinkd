@@ -75,7 +75,7 @@ EOF
 
 (
   cd "${WORKDIR}"
-  makepkg -f --cleanbuild --noconfirm
+  makepkg -fs --cleanbuild --noconfirm
 )
 
 shopt -s nullglob

@@ -84,7 +84,7 @@ jobs:
       - name: Install OS packages (Arch)
         if: matrix.pkg == 'arch'
         run: |
-          pacman -Sy --noconfirm archlinux-keyring base-devel git sudo curl ca-certificates musl
+          pacman -Sy --noconfirm archlinux-keyring base-devel git sudo curl ca-certificates musl rsync
 
       - uses: launchfirestorm/bump@v6
 
