@@ -18,7 +18,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
@@ -31,31 +31,98 @@ jobs:
   build-linux:
     needs: lint
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - { runner: ubuntu-22.04, target: x86_64-unknown-linux-musl, platform: linux-amd64 }
-          - { runner: ubuntu-22.04-arm, target: aarch64-unknown-linux-musl, platform: linux-arm64 }
+          - { pkg: deb, runner: ubuntu-22.04, container: 'ubuntu:22.04', target: x86_64-unknown-linux-musl, platform: linux-amd64 }
+          - { pkg: deb, runner: ubuntu-22.04-arm, container: 'ubuntu:22.04', target: aarch64-unknown-linux-musl, platform: linux-arm64 }
+          - { pkg: arch, runner: ubuntu-22.04, container: 'archlinux:latest', target: x86_64-unknown-linux-musl, platform: linux-amd64 }
     runs-on: ${{ matrix.runner }}
+    container:
+      image: ${{ matrix.container }}
     steps:
-      - uses: actions/checkout@v5
-      - name: musl toolchain (apt)
+      - uses: actions/checkout@v6
+
+      - name: Install OS packages (Ubuntu)
+        if: matrix.pkg == 'deb'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y musl-tools
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            ca-certificates curl git build-essential musl-tools pkg-config dpkg-dev
+
+      - name: Install OS packages (Arch)
+        if: matrix.pkg == 'arch'
+        run: |
+          pacman-key --init
+          pacman -Sy --noconfirm archlinux-keyring
+          pacman-key --populate archlinux
+          pacman -Sy --noconfirm base-devel git sudo curl ca-certificates musl rsync
+
+      - uses: launchfirestorm/bump@v6
+
       - uses: dtolnay/rust-toolchain@v1
+        if: matrix.pkg == 'deb'
         with:
           toolchain: stable
           targets: ${{ matrix.target }}
+
+      - name: Rust (Arch, root)
+        if: matrix.pkg == 'arch'
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+          . ~/.cargo/env
+          rustup target add ${{ matrix.target }}
+
       - name: Build ${{ matrix.target }}
         run: |
           mkdir -p artifacts
+          if [[ "${{ matrix.pkg }}" == "arch" ]]; then
+            . ~/.cargo/env
+          fi
           cargo build -p sinkd --release --target ${{ matrix.target }}
           cp "target/${{ matrix.target }}/release/sinkd" "artifacts/sinkd-${{ matrix.platform }}"
 
+      # One sinkd-linux-amd64 binary (Ubuntu musl); Arch row builds its own for makepkg but skips this upload to avoid duplicate artifact names.
       - uses: actions/upload-artifact@v7
+        if: matrix.pkg == 'deb'
         with:
           name: sinkd-${{ matrix.platform }}
           path: artifacts/sinkd-*
+          retention-days: 7
+
+      - name: Build .deb
+        if: matrix.pkg == 'deb'
+        run: |
+          rm -f artifacts/sinkd-*
+          bash pkg/debian/create.sh
+
+      - name: Create builder user (Arch)
+        if: matrix.pkg == 'arch'
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          useradd -m -s /bin/bash builder
+          chown -R builder:builder .
+
+      - name: Arch package (makepkg)
+        if: matrix.pkg == 'arch'
+        run: |
+          rm -f artifacts/sinkd-*
+          sudo -u builder bash -lc "cd \"$GITHUB_WORKSPACE\" && bash pkg/arch/create.sh"
+
+      - name: Upload package artifact
+        if: matrix.pkg == 'deb'
+        uses: actions/upload-artifact@v7
+        with:
+          name: sinkd-pkg-deb-${{ matrix.platform }}
+          path: artifacts/*
+          retention-days: 7
+
+      - name: Upload package artifact (Arch)
+        if: matrix.pkg == 'arch'
+        uses: actions/upload-artifact@v7
+        with:
+          name: sinkd-pkg-arch-${{ matrix.platform }}
+          path: artifacts/*
           retention-days: 7
 
   build-macos:
@@ -67,7 +134,8 @@ jobs:
           - { runner: macos-latest, target: aarch64-apple-darwin, platform: darwin-arm64 }
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
+      - uses: launchfirestorm/bump@v6
       - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
@@ -92,7 +160,8 @@ jobs:
           - { runner: windows-11-arm, target: aarch64-pc-windows-msvc, platform: windows-arm64 }
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
+      - uses: launchfirestorm/bump@v6
       - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
@@ -108,6 +177,21 @@ jobs:
           name: sinkd-${{ matrix.platform }}
           path: artifacts/sinkd-*
           retention-days: 7
+      - name: Sync version from bump.toml (Cargo.toml)
+        shell: bash
+        run: bump update Cargo.toml
+      - name: Windows zip (binary + cfg + LICENSE + README)
+        shell: pwsh
+        run: |
+          Remove-Item artifacts/sinkd-*.exe -ErrorAction SilentlyContinue
+          $exe = Join-Path $env:GITHUB_WORKSPACE "target/${{ matrix.target }}/release/sinkd.exe"
+          $env:SINKD_EXE = (Resolve-Path $exe).Path
+          ./pkg/windows/create.ps1
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sinkd-pkg-windows-${{ matrix.platform }}
+          path: artifacts/*
+          retention-days: 7
 
   release:
     needs: [build-linux, build-macos, build-windows]
@@ -116,17 +200,18 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
+      - uses: launchfirestorm/bump@v6
       - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
+      - name: Version for release metadata
+        run: echo "version=$(bump --print)" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@v8
         with:
           pattern: sinkd-*
           merge-multiple: true
           path: artifacts/
-      - name: Version from Cargo.toml
-        run: echo "version=$(cargo pkgid | cut -d# -f2)" >> "$GITHUB_ENV"
       - uses: softprops/action-gh-release@v2
         with:
           name: ${{ env.version }}

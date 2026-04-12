@@ -25,6 +25,20 @@ across many computers.
 1. Granular permissions per user  
 1. Uses DDS (Data Distribution Service) for peer-to-peer communication - no broker required
 
+### Installation
+
+**macOS:** use Homebrew with the formula in this repo:
+
+```bash
+brew install --head ./pkg/homebrew/sinkd.rb
+```
+
+See comments in [`pkg/homebrew/sinkd.rb`](pkg/homebrew/sinkd.rb) for a versioned install from a release tarball.
+
+**Linux / Windows:** prebuilt binaries and packages (`.deb`, `.pkg.tar.zst`, Windows zip) attach to [GitHub Releases](https://github.com/ballast-dev/sinkd/releases) when you tag a version.
+
+**Arch Linux (aarch64):** CI does not build Arch packages on ARM64 runners (no suitable multi-arch `archlinux` image in practice). Use the `linux-arm64` binary from the release, build [`pkg/arch/create.sh`](pkg/arch/create.sh) locally, or install another distro’s artifact.
+
 ### Roadmap
 
 - use `btrfs` on a virtual mount for ease of snapshotting

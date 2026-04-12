@@ -33,7 +33,7 @@ zenoh-down:
 
 # the following commands are purely for debugging
 client:
-    cargo run -p sinkd -- -d client -s cfg/opt/sinkd/sinkd.conf -u cfg/user/sinkd.conf start
+    cargo run -p sinkd -- -d client -s cfg/system/sinkd.conf -u cfg/user/sinkd.conf start
 
 client-log:
     tail -f /tmp/sinkd/client.log

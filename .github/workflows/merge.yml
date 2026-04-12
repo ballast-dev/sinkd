@@ -1,0 +1,48 @@
+name: Merge
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+      - release/*
+
+permissions:
+  contents: write
+
+jobs:
+  merge-bump:
+    if: github.event.pull_request.merged
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install bump
+        run: curl -sSL https://raw.githubusercontent.com/launchfirestorm/bump/main/install/get_bump.sh | bash
+
+      - name: "select bump strategy"
+        shell: bash
+        run: |
+          if [[ "${{ github.base_ref }}" == "main" && "${{ github.head_ref }}" == release/* ]]; then
+            echo "bump_mode=release" >> "$GITHUB_ENV"
+            echo "push_ref=HEAD" >> "$GITHUB_ENV"
+          elif [[ "${{ github.base_ref }}" == main ]]; then
+            echo "bump_mode=patch" >> "$GITHUB_ENV"
+            echo "push_ref=main" >> "$GITHUB_ENV"
+          else
+            echo "bump_mode=candidate" >> "$GITHUB_ENV"
+            echo "push_ref=HEAD" >> "$GITHUB_ENV"
+          fi
+
+      - name: "bump version, and update Cargo.toml/Cargo.lock"
+        shell: bash
+        run: |
+          bump --${{ env.bump_mode }}
+          bump update Cargo.toml
+          cargo update -p sinkd
+
+      - name: "commit, tag, and push"
+        run: |
+          git add -u
+          git commit -m "chore: bump sinkd to $(bump --print)"
+          bump tag
+          git push origin ${{ env.push_ref }} --tags
