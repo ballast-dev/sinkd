@@ -16,8 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Install bump
-        run: curl -sSL https://raw.githubusercontent.com/launchfirestorm/bump/main/install/get_bump.sh | bash
+      - uses: launchfirestorm/bump@v6
 
       - name: "select bump strategy"
         shell: bash
