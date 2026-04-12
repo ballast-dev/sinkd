@@ -29,6 +29,7 @@ trap cleanup EXIT
 install -d "${STAGE}/usr/bin" \
   "${STAGE}/etc" \
   "${STAGE}/usr/share/sinkd" \
+  "${STAGE}/usr/share/doc/sinkd" \
   "${STAGE}/etc/skel/.config/sinkd" \
   "${STAGE}/DEBIAN"
 
