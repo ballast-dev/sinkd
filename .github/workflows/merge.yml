@@ -41,6 +41,9 @@ jobs:
 
       - name: "commit, tag, and push"
         run: |
+          # Required for GitHub Actions to commit and tag.
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -u
           git commit -m "chore: bump sinkd to $(bump --print)"
           bump tag
