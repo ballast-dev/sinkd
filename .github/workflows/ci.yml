@@ -38,8 +38,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v6
-      - name: Install bump
-        run: curl -sSL https://raw.githubusercontent.com/launchfirestorm/bump/main/install/get_bump.sh | bash
+      - uses: launchfirestorm/bump@v6
       - name: musl toolchain (apt)
         run: |
           sudo apt-get update
@@ -88,8 +87,7 @@ jobs:
         run: |
           pacman -Sy --noconfirm archlinux-keyring base-devel git sudo curl ca-certificates musl
 
-      - name: Install bump
-        run: curl -sSL https://raw.githubusercontent.com/launchfirestorm/bump/main/install/get_bump.sh | bash
+      - uses: launchfirestorm/bump@v6
 
       - name: Rust toolchain (musl, .deb)
         if: matrix.pkg == 'deb'
@@ -134,8 +132,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v6
-      - name: Install bump
-        run: curl -sSL https://raw.githubusercontent.com/launchfirestorm/bump/main/install/get_bump.sh | bash
+      - uses: launchfirestorm/bump@v6
       - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
@@ -161,8 +158,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v6
-      - name: Install bump
-        run: curl -sSL https://raw.githubusercontent.com/launchfirestorm/bump/main/install/get_bump.sh | bash
+      - uses: launchfirestorm/bump@v6
       - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
@@ -191,9 +187,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v6
-      - name: Install bump
-        shell: powershell
-        run: irm https://raw.githubusercontent.com/launchfirestorm/bump/main/install/get_bump.ps1 | iex
+      - uses: launchfirestorm/bump@v6
       - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
@@ -220,9 +214,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v6
-      - name: Install bump
-        shell: powershell
-        run: irm https://raw.githubusercontent.com/launchfirestorm/bump/main/install/get_bump.ps1 | iex
+      - uses: launchfirestorm/bump@v6
       - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
