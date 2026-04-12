@@ -68,7 +68,6 @@ jobs:
           - { pkg: deb, runner: ubuntu-22.04, container: 'ubuntu:22.04', platform: linux-amd64, target: x86_64-unknown-linux-musl }
           - { pkg: deb, runner: ubuntu-22.04-arm, container: 'ubuntu:22.04', platform: linux-arm64, target: aarch64-unknown-linux-musl }
           - { pkg: arch, runner: ubuntu-22.04, container: 'archlinux:latest', platform: linux-amd64, target: x86_64-unknown-linux-musl }
-          - { pkg: arch, runner: ubuntu-22.04-arm, container: 'archlinux:latest', platform: linux-arm64, target: aarch64-unknown-linux-musl }
     runs-on: ${{ matrix.runner }}
     container:
       image: ${{ matrix.container }}
@@ -106,15 +105,16 @@ jobs:
       - name: Create builder user (Arch)
         if: matrix.pkg == 'arch'
         run: |
+          cd "$GITHUB_WORKSPACE"
           useradd -m -s /bin/bash builder
-          chown -R builder:builder "${{ github.workspace }}"
+          chown -R builder:builder .
 
       - name: Sync version, Rust, and Arch package
         if: matrix.pkg == 'arch'
         run: |
           sudo -u builder bash -c 'curl --proto https --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable'
           sudo -u builder bash -lc 'source ~/.cargo/env && rustup target add ${{ matrix.target }}'
-          sudo -u builder bash -lc 'source ~/.cargo/env && cd "${{ github.workspace }}" && bash pkg/arch/create.sh'
+          sudo -u builder bash -lc "source ~/.cargo/env && cd \"$GITHUB_WORKSPACE\" && bash pkg/arch/create.sh"
 
       - uses: actions/upload-artifact@v7
         with:
@@ -146,35 +146,6 @@ jobs:
         with:
           name: sinkd-${{ matrix.platform }}
           path: artifacts/sinkd-*
-          retention-days: 7
-
-  package-macos:
-    needs: lint
-    strategy:
-      matrix:
-        include:
-          - { runner: macos-15-intel, target: x86_64-apple-darwin, platform: darwin-amd64 }
-          - { runner: macos-latest, target: aarch64-apple-darwin, platform: darwin-arm64 }
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - uses: actions/checkout@v6
-      - uses: launchfirestorm/bump@v6
-      - uses: dtolnay/rust-toolchain@v1
-        with:
-          toolchain: stable
-          targets: ${{ matrix.target }}
-      - name: Sync version from bump.toml (Cargo.toml + lockfile)
-        run: |
-          bump update Cargo.toml
-          cargo update -p sinkd
-      - name: Build macOS tarball (binary + cfg + LICENSE + README)
-        env:
-          CARGO_BUILD_TARGET: ${{ matrix.target }}
-        run: bash pkg/macos/create.sh
-      - uses: actions/upload-artifact@v7
-        with:
-          name: sinkd-pkg-macos-${{ matrix.platform }}
-          path: artifacts/*
           retention-days: 7
 
   build-windows:
@@ -236,15 +207,14 @@ jobs:
           retention-days: 7
 
   release:
-    needs: [build-linux, build-macos, build-windows, package-linux, package-macos, package-windows]
+    needs: [build-linux, build-macos, build-windows, package-linux, package-windows]
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v6
-      - name: Install bump
-        run: curl -sSL https://raw.githubusercontent.com/launchfirestorm/bump/main/install/get_bump.sh | bash
+      - uses: launchfirestorm/bump@v6
       - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
