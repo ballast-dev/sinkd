@@ -84,7 +84,11 @@ jobs:
       - name: Install OS packages (Arch)
         if: matrix.pkg == 'arch'
         run: |
-          pacman -Sy --noconfirm archlinux-keyring base-devel git sudo curl ca-certificates musl rsync
+          # archlinux-keyring post-upgrade hooks need a local keyring secret; init before -Sy (see logs).
+          pacman-key --init
+          pacman -Sy --noconfirm archlinux-keyring
+          pacman-key --populate archlinux
+          pacman -Sy --noconfirm base-devel git sudo curl ca-certificates musl rsync
 
       - uses: launchfirestorm/bump@v6
 

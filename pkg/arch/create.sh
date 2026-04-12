@@ -58,6 +58,7 @@ options=('!lto' '!debug')
 
 build() {
   cd "$ROOT"
+  export PATH="\$HOME/.cargo/bin:\$PATH"
   if command -v rustup >/dev/null 2>&1; then
     rustup target add ${MUSL_TARGET} 2>/dev/null || true
   fi
