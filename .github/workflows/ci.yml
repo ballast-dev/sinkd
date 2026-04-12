@@ -48,7 +48,7 @@ jobs:
         run: |
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            ca-certificates curl git musl-tools dpkg-dev
+            ca-certificates curl git build-essential musl-tools pkg-config dpkg-dev
 
       - name: Install OS packages (Arch)
         if: matrix.pkg == 'arch'
