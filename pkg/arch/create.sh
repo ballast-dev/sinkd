@@ -50,7 +50,10 @@ arch=('x86_64' 'aarch64')
 url="https://github.com/ballast-dev/sinkd"
 license=('MIT')
 depends=('rsync')
-makedepends=('cargo' 'rust')
+# No makedepends for pacman rust/cargo — build uses rustup (~/.cargo/bin). Declaring cargo/rust here
+# forces makepkg -s to sudo pacman, which breaks non-interactive CI. Install rustup + musl target before
+# running this script; ensure rsync is installed (depends) or use makepkg -s with passwordless sudo.
+makedepends=()
 options=('!lto' '!debug')
 
 build() {
