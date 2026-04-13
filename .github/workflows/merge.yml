@@ -28,7 +28,7 @@ jobs:
 
       - uses: actions/checkout@v6
         with:
-          github-token: ${{ steps.app-token.outputs.token }}
+          token: ${{ steps.app-token.outputs.token }}
 
       - uses: launchfirestorm/bump@v6
 
