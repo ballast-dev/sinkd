@@ -8,13 +8,13 @@
 [semver.format]
 prefix = ""
 delimiter = "."
-timestamp = "%Y-%m-%d %H:%M:%S %Z"   # [optional] strftime syntax for build timestamp
+timestamp = "%Y-%m-%d %H:%M:%S %Z"
 
 # NOTE: This section is modified by the bump command
 [semver.version]
 major = 0
 minor = 0
-patch = 3
+patch = 4
 candidate = 0
 
 # Candidate promotion strategies:  (when creating first candidate)

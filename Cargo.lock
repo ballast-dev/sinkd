@@ -2588,7 +2588,7 @@ checksum = "e320a6c5ad31d271ad523dcf3ad13e2767ad8b1cb8f047f75a8aeaf8da139da2"
 
 [[package]]
 name = "sinkd"
-version = "0.0.3+6815c99"
+version = "0.0.4+5bedf12"
 dependencies = [
  "bincode",
  "chrono",
