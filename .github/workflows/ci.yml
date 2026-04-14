@@ -177,9 +177,6 @@ jobs:
           name: sinkd-${{ matrix.platform }}
           path: artifacts/sinkd-*
           retention-days: 7
-      - name: Sync version from bump.toml (Cargo.toml)
-        shell: bash
-        run: bump update Cargo.toml
       - name: Windows zip (binary + cfg + LICENSE + README)
         shell: pwsh
         run: |
@@ -215,7 +212,8 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           name: ${{ env.version }}
-          body: sinkd ${{ env.version }}
           draft: false
-          prerelease: false
+          prerelease: ${{ contains(github.ref_name, '-rc') }}
           files: artifacts/*
+          generate_release_notes: true
+
