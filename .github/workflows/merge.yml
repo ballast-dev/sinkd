@@ -50,9 +50,6 @@ jobs:
         shell: bash
         run: |
           bump --${{ env.bump_mode }}
-          # need to tag before updating Cargo.toml to remove the development suffix
-          bump tag
-
           bump update Cargo.toml
           cargo update -p sinkd
 
@@ -61,5 +58,5 @@ jobs:
           git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
 
           git add -u
-          git commit -m "chore: bump sinkd to $(bump --print)"
+          bump tag
           git push origin ${{ env.push_ref }} --tags
