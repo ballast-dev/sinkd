@@ -1,6 +1,6 @@
+use crate::outcome::Outcome;
 use clap::{Arg, ArgAction, Command};
 use std::process::ExitCode;
-use crate::outcome::Outcome;
 
 pub mod client;
 pub mod server;

@@ -636,7 +636,7 @@ fn process(
                     let mut payload = ipc::Payload::new()?
                         .status(ipc::Status::NotReady(ipc::Reason::Behind))
                         .src_paths(src_paths);
-                    let has_dirty = local_dirty.lock().map(|d| !d.is_empty()).unwrap_or(false);
+                    let has_dirty = local_dirty.lock().is_ok_and(|d| !d.is_empty());
                     let state_dir = client_state_dir(params);
                     let backup_run = if has_dirty {
                         let dir = conflict::next_behind_backup_dir(&state_dir)?;
@@ -891,10 +891,7 @@ mod conflict_resolution_tests {
 
     use super::{mark_local_dirty, maybe_record_writer_ack, ClientSyncState};
 
-    fn sample_payload(
-        last_writer: &str,
-        head_generation: u64,
-    ) -> ipc::Payload {
+    fn sample_payload(last_writer: &str, head_generation: u64) -> ipc::Payload {
         ipc::Payload::from(
             String::from("h"),
             String::from("u"),
@@ -975,5 +972,4 @@ mod conflict_resolution_tests {
         assert_eq!(sync.lock().expect("lock").acked_generation, 5);
         assert!(dirty.lock().expect("lock").contains(&marker));
     }
-
 }
