@@ -189,9 +189,7 @@ impl ScenarioRunner {
                 let full = self.root.join(path);
                 Self::assert_eventually(
                     || {
-                        fs::read_to_string(&full)
-                            .map(|text| text.contains(contains))
-                            .unwrap_or(false)
+                        fs::read_to_string(&full).is_ok_and(|text| text.contains(contains))
                     },
                     *within_ms,
                     *poll_interval_ms,
@@ -281,11 +279,7 @@ struct ExecutedStep {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
-    use std::path::PathBuf;
-
-    use super::{ScenarioRunner, expand_root_template};
-    use crate::spec::parse_spec;
+    use super::expand_root_template;
 
     #[test]
     fn expand_root_template_replaces_placeholder() {
@@ -306,25 +300,5 @@ mod tests {
             out
         );
         let _ = std::fs::remove_dir_all(tmp);
-    }
-
-    /// Runs `scenario/specs/local_smoke.toml` so step definitions stay in one place.
-    #[test]
-    fn local_smoke_spec_runs() {
-        let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let spec_path = manifest.join("specs/local_smoke.toml");
-        let raw = fs::read_to_string(&spec_path)
-            .unwrap_or_else(|e| panic!("read {}: {e}", spec_path.display()));
-        let spec = parse_spec(&raw).expect("parse local_smoke.toml");
-
-        let unique = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time should be after epoch")
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!("sinkd_local_smoke_{unique}"));
-
-        let runner = ScenarioRunner::new(&root);
-        runner.run(&spec).expect("local_smoke scenario should pass");
-        let _ = std::fs::remove_dir_all(&root);
     }
 }

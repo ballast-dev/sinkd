@@ -325,7 +325,7 @@ pub fn rmuser(params: &ClientParameters, users: Option<ValuesRef<String>>) -> Ou
 }
 
 pub fn ls(params: &ClientParameters, paths: Option<Vec<&String>>) -> Outcome<()> {
-    let (_addr, inode_map) = config::get(params)?;
+    let (_, _, inode_map) = config::get(params)?;
     let mut keys: Vec<_> = inode_map.keys().cloned().collect();
     keys.sort();
 
@@ -361,13 +361,59 @@ pub fn log(params: &ClientParameters) -> Outcome<()> {
     Ok(())
 }
 
+/// Bootstrap the client's system + user configuration files from the embedded
+/// templates. Idempotent: refuses to overwrite an existing file unless `force`
+/// is set. The system config (`/etc/sinkd.conf` etc.) carries `server_addr`
+/// and the `users` list; the user config (`~/.config/sinkd/sinkd.conf`) holds
+/// the per-user watch anchor.
+pub fn init_config(
+    sys_target: &Path,
+    user_target: &Path,
+    server_addr: &str,
+    users: &[String],
+    watch: &Path,
+    interval: u64,
+    force: bool,
+) -> Outcome<()> {
+    use crate::cli::init::{self, InitOptions};
+
+    let users_body = init::toml_string_array_body(users);
+    init::render(&InitOptions {
+        target_path: sys_target.to_path_buf(),
+        template_disk: Some(Path::new(init::SYSTEM_TEMPLATE_DISK)),
+        template_embedded: init::SYSTEM_TEMPLATE,
+        substitutions: &[
+            ("server_addr", server_addr.to_string()),
+            ("users", users_body),
+        ],
+        force,
+    })?;
+
+    init::render(&InitOptions {
+        target_path: user_target.to_path_buf(),
+        template_disk: Some(Path::new(init::USER_TEMPLATE_DISK)),
+        template_embedded: init::USER_TEMPLATE,
+        substitutions: &[
+            ("watch", watch.display().to_string()),
+            ("interval", interval.to_string()),
+        ],
+        force,
+    })
+}
+
+/// Default user-config target: `~/.config/sinkd/sinkd.conf`. Falls back to
+/// `/tmp/sinkd-user.conf` if `$HOME` is unset (only used in degenerate envs).
+#[must_use]
+pub fn default_user_config_target() -> PathBuf {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    PathBuf::from(home).join(".config/sinkd/sinkd.conf")
+}
+
 // Daemonized call, stdin/stdout/stderr are closed
 pub fn init(params: &ClientParameters) -> Outcome<()> {
     let client_sync = load_client_sync_state(params)?;
     let params = Arc::new(params.clone());
-    // `_srv_addr`: RSYNC destination / server address from TOML — reserved until the wire protocol
-    // needs it here (currently paths use `Payload.hostname` for remote rsync).
-    let (_srv_addr, inode_map) = config::get(params.as_ref())?;
+    let (_, _, inode_map) = config::get(params.as_ref())?;
 
     let (notify_tx, notify_rx): (mpsc::Sender<notify::Event>, mpsc::Receiver<notify::Event>) =
         mpsc::channel();
@@ -632,10 +678,11 @@ fn process(
                 // let's sync up
                 if let Ok(map_read) = inode_map.read() {
                     let head = server_msg.head_generation;
-                    let src_paths = map_read.keys().cloned().collect();
+                    let src_paths: Vec<PathBuf> = map_read.keys().cloned().collect();
+                    let (server_addr, server_mirror_root, _) = config::get(params)?;
                     let mut payload = ipc::Payload::new()?
                         .status(ipc::Status::NotReady(ipc::Reason::Behind))
-                        .src_paths(src_paths);
+                        .src_paths(src_paths.clone());
                     let has_dirty = local_dirty.lock().is_ok_and(|d| !d.is_empty());
                     let state_dir = client_state_dir(params);
                     let backup_run = if has_dirty {
@@ -648,7 +695,13 @@ fn process(
                     } else {
                         None
                     };
-                    pull(&payload, backup_run.as_deref())?;
+                    pull_behind(
+                        &server_addr,
+                        &server_mirror_root,
+                        &src_paths,
+                        &map_read,
+                        backup_run.as_deref(),
+                    )?;
                     if let Some(ref dir) = backup_run {
                         info!(
                             "client: behind pull finished; pre-replace copies (if any) are under {} (head_generation={})",
@@ -723,7 +776,7 @@ fn apply_client_config_reload(
     watchers: &Arc<Mutex<Vec<RecommendedWatcher>>>,
     notify_tx: &mpsc::Sender<Event>,
 ) -> Outcome<()> {
-    let (_srv_addr, new_map) = config::get(params)?;
+    let (_, _, new_map) = config::get(params)?;
     let new_watchers = setup_watchers(&new_map, notify_tx.clone())?;
     {
         let mut im = inode_map
@@ -826,25 +879,43 @@ fn push(payload: &ipc::Payload) -> Outcome<()> {
     rsync(&payload.src_paths, &dest, &rsync_cfg, None)
 }
 
-fn pull(payload: &ipc::Payload, backup_dir: Option<&Path>) -> Outcome<()> {
-    let srcs: Vec<PathBuf> = payload
-        .src_paths
-        .iter()
-        .map(|p| PathBuf::from(format!("{}:{}", payload.hostname, p.display())))
-        .collect();
-
-    debug!(
-        "pulling srcs:[{}] dest:{} backup:{:?}",
-        srcs.iter()
-            .map(|p| p.display().to_string())
-            .collect::<Vec<_>>()
-            .join(", "),
-        payload.dest_path.display(),
-        backup_dir
-    );
-
-    let rsync_cfg = payload.rsync.clone().unwrap_or_default();
-    rsync(&srcs, &payload.dest_path, &rsync_cfg, backup_dir)
+/// Reconcile each watched anchor from the server's mirror (`server_sync_root` layout)
+/// or a local/shared mount (`server_addr` as an absolute path).
+fn pull_behind(
+    server_addr: &str,
+    server_mirror_root: &Path,
+    anchor_paths: &[PathBuf],
+    inode_map: &config::InodeMap,
+    backup_dir: Option<&Path>,
+) -> Outcome<()> {
+    for anchor in anchor_paths {
+        let mirror = config::server_mirror_path(anchor, server_mirror_root);
+        let rsync_cfg = inode_map
+            .get(anchor)
+            .map(|inode| inode.rsync.clone())
+            .unwrap_or_default();
+        let is_local = server_addr.starts_with('/');
+        // When mirror_root is a local mount (compose / shared FS), a late-joining
+        // client can hit `NotReady(Behind)` before the server has ever rsynced
+        // this anchor. There's nothing to reconcile in that case — skip so the
+        // client can ack head_generation and proceed to push.
+        if is_local && !mirror.exists() {
+            info!(
+                "client:pull_behind>> server mirror {} does not exist yet; nothing to reconcile",
+                mirror.display()
+            );
+            continue;
+        }
+        let src = if is_local {
+            format!("{}/", mirror.display())
+        } else {
+            format!("{}:{}/", server_addr, mirror.display())
+        };
+        let dest = format!("{}/", anchor.display());
+        debug!("client:pull_behind>> {src} -> {dest} backup:{backup_dir:?}");
+        crate::rsync::rsync_behind_mirror_sync(&src, &dest, &rsync_cfg, backup_dir)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

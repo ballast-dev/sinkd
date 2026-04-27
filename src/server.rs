@@ -151,6 +151,29 @@ pub fn ls(params: &ServerParameters) -> Outcome<()> {
     Ok(())
 }
 
+/// Bootstrap the server's system configuration file from the embedded template.
+/// Idempotent: refuses to overwrite an existing file unless `force` is set.
+pub fn init_config(
+    target: &Path,
+    server_addr: &str,
+    users: &[String],
+    force: bool,
+) -> Outcome<()> {
+    use crate::cli::init::{self, InitOptions};
+
+    let users_body = init::toml_string_array_body(users);
+    init::render(&InitOptions {
+        target_path: target.to_path_buf(),
+        template_disk: Some(Path::new(init::SYSTEM_TEMPLATE_DISK)),
+        template_embedded: init::SYSTEM_TEMPLATE,
+        substitutions: &[
+            ("server_addr", server_addr.to_string()),
+            ("users", users_body),
+        ],
+        force,
+    })
+}
+
 fn get_srv_dir(debug: u8) -> PathBuf {
     if debug > 0 {
         PathBuf::from("/tmp/sinkd/srv")
@@ -406,62 +429,54 @@ fn queue(
     generation_state: &Arc<Mutex<GenerationState>>,
     status: &Arc<Mutex<ipc::Status>>,
 ) -> Outcome<()> {
-    match status.lock() {
-        Ok(state) => {
-            if *state == ipc::Status::Ready {
-                if needs_push_basis_check(&payload) {
-                    if payload.client_id.is_empty() {
-                        let head = generation_state
-                            .lock()
-                            .map_err(|e| format!("server:queue>> generation_state lock: {e}"))?
-                            .current_generation;
-                        let mut response = ipc::Payload::new()?
-                            .dest_path("sinkd_status")
-                            .status(ipc::Status::NotReady(ipc::Reason::Behind))
-                            .head_generation(head);
-                        if let Err(e) = zenoh_client.publish(&mut response) {
-                            error!("server:queue>> unable to publish response {e}");
-                        }
-                        return Ok(());
-                    }
-                    let head = generation_state
-                        .lock()
-                        .map_err(|e| format!("server:queue>> generation_state lock: {e}"))?
-                        .current_generation;
-                    if payload.basis_generation != head {
-                        let mut response = ipc::Payload::new()?
-                            .dest_path("sinkd_status")
-                            .status(ipc::Status::NotReady(ipc::Reason::Behind))
-                            .head_generation(head);
-                        if let Err(e) = zenoh_client.publish(&mut response) {
-                            error!("server:queue>> unable to publish response {e}");
-                        }
-                        return Ok(());
-                    }
-                }
-                debug!("queuing payload: {payload:#?}");
-                if let Err(e) = synch_tx.send(payload) {
-                    bad!("server:process>> unable to send on synch_tx {}", e)
-                } else {
-                    Ok(())
-                }
-            } else {
-                let head = generation_state
-                    .lock()
-                    .map_err(|e| format!("server:queue>> generation_state lock: {e}"))?
-                    .current_generation;
-                let mut response = ipc::Payload::new()?
-                    .dest_path("sinkd_status")
-                    .status(*state)
-                    .head_generation(head);
-                if let Err(e) = zenoh_client.publish(&mut response) {
-                    error!("server:queue>> unable to publish response {e}");
-                }
-                Ok(())
-            }
+    let head = generation_state
+        .lock()
+        .map_err(|e| format!("server:queue>> generation_state lock: {e}"))?
+        .current_generation;
+    let state_now = *status
+        .lock()
+        .map_err(|e| format!("server:queue>> status lock: {e}"))?;
+
+    // Early-reject Ready pushes whose basis is stale (or carry no client_id):
+    // tells the client to pull_behind without spending an rsync slot on a
+    // doomed apply. Behind acks (`status != Ready` with src_paths) are
+    // reconciliation work that synch_entry applies unconditionally — those
+    // skip this check and fall through to the queue path.
+    if state_now == ipc::Status::Ready
+        && needs_push_basis_check(&payload)
+        && (payload.client_id.is_empty() || payload.basis_generation != head)
+    {
+        let mut response = ipc::Payload::new()?
+            .dest_path("sinkd_status")
+            .status(ipc::Status::NotReady(ipc::Reason::Behind))
+            .head_generation(head);
+        if let Err(e) = zenoh_client.publish(&mut response) {
+            error!("server:queue>> unable to publish response {e}");
         }
-        Err(e) => bad!("server:queue>> status lock poisoned {}", e),
+        return Ok(());
     }
+
+    if payload.src_paths.is_empty() {
+        // Bare status query (no work to do) — reflect current state to caller.
+        let mut response = ipc::Payload::new()?
+            .dest_path("sinkd_status")
+            .status(state_now)
+            .head_generation(head);
+        if let Err(e) = zenoh_client.publish(&mut response) {
+            error!("server:queue>> unable to publish response {e}");
+        }
+        return Ok(());
+    }
+
+    // Queue work-bearing payloads even while Busy: synch_entry serializes via
+    // the channel, and dropping (e.g.) a second client's Behind-ack mid-rsync
+    // silently strands their reconcile. synch_entry re-validates basis at
+    // apply time for Ready pushes and replies StaleAtApply if it's racy.
+    debug!("queuing payload: {payload:#?}");
+    if let Err(e) = synch_tx.send(payload) {
+        return bad!("server:process>> unable to send on synch_tx {}", e);
+    }
+    Ok(())
 }
 
 // The engine behind sinkd is rsync — bump global generation only after successful apply.

@@ -12,10 +12,10 @@ use std::{fs, path::PathBuf};
 #[command(about = "Declarative scenario test harness runner")]
 struct Args {
     /// Path to scenario spec TOML file
-    #[arg(short, long, default_value = "scenario/specs/local_smoke.toml")]
+    #[arg(short, long, default_value = "scenario/specs/compose.toml")]
     spec: PathBuf,
     /// Root directory where scenario actions are executed
-    #[arg(short, long, default_value = "test_scenarios/harness")]
+    #[arg(short, long, default_value = "test_scenarios/compose")]
     root: PathBuf,
 }
 

@@ -1,0 +1,7 @@
+name = "compose"
+# 15-minute ceiling: image build (esp. cold) can dominate.
+timeout_ms = 900000
+
+[[steps]]
+kind = "run_command"
+command = "bash scenario/scripts/compose.sh '{{root}}'"

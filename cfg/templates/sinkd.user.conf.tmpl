@@ -1,0 +1,11 @@
+# sinkd user config template (rendered by `sinkd client init`)
+# Placeholders: {{watch}}, {{interval}}
+
+[rsync]
+compress = false
+partial = true
+
+[[anchors]]
+path = "{{watch}}"
+interval = {{interval}}
+excludes = []

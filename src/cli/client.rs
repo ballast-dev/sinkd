@@ -1,10 +1,15 @@
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use std::{path::Path, process::ExitCode};
+use std::{
+    path::{Path, PathBuf},
+    process::ExitCode,
+};
 
 use super::egress;
 use crate::client;
+use crate::outcome::Outcome;
 use crate::parameters::ClientParameters;
 
+#[allow(clippy::too_many_lines)]
 pub(super) fn build_command() -> Command {
     let share_arg = Arg::new("share")
         .short('S')
@@ -93,6 +98,48 @@ pub(super) fn build_command() -> Command {
         .subcommand(Command::new("start").about("Start the client daemon"))
         .subcommand(Command::new("restart").about("Restart the client daemon"))
         .subcommand(Command::new("stop").about("Stop the client daemon"))
+        .subcommand(
+            Command::new("init")
+                .about("Scaffold system + user config files from templates")
+                .arg(
+                    Arg::new("server-addr")
+                        .long("server-addr")
+                        .value_name("HOST")
+                        .num_args(1)
+                        .required(true)
+                        .help("Sync target host (rsync destination)"),
+                )
+                .arg(
+                    Arg::new("user")
+                        .long("user")
+                        .value_name("NAME")
+                        .num_args(1)
+                        .required(true)
+                        .help("Owning user for this client (also added to system `users` list)"),
+                )
+                .arg(
+                    Arg::new("watch")
+                        .long("watch")
+                        .value_name("ABS_PATH")
+                        .num_args(1)
+                        .required(true)
+                        .help("Absolute path to the watch anchor"),
+                )
+                .arg(
+                    Arg::new("interval")
+                        .long("interval")
+                        .value_name("SECS")
+                        .num_args(1)
+                        .default_value("1")
+                        .help("Polling interval for the anchor (seconds)"),
+                )
+                .arg(
+                    Arg::new("force")
+                        .long("force")
+                        .action(ArgAction::SetTrue)
+                        .help("Overwrite existing config files"),
+                ),
+        )
 }
 
 fn check_path_exists(p: &str) -> bool {
@@ -143,9 +190,45 @@ pub fn dispatch(sub: &ArgMatches, params: &ClientParameters) -> ExitCode {
             egress(client::ls(params, paths))
         }
         Some(("log", _)) => egress(client::log(params)),
+        Some(("init", s)) => egress(run_init(s, params)),
         _ => {
             fancy_error!("unknown subcommand");
             ExitCode::FAILURE
         }
     }
+}
+
+fn run_init(sub: &ArgMatches, params: &ClientParameters) -> Outcome<()> {
+    let server_addr = sub
+        .get_one::<String>("server-addr")
+        .map(String::as_str)
+        .ok_or("client init: --server-addr is required")?;
+    let user = sub
+        .get_one::<String>("user")
+        .map(String::as_str)
+        .ok_or("client init: --user is required")?;
+    let watch_arg = sub
+        .get_one::<String>("watch")
+        .ok_or("client init: --watch is required")?;
+    let interval: u64 = sub
+        .get_one::<String>("interval")
+        .map_or("1", String::as_str)
+        .parse()
+        .map_err(|e| format!("client init: --interval must be an integer: {e}"))?;
+    let force = sub.get_flag("force");
+
+    let watch = PathBuf::from(watch_arg);
+    let sys_target: PathBuf = params.system_config.as_ref().as_path().to_path_buf();
+    let user_target = client::default_user_config_target();
+    let users = vec![user.to_string()];
+
+    client::init_config(
+        &sys_target,
+        &user_target,
+        server_addr,
+        &users,
+        &watch,
+        interval,
+        force,
+    )
 }

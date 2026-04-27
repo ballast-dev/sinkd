@@ -7,6 +7,9 @@ test/
 __pycache__/
 
 test_scenarios/
+# Tracked: containerized compose scenario assets (generated runs land in _artifacts/).
+!test_scenarios/compose/
+test_scenarios/compose/_artifacts/
 
 pkg/**/__gen/
 

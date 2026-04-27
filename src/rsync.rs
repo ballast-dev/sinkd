@@ -52,9 +52,83 @@ where
     Ok(())
 }
 
+/// Directory → directory sync (no `-R`). Used when the client reconciles from the
+/// server's mirror tree during `NotReady(Behind)` — the server layout is
+/// `{server_sync_root}/watch_user/...`, not the client's absolute anchor paths.
+pub fn rsync_behind_mirror_sync(
+    src_dir: &str,
+    dest_dir: &str,
+    rsync_cfg: &ResolvedRsyncConfig,
+    backup_dir: Option<&Path>,
+) -> Outcome<()> {
+    if crate::test_hooks::env_flag_true("SINKD_TEST_RSYNC_FAIL") {
+        error!("rsync test hook: forced failure");
+        return bad!("rsync test hook: forced failure");
+    }
+    if let Some(delay_ms) = crate::test_hooks::env_u64("SINKD_TEST_RSYNC_DELAY_MS") {
+        std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+    }
+
+    let mut cmd = Command::new("rsync");
+    cmd.args(build_behind_pull_args(rsync_cfg, backup_dir))
+        .arg(src_dir)
+        .arg(dest_dir);
+
+    let mut child = match cmd.spawn() {
+        Err(e) => {
+            error!("rsync spawn error: {e:#?}");
+            return bad!("rsync spawn failed: {e}");
+        }
+        Ok(c) => c,
+    };
+
+    let status = match child.wait() {
+        Err(e) => {
+            error!("rsync wait error: {e:#?}");
+            return bad!("rsync wait failed: {e}");
+        }
+        Ok(s) => s,
+    };
+
+    if !status.success() {
+        error!("rsync exited with status {status}");
+        return bad!("rsync failed with status {status}");
+    }
+
+    debug!(
+        "\u{1f6b0} rsync behind {src_dir} -> {dest_dir} backup:{backup_dir:?} \u{1f919}"
+    );
+    Ok(())
+}
+
 #[must_use]
 pub fn build_args(rsync_cfg: &ResolvedRsyncConfig) -> Vec<String> {
     let mut args = vec!["-atR".to_string(), "--delete".to_string()];
+    append_rsync_option_flags(&mut args, rsync_cfg);
+    args
+}
+
+#[must_use]
+fn build_behind_pull_args(
+    rsync_cfg: &ResolvedRsyncConfig,
+    backup_dir: Option<&Path>,
+) -> Vec<String> {
+    // No `--delete`: when the server mirror for this anchor is still empty or lagging
+    // (e.g. a second client joins while global generation is already ahead), a delete
+    // pass would wipe the client's pending tree before the first successful push lands.
+    let mut args = vec!["-a".to_string()];
+    append_rsync_option_flags(&mut args, rsync_cfg);
+    if let Some(dir) = backup_dir {
+        args.push("--backup".to_string());
+        args.push(format!(
+            "--backup-dir={}",
+            dir.as_os_str().to_string_lossy()
+        ));
+    }
+    args
+}
+
+fn append_rsync_option_flags(args: &mut Vec<String>, rsync_cfg: &ResolvedRsyncConfig) {
     if rsync_cfg.checksum {
         args.push("--checksum".to_string());
     }
@@ -85,7 +159,6 @@ pub fn build_args(rsync_cfg: &ResolvedRsyncConfig) -> Vec<String> {
     if rsync_cfg.stats {
         args.push("--stats".to_string());
     }
-    args
 }
 
 /// Full rsync argv for a pull (baseline flags plus optional `--backup` / `--backup-dir`).

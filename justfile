@@ -8,21 +8,19 @@ _:
 lint:
     cargo clippy --all-targets --all-features
 
-# fast local lane: unit + local integration
+# fast local lane: unit + local integration (no docker required)
 test-local:
     cargo test --workspace
 
-# unit/integration + CLI contract + generation smoke + multi-client interleave + behind-pull backup tree
+# containerized multi-client/single-server scenario (requires docker + docker compose)
+test-compose:
+    rm -rf test_scenarios/compose/_artifacts
+    cargo run -p scenario -- --spec scenario/specs/compose.toml --root test_scenarios/compose
+
+# full lane: local + compose
 test:
     just test-local
-    rm -rf test_scenarios/cli
-    cargo run -p scenario -- --spec scenario/specs/cli_smoke.toml --root test_scenarios/cli
-    rm -rf test_scenarios/harness
-    cargo run -p scenario -- --spec scenario/specs/sinkd_generation_smoke.toml --root test_scenarios/harness
-    rm -rf test_scenarios/multi_client
-    cargo run -p scenario -- --spec scenario/specs/multi_client_interleave.toml --root test_scenarios/multi_client
-    rm -rf test_scenarios/behind_conflict
-    cargo run -p scenario -- --spec scenario/specs/behind_pull_conflict_backup.toml --root test_scenarios/behind_conflict
+    just test-compose
 
 # optional Zenoh router (see docker-compose.yml); use when debugging cross-host peers
 zenoh:

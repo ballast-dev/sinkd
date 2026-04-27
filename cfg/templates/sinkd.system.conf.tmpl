@@ -1,0 +1,9 @@
+# sinkd system config template (rendered by `sinkd server init`)
+# Placeholders: {{server_addr}}, {{users}}
+
+server_addr = "{{server_addr}}"
+users = [{{users}}]
+
+[rsync]
+compress = false
+partial = true

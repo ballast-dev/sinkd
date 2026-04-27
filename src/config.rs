@@ -197,6 +197,11 @@ impl Anchor {
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct SysConfig {
     pub(crate) server_addr: String,
+    /// On the sync server, the directory where mirrored client trees live (`/srv/sinkd/...`).
+    /// Used when [`Self::server_addr`] is a hostname (remote `rsync`). Ignored when
+    /// `server_addr` is itself an absolute path (local/shared-volume mirror).
+    #[serde(default)]
+    pub(crate) server_sync_root: Option<String>,
     pub(crate) users: Vec<String>,
     pub(crate) anchors: Option<Vec<Anchor>>,
     pub(crate) rsync: Option<RsyncConfig>,
@@ -234,10 +239,33 @@ impl SysConfig {
     fn new() -> SysConfig {
         SysConfig {
             server_addr: String::new(),
+            server_sync_root: None,
             users: Vec::new(),
             anchors: Some(Vec::new()),
             rsync: None,
         }
+    }
+}
+
+/// Path on the server (or local mirror mount) that corresponds to the client's
+/// anchor root after `rsync -aR` from the client (`/srv/sinkd` + `/watch_alice` → `/srv/sinkd/watch_alice`).
+#[must_use]
+pub(crate) fn server_mirror_path(anchor: &Path, server_mirror_root: &Path) -> PathBuf {
+    let tail = anchor.strip_prefix("/").unwrap_or(anchor);
+    server_mirror_root.join(tail)
+}
+
+fn resolve_server_mirror_root(sys: &SysConfig) -> PathBuf {
+    let sync_root = sys
+        .server_sync_root
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("/srv/sinkd");
+    if sys.server_addr.starts_with('/') {
+        PathBuf::from(&sys.server_addr)
+    } else {
+        PathBuf::from(sync_root)
     }
 }
 
@@ -376,7 +404,7 @@ pub struct Inode {
 
 pub type InodeMap = HashMap<PathBuf, Inode>;
 
-pub fn get(client: &ClientParameters) -> Outcome<(String, InodeMap)> {
+pub fn get(client: &ClientParameters) -> Outcome<(String, PathBuf, InodeMap)> {
     let mut parser = ConfigParser::new();
     parser.parse_configs_paths(
         client.system_config.as_ref().as_path(),
@@ -422,7 +450,8 @@ pub fn get(client: &ClientParameters) -> Outcome<(String, InodeMap)> {
             });
         }
     }
-    Ok((parser.sys.server_addr, inode_map))
+    let mirror_root = resolve_server_mirror_root(&parser.sys);
+    Ok((parser.sys.server_addr, mirror_root, inode_map))
 }
 
 #[must_use]

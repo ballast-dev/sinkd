@@ -3,6 +3,7 @@ use clap::{Arg, ArgAction, Command};
 use std::process::ExitCode;
 
 pub mod client;
+pub mod init;
 pub mod server;
 
 pub fn egress<T>(outcome: Outcome<T>) -> ExitCode {
