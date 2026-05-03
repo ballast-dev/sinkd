@@ -8,17 +8,21 @@ _:
 lint:
     cargo clippy --all-targets --all-features
 
-# fast local lane: unit + local integration (no docker required)
+# Default / CI-parity: workspace unit tests only (seconds; no Docker).
+test: test-local
+
+# fast local lane (alias for default `test`)
 test-local:
     cargo test --workspace
 
-# containerized multi-client/single-server scenario (requires docker + docker compose)
+# Containerized multi-client/single-server scenario (requires Docker + docker compose).
+# Can take many minutes on cold cache (image build + sync waits); use when validating integration.
 test-compose:
     rm -rf test_scenarios/compose/_artifacts
     cargo run -p scenario -- --spec scenario/specs/compose.toml --root test_scenarios/compose
 
-# full lane: local + compose
-test:
+# Full lane: unit tests then compose scenario.
+test-all:
     just test-local
     just test-compose
 
@@ -31,13 +35,13 @@ zenoh-down:
 
 # the following commands are purely for debugging
 client:
-    cargo run -p sinkd -- -d client -s cfg/system/sinkd.conf -u cfg/user/sinkd.conf start
+    cargo run -p sinkd -- -d -s cfg/system/sinkd.conf -u cfg/user/sinkd.conf start
 
 client-log:
     tail -f /tmp/sinkd/client.log
 
 server:
-    cargo run -p sinkd -- -d server start
+    cargo run -p sinkd-srv -- -d start
 
 server-log:
     tail -f /tmp/sinkd/server.log

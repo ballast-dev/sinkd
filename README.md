@@ -35,7 +35,17 @@ brew install --head ./pkg/homebrew/sinkd.rb
 
 See comments in [`pkg/homebrew/sinkd.rb`](pkg/homebrew/sinkd.rb) for a versioned install from a release tarball.
 
-**Linux / Windows:** prebuilt binaries and packages (`.deb`, `.pkg.tar.zst`, Windows zip) attach to [GitHub Releases](https://github.com/ballast-dev/sinkd/releases) when you tag a version.
+**Linux / Windows:** prebuilt binaries and packages (`.deb`, `.pkg.tar.zst`, Windows zip) attach to [GitHub Releases](https://github.com/ballast-dev/sinkd/releases) when you tag a version. Releases ship **`sinkd`** (watch client) and **`sinkd-srv`** (sync server).
+
+### Workspace layout
+
+| Crate | Role |
+|-------|------|
+| [`core`](core/) | `sinkd-core` library — Zenoh IPC, config, rsync helpers, init templates |
+| [`client`](client/) | `sinkd` binary — flattened CLI: `sinkd start`, `sinkd init`, … |
+| [`server`](server/) | `sinkd-srv` binary — `sinkd-srv start`, `sinkd-srv init`, … |
+
+Breaking CLI change from the single-binary layout: use **`sinkd …`** instead of **`sinkd client …`**, **`sinkd-srv …`** instead of **`sinkd server …`**, and **`sinkd-srv init …`** instead of **`sinkd init server …`** (server config scaffold).
 
 **Arch Linux (aarch64):** CI does not build Arch packages on ARM64 runners (no suitable multi-arch `archlinux` image in practice). Use the `linux-arm64` binary from the release, build [`pkg/arch/create.sh`](pkg/arch/create.sh) locally, or install another distro’s artifact.
 

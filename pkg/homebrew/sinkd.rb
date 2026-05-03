@@ -17,13 +17,15 @@ class Sinkd < Formula
   depends_on "rsync"
 
   def install
-    system "cargo", "install", *std_cargo_args
+    system "cargo", "install", *std_cargo_args(path: "client")
+    system "cargo", "install", *std_cargo_args(path: "server")
     etc.install buildpath / "cfg/system/sinkd.conf" => "sinkd.conf"
     (share / "sinkd").install buildpath / "cfg/user/sinkd.conf" => "sinkd.user.conf"
   end
 
   test do
     assert_predicate bin / "sinkd", :exist?
+    assert_predicate bin / "sinkd-srv", :exist?
     assert_path_exists etc / "sinkd.conf"
     assert_path_exists share / "sinkd/sinkd.user.conf"
   end

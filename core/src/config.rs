@@ -1,8 +1,8 @@
 //! **Two configuration surfaces (by design):**
 //! - **Client** — system TOML (`/etc/sinkd.conf` or `--sys-cfg`) plus per-user TOML files; consumed by
-//!   [`crate::client`] via [`crate::parameters::ClientParameters`]. `server_addr` in the
+//!   client crate via paths passed to [`crate::config::get_for_client_paths`]. `server_addr` in the
 //!   system file is the sync target/description for clients (see also client-side `_srv_addr` note in
-//!   [`crate::client::init`]).
+//!   client daemon init).
 //! - **Server** — runtime sync root under `/srv/sinkd` (or debug path) and `generation_state.toml` there; the
 //!   server does **not** load client TOML anchor lists for queue/dedup logic.
 
@@ -24,7 +24,7 @@ macro_rules! reject_unsupported_rsync_fields {
     };
 }
 
-use crate::{outcome::Outcome, parameters::ClientParameters};
+use crate::outcome::Outcome;
 use log::{error, warn};
 
 #[allow(clippy::struct_excessive_bools)]
@@ -121,8 +121,8 @@ impl RsyncConfig {
 
 // these are serially parsable
 #[derive(Debug, Serialize, Deserialize)]
-pub(crate) struct Anchor {
-    pub(crate) path: PathBuf,
+pub struct Anchor {
+    pub path: PathBuf,
     interval: Option<u64>,
     excludes: Option<Vec<String>>,
     rsync: Option<RsyncConfig>,
@@ -139,7 +139,8 @@ pub(crate) struct Anchor {
 }
 
 impl Anchor {
-    pub(crate) fn with_path(path: PathBuf) -> Self {
+    #[must_use]
+    pub fn with_path(path: PathBuf) -> Self {
         Anchor {
             path,
             interval: None,
@@ -195,40 +196,40 @@ impl Anchor {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub(crate) struct SysConfig {
-    pub(crate) server_addr: String,
+pub struct SysConfig {
+    pub server_addr: String,
     /// On the sync server, the directory where mirrored client trees live (`/srv/sinkd/...`).
     /// Used when [`Self::server_addr`] is a hostname (remote `rsync`). Ignored when
     /// `server_addr` is itself an absolute path (local/shared-volume mirror).
     #[serde(default)]
-    pub(crate) server_sync_root: Option<String>,
-    pub(crate) users: Vec<String>,
-    pub(crate) anchors: Option<Vec<Anchor>>,
-    pub(crate) rsync: Option<RsyncConfig>,
+    pub server_sync_root: Option<String>,
+    pub users: Vec<String>,
+    pub anchors: Option<Vec<Anchor>>,
+    pub rsync: Option<RsyncConfig>,
 }
 
-pub(crate) fn load_system_config_file(path: &Path) -> Outcome<SysConfig> {
+pub fn load_system_config_file(path: &Path) -> Outcome<SysConfig> {
     let raw = fs::read_to_string(path)
         .map_err(|e| format!("cannot read system config {}: {e}", path.display()))?;
     Ok(toml::from_str(&raw)
         .map_err(|e| format!("cannot parse system config {}: {e}", path.display()))?)
 }
 
-pub(crate) fn save_system_config_file(path: &Path, cfg: &SysConfig) -> Outcome<()> {
+pub fn save_system_config_file(path: &Path, cfg: &SysConfig) -> Outcome<()> {
     let serialized =
         toml::to_string_pretty(cfg).map_err(|e| format!("cannot serialize system config: {e}"))?;
     fs::write(path, serialized)?;
     Ok(())
 }
 
-pub(crate) fn load_user_config_file(path: &Path) -> Outcome<UserConfig> {
+pub fn load_user_config_file(path: &Path) -> Outcome<UserConfig> {
     let raw = fs::read_to_string(path)
         .map_err(|e| format!("cannot read user config {}: {e}", path.display()))?;
     Ok(toml::from_str(&raw)
         .map_err(|e| format!("cannot parse user config {}: {e}", path.display()))?)
 }
 
-pub(crate) fn save_user_config_file(path: &Path, cfg: &UserConfig) -> Outcome<()> {
+pub fn save_user_config_file(path: &Path, cfg: &UserConfig) -> Outcome<()> {
     let serialized =
         toml::to_string_pretty(cfg).map_err(|e| format!("cannot serialize user config: {e}"))?;
     fs::write(path, serialized)?;
@@ -250,7 +251,7 @@ impl SysConfig {
 /// Path on the server (or local mirror mount) that corresponds to the client's
 /// anchor root after `rsync -aR` from the client (`/srv/sinkd` + `/watch_alice` → `/srv/sinkd/watch_alice`).
 #[must_use]
-pub(crate) fn server_mirror_path(anchor: &Path, server_mirror_root: &Path) -> PathBuf {
+pub fn server_mirror_path(anchor: &Path, server_mirror_root: &Path) -> PathBuf {
     let tail = anchor.strip_prefix("/").unwrap_or(anchor);
     server_mirror_root.join(tail)
 }
@@ -270,9 +271,9 @@ fn resolve_server_mirror_root(sys: &SysConfig) -> PathBuf {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub(crate) struct UserConfig {
-    pub(crate) anchors: Vec<Anchor>,
-    pub(crate) rsync: Option<RsyncConfig>,
+pub struct UserConfig {
+    pub anchors: Vec<Anchor>,
+    pub rsync: Option<RsyncConfig>,
 }
 
 #[allow(dead_code)]
@@ -404,12 +405,12 @@ pub struct Inode {
 
 pub type InodeMap = HashMap<PathBuf, Inode>;
 
-pub fn get(client: &ClientParameters) -> Outcome<(String, PathBuf, InodeMap)> {
+pub fn get_for_client_paths(
+    system_config: &Path,
+    user_configs: &[PathBuf],
+) -> Outcome<(String, PathBuf, InodeMap)> {
     let mut parser = ConfigParser::new();
-    parser.parse_configs_paths(
-        client.system_config.as_ref().as_path(),
-        client.user_configs.as_ref().as_slice(),
-    )?;
+    parser.parse_configs_paths(system_config, user_configs)?;
 
     let mut inode_map: InodeMap = HashMap::new();
     let sys_rsync = parser

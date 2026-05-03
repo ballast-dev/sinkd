@@ -61,8 +61,8 @@ if ! docker compose version >/dev/null 2>&1; then
     exit 127
 fi
 
-log "building image"
-"${COMPOSE[@]}" build --pull >/dev/null
+log "building image (first run can take several minutes; progress follows)"
+"${COMPOSE[@]}" build --pull
 
 log "starting zenoh + server"
 "${COMPOSE[@]}" up -d zenoh server

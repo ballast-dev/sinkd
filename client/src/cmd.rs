@@ -4,13 +4,36 @@ use std::{
     process::ExitCode,
 };
 
-use super::egress;
-use crate::client;
-use crate::outcome::Outcome;
-use crate::parameters::ClientParameters;
+use sinkd_core::{fancy_error, outcome::Outcome};
+
+use crate::{client, params::ClientParameters};
+
+pub fn egress<T>(outcome: Outcome<T>) -> ExitCode {
+    match outcome {
+        Ok(_) => ExitCode::SUCCESS,
+        Err(e) => {
+            fancy_error!("ERROR: {}", e);
+            ExitCode::FAILURE
+        }
+    }
+}
 
 #[allow(clippy::too_many_lines)]
-pub(super) fn build_command() -> Command {
+#[must_use]
+pub fn build_command() -> Command {
+    let verbose_arg = Arg::new("verbose")
+        .short('v')
+        .action(ArgAction::Count)
+        .help("log verbosity: v=error, vv=warn (default), vvv=info, vvvv=debug")
+        .global(true);
+
+    let debug_arg = Arg::new("debug")
+        .short('d')
+        .long("debug")
+        .action(ArgAction::Count)
+        .help("debug logs under /tmp/sinkd; -dd also enables Zenoh/IPC crate logs in the file")
+        .global(true);
+
     let share_arg = Arg::new("share")
         .short('S')
         .long("share")
@@ -29,9 +52,11 @@ pub(super) fn build_command() -> Command {
         .num_args(1..)
         .help("username");
 
-    Command::new("client")
-        .about("Client side daemon")
-        .visible_alias("c")
+    Command::new("sinkd")
+        .about("Sync client: watch paths and sync via Zenoh + rsync.")
+        .version(env!("CARGO_PKG_VERSION"))
+        .arg(verbose_arg)
+        .arg(debug_arg)
         .arg(
             Arg::new("windows-daemon")
                 .long("windows-daemon")
@@ -67,6 +92,7 @@ pub(super) fn build_command() -> Command {
                 .action(ArgAction::Append)
                 .global(true),
         )
+        .subcommand_required(true)
         .subcommand(
             Command::new("add")
                 .about("Add PATH(s) to watch list")
@@ -147,10 +173,10 @@ fn check_path_exists(p: &str) -> bool {
     if p.exists() {
         return true;
     }
-    crate::fancy::println(
+    sinkd_core::fancy::println(
         &format!("path doesn't exist: {}", p.display()),
-        crate::fancy::Attrs::Bold,
-        crate::fancy::Colors::Red,
+        sinkd_core::fancy::Attrs::Bold,
+        sinkd_core::fancy::Colors::Red,
     );
     false
 }
@@ -168,8 +194,8 @@ fn collect_share_user_paths(submatches: &ArgMatches) -> (Vec<&String>, Vec<&Stri
 }
 
 #[must_use]
-pub fn dispatch(sub: &ArgMatches, params: &ClientParameters) -> ExitCode {
-    match sub.subcommand() {
+pub fn dispatch(matches: &ArgMatches, params: &ClientParameters) -> ExitCode {
+    match matches.subcommand() {
         Some(("start", _)) => egress(client::start(params)),
         Some(("restart", _)) => egress(client::restart(params)),
         Some(("stop", _)) => egress(client::stop(params)),
@@ -222,7 +248,7 @@ fn run_init(sub: &ArgMatches, params: &ClientParameters) -> Outcome<()> {
     let user_target = client::default_user_config_target();
     let users = vec![user.to_string()];
 
-    client::init_config(
+    sinkd_core::init::init_client_config(
         &sys_target,
         &user_target,
         server_addr,

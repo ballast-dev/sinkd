@@ -15,151 +15,18 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{
+use crate::sync_state::{
+    attach_client_outbound_basis, client_state_dir, load_client_sync_state, mark_local_dirty,
+    maybe_record_writer_ack, record_pull_acked, ClientSyncState,
+};
+use crate::{daemon, params::ClientParameters};
+use sinkd_core::{
+    bad,
     config::{self, SysConfig},
     conflict, ipc,
     outcome::Outcome,
-    parameters::{ClientParameters, DaemonParameters},
     rsync::rsync,
 };
-
-struct ClientSyncState {
-    client_id: String,
-    acked_generation: u64,
-    ack_path: PathBuf,
-}
-
-fn client_state_dir(params: &ClientParameters) -> PathBuf {
-    let shared = &params.shared;
-    if shared.debug > 0 {
-        if let Some(p) = &params.client_state_dir_override {
-            if !p.as_os_str().is_empty() {
-                return p.clone();
-            }
-        }
-        if let Ok(p) = std::env::var("SINKD_CLIENT_STATE_DIR") {
-            let p = p.trim();
-            if !p.is_empty() {
-                return PathBuf::from(p);
-            }
-        }
-        PathBuf::from("/tmp/sinkd/client")
-    } else if cfg!(target_os = "windows") {
-        PathBuf::from(r"C:\ProgramData\sinkd\client")
-    } else {
-        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-        PathBuf::from(home).join(".local/share/sinkd")
-    }
-}
-
-fn ensure_client_state_dir(params: &ClientParameters) -> Outcome<PathBuf> {
-    let dir = client_state_dir(params);
-    if !dir.exists() {
-        fs::create_dir_all(&dir)
-            .map_err(|e| format!("client state dir '{}': {e}", dir.display()))?;
-    }
-    Ok(dir)
-}
-
-fn load_or_create_client_id(path: &Path) -> Outcome<String> {
-    if let Ok(s) = fs::read_to_string(path) {
-        let line = s.lines().next().unwrap_or("").trim();
-        if !line.is_empty() {
-            return Ok(line.to_string());
-        }
-    }
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|e| format!("client_id parent '{}': {e}", parent.display()))?;
-    }
-    let id = uuid::Uuid::new_v4().to_string();
-    fs::write(path, format!("{id}\n")).map_err(|e| format!("write client_id: {e}"))?;
-    Ok(id)
-}
-
-fn load_acked_generation(path: &Path) -> u64 {
-    fs::read_to_string(path)
-        .ok()
-        .and_then(|s| s.trim().parse().ok())
-        .unwrap_or(0)
-}
-
-fn persist_acked_generation(path: &Path, acked: u64) -> Outcome<()> {
-    fs::write(path, acked.to_string()).map_err(|e| format!("persist acked_generation: {e}"))?;
-    Ok(())
-}
-
-fn load_client_sync_state(params: &ClientParameters) -> Outcome<Arc<Mutex<ClientSyncState>>> {
-    let dir = ensure_client_state_dir(params)?;
-    let id_path = dir.join("client_id");
-    let ack_path = dir.join("acked_generation");
-    let client_id = load_or_create_client_id(&id_path)?;
-    let acked_generation = load_acked_generation(&ack_path);
-    Ok(Arc::new(Mutex::new(ClientSyncState {
-        client_id,
-        acked_generation,
-        ack_path,
-    })))
-}
-
-fn attach_client_outbound_basis(
-    payload: &mut ipc::Payload,
-    sync: &Mutex<ClientSyncState>,
-) -> Outcome<()> {
-    let s = sync
-        .lock()
-        .map_err(|e| format!("client sync state lock: {e}"))?;
-    payload.client_id.clear();
-    payload.client_id.push_str(&s.client_id);
-    payload.basis_generation = s.acked_generation;
-    payload.head_generation = 0;
-    payload.last_writer_client_id.clear();
-    Ok(())
-}
-
-fn maybe_record_writer_ack(
-    sync: &Mutex<ClientSyncState>,
-    server_msg: &ipc::Payload,
-    local_dirty: &Mutex<HashSet<PathBuf>>,
-) -> Outcome<()> {
-    let mut s = sync
-        .lock()
-        .map_err(|e| format!("client sync state lock: {e}"))?;
-    if server_msg.last_writer_client_id.is_empty() {
-        return Ok(());
-    }
-    if server_msg.last_writer_client_id == s.client_id
-        && server_msg.head_generation > s.acked_generation
-    {
-        s.acked_generation = server_msg.head_generation;
-        persist_acked_generation(&s.ack_path, s.acked_generation)?;
-        if let Ok(mut dirty) = local_dirty.lock() {
-            dirty.clear();
-        }
-    }
-    Ok(())
-}
-
-fn mark_local_dirty(local_dirty: &Mutex<HashSet<PathBuf>>, path: &Path) {
-    if let Ok(mut dirty) = local_dirty.lock() {
-        let p = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-        dirty.insert(p);
-    }
-}
-
-fn record_pull_acked(sync: &Mutex<ClientSyncState>, head_generation: u64) -> Outcome<()> {
-    if head_generation == 0 {
-        return Ok(());
-    }
-    let mut s = sync
-        .lock()
-        .map_err(|e| format!("client sync state lock: {e}"))?;
-    if head_generation > s.acked_generation {
-        s.acked_generation = head_generation;
-        persist_acked_generation(&s.ack_path, s.acked_generation)?;
-    }
-    Ok(())
-}
 
 /// Linux/Android use inotify-style backends without extra polling; other platforms fall back to periodic poll.
 fn notify_config_for_platform() -> notify::Config {
@@ -175,7 +42,7 @@ fn notify_config_for_platform() -> notify::Config {
 
 pub fn start(params: &ClientParameters) -> Outcome<()> {
     println!("logging to: {}", params.shared.log_path.display());
-    ipc::daemon(&DaemonParameters::Client(params.clone()))
+    daemon::spawn(params)
 }
 
 pub fn stop(_params: &ClientParameters) -> Outcome<()> {
@@ -325,7 +192,10 @@ pub fn rmuser(params: &ClientParameters, users: Option<ValuesRef<String>>) -> Ou
 }
 
 pub fn ls(params: &ClientParameters, paths: Option<Vec<&String>>) -> Outcome<()> {
-    let (_, _, inode_map) = config::get(params)?;
+    let (_, _, inode_map) = config::get_for_client_paths(
+        params.system_config.as_ref().as_path(),
+        params.user_configs.as_ref().as_slice(),
+    )?;
     let mut keys: Vec<_> = inode_map.keys().cloned().collect();
     keys.sort();
 
@@ -361,46 +231,6 @@ pub fn log(params: &ClientParameters) -> Outcome<()> {
     Ok(())
 }
 
-/// Bootstrap the client's system + user configuration files from the embedded
-/// templates. Idempotent: refuses to overwrite an existing file unless `force`
-/// is set. The system config (`/etc/sinkd.conf` etc.) carries `server_addr`
-/// and the `users` list; the user config (`~/.config/sinkd/sinkd.conf`) holds
-/// the per-user watch anchor.
-pub fn init_config(
-    sys_target: &Path,
-    user_target: &Path,
-    server_addr: &str,
-    users: &[String],
-    watch: &Path,
-    interval: u64,
-    force: bool,
-) -> Outcome<()> {
-    use crate::cli::init::{self, InitOptions};
-
-    let users_body = init::toml_string_array_body(users);
-    init::render(&InitOptions {
-        target_path: sys_target.to_path_buf(),
-        template_disk: Some(Path::new(init::SYSTEM_TEMPLATE_DISK)),
-        template_embedded: init::SYSTEM_TEMPLATE,
-        substitutions: &[
-            ("server_addr", server_addr.to_string()),
-            ("users", users_body),
-        ],
-        force,
-    })?;
-
-    init::render(&InitOptions {
-        target_path: user_target.to_path_buf(),
-        template_disk: Some(Path::new(init::USER_TEMPLATE_DISK)),
-        template_embedded: init::USER_TEMPLATE,
-        substitutions: &[
-            ("watch", watch.display().to_string()),
-            ("interval", interval.to_string()),
-        ],
-        force,
-    })
-}
-
 /// Default user-config target: `~/.config/sinkd/sinkd.conf`. Falls back to
 /// `/tmp/sinkd-user.conf` if `$HOME` is unset (only used in degenerate envs).
 #[must_use]
@@ -413,7 +243,10 @@ pub fn default_user_config_target() -> PathBuf {
 pub fn init(params: &ClientParameters) -> Outcome<()> {
     let client_sync = load_client_sync_state(params)?;
     let params = Arc::new(params.clone());
-    let (_, _, inode_map) = config::get(params.as_ref())?;
+    let (_, _, inode_map) = config::get_for_client_paths(
+        params.system_config.as_ref().as_path(),
+        params.user_configs.as_ref().as_slice(),
+    )?;
 
     let (notify_tx, notify_rx): (mpsc::Sender<notify::Event>, mpsc::Receiver<notify::Event>) =
         mpsc::channel();
@@ -679,7 +512,10 @@ fn process(
                 if let Ok(map_read) = inode_map.read() {
                     let head = server_msg.head_generation;
                     let src_paths: Vec<PathBuf> = map_read.keys().cloned().collect();
-                    let (server_addr, server_mirror_root, _) = config::get(params)?;
+                    let (server_addr, server_mirror_root, _) = config::get_for_client_paths(
+                        params.system_config.as_ref().as_path(),
+                        params.user_configs.as_ref().as_slice(),
+                    )?;
                     let mut payload = ipc::Payload::new()?
                         .status(ipc::Status::NotReady(ipc::Reason::Behind))
                         .src_paths(src_paths.clone());
@@ -776,7 +612,10 @@ fn apply_client_config_reload(
     watchers: &Arc<Mutex<Vec<RecommendedWatcher>>>,
     notify_tx: &mpsc::Sender<Event>,
 ) -> Outcome<()> {
-    let (_, _, new_map) = config::get(params)?;
+    let (_, _, new_map) = config::get_for_client_paths(
+        params.system_config.as_ref().as_path(),
+        params.user_configs.as_ref().as_slice(),
+    )?;
     let new_watchers = setup_watchers(&new_map, notify_tx.clone())?;
     {
         let mut im = inode_map
@@ -913,7 +752,7 @@ fn pull_behind(
         };
         let dest = format!("{}/", anchor.display());
         debug!("client:pull_behind>> {src} -> {dest} backup:{backup_dir:?}");
-        crate::rsync::rsync_behind_mirror_sync(&src, &dest, &rsync_cfg, backup_dir)?;
+        sinkd_core::rsync::rsync_behind_mirror_sync(&src, &dest, &rsync_cfg, backup_dir)?;
     }
     Ok(())
 }
@@ -958,9 +797,9 @@ mod conflict_resolution_tests {
     use std::path::PathBuf;
     use std::sync::Mutex;
 
-    use crate::ipc;
+    use sinkd_core::ipc;
 
-    use super::{mark_local_dirty, maybe_record_writer_ack, ClientSyncState};
+    use crate::sync_state::{mark_local_dirty, maybe_record_writer_ack, ClientSyncState};
 
     fn sample_payload(last_writer: &str, head_generation: u64) -> ipc::Payload {
         ipc::Payload::from(

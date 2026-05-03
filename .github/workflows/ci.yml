@@ -79,15 +79,16 @@ jobs:
           if [[ "${{ matrix.pkg }}" == "arch" ]]; then
             . ~/.cargo/env
           fi
-          cargo build -p sinkd --release --target ${{ matrix.target }}
+          cargo build -p sinkd -p sinkd-srv --release --target ${{ matrix.target }}
           cp "target/${{ matrix.target }}/release/sinkd" "artifacts/sinkd-${{ matrix.platform }}"
+          cp "target/${{ matrix.target }}/release/sinkd-srv" "artifacts/sinkd-srv-${{ matrix.platform }}"
 
       # One sinkd-linux-amd64 binary (Ubuntu musl); Arch row builds its own for makepkg but skips this upload to avoid duplicate artifact names.
       - uses: actions/upload-artifact@v7
         if: matrix.pkg == 'deb'
         with:
           name: sinkd-${{ matrix.platform }}
-          path: artifacts/sinkd-*
+          path: artifacts/sinkd*
           retention-days: 7
 
       - name: Build .deb
@@ -143,12 +144,13 @@ jobs:
       - name: Build ${{ matrix.target }}
         run: |
           mkdir -p artifacts
-          cargo build -p sinkd --release --target ${{ matrix.target }}
+          cargo build -p sinkd -p sinkd-srv --release --target ${{ matrix.target }}
           cp "target/${{ matrix.target }}/release/sinkd" "artifacts/sinkd-${{ matrix.platform }}"
+          cp "target/${{ matrix.target }}/release/sinkd-srv" "artifacts/sinkd-srv-${{ matrix.platform }}"
       - uses: actions/upload-artifact@v7
         with:
           name: sinkd-${{ matrix.platform }}
-          path: artifacts/sinkd-*
+          path: artifacts/sinkd*
           retention-days: 7
 
   build-windows:
@@ -170,19 +172,22 @@ jobs:
         shell: powershell
         run: |
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
-          cargo build -p sinkd --release --target ${{ matrix.target }}
+          cargo build -p sinkd -p sinkd-srv --release --target ${{ matrix.target }}
           Copy-Item "target/${{ matrix.target }}/release/sinkd.exe" "artifacts/sinkd-${{ matrix.platform }}.exe"
+          Copy-Item "target/${{ matrix.target }}/release/sinkd-srv.exe" "artifacts/sinkd-srv-${{ matrix.platform }}.exe"
       - uses: actions/upload-artifact@v7
         with:
           name: sinkd-${{ matrix.platform }}
-          path: artifacts/sinkd-*
+          path: artifacts/sinkd*
           retention-days: 7
-      - name: Windows zip (binary + cfg + LICENSE + README)
+      - name: Windows zip (binaries + cfg + LICENSE + README)
         shell: pwsh
         run: |
-          Remove-Item artifacts/sinkd-*.exe -ErrorAction SilentlyContinue
+          Remove-Item artifacts/sinkd*.exe -ErrorAction SilentlyContinue
           $exe = Join-Path $env:GITHUB_WORKSPACE "target/${{ matrix.target }}/release/sinkd.exe"
+          $exeSrv = Join-Path $env:GITHUB_WORKSPACE "target/${{ matrix.target }}/release/sinkd-srv.exe"
           $env:SINKD_EXE = (Resolve-Path $exe).Path
+          $env:SINKD_SRV_EXE = (Resolve-Path $exeSrv).Path
           ./pkg/windows/create.ps1
       - uses: actions/upload-artifact@v7
         with:

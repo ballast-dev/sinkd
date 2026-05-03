@@ -19,7 +19,7 @@ elif command -v bump >/dev/null 2>&1; then
   VERSION=$(bump -b)
 else
   # Last-resort fallback: lift the base version from Cargo.toml.
-  VERSION=$(awk -F'"' '/^version[[:space:]]*=/ { split($2, a, "+"); print a[1]; exit }' "${ROOT}/Cargo.toml")
+  VERSION=$(awk -F'"' '/^version[[:space:]]*=/ { split($2, a, "+"); print a[1]; exit }' "${ROOT}/client/Cargo.toml")
 fi
 
 if [[ -z "${VERSION}" ]]; then
@@ -50,18 +50,24 @@ install -d "${STAGE}/usr/bin" \
 
 TARGET_DIR="${CARGO_TARGET_DIR:-${ROOT}/target}"
 BIN="${SINKD_BIN:-${TARGET_DIR}/${MUSL_TARGET}/release/sinkd}"
+BIN_SRV="${SINKD_SRV_BIN:-${TARGET_DIR}/${MUSL_TARGET}/release/sinkd-srv}"
 
 if [[ ! -f "${BIN}" ]]; then
   echo "Missing binary at ${BIN}. Build sinkd for ${MUSL_TARGET} first or set SINKD_BIN." >&2
   exit 1
 fi
+if [[ ! -f "${BIN_SRV}" ]]; then
+  echo "Missing binary at ${BIN_SRV}. Build sinkd-srv for ${MUSL_TARGET} first or set SINKD_SRV_BIN." >&2
+  exit 1
+fi
 
 install "${BIN}" "${STAGE}/usr/bin/sinkd"
+install "${BIN_SRV}" "${STAGE}/usr/bin/sinkd-srv"
 install -m 644 LICENSE "${STAGE}/usr/share/doc/sinkd/copyright"
 install -m 644 "${ROOT}/cfg/system/sinkd.conf" "${STAGE}/etc/sinkd.conf"
 install -m 644 "${ROOT}/cfg/user/sinkd.conf" "${STAGE}/usr/share/sinkd/sinkd.user.conf.example"
 
-# Init templates consumed by `sinkd client init` / `sinkd server init` (disk-first;
+# Init templates consumed by `sinkd init` / `sinkd-srv init` (disk-first;
 # binary falls back to embedded copies if these are missing).
 install -m 644 "${ROOT}/cfg/templates/sinkd.system.conf.tmpl" "${STAGE}/usr/share/sinkd/sinkd.conf"
 install -m 644 "${ROOT}/cfg/templates/sinkd.user.conf.tmpl"   "${STAGE}/usr/share/sinkd/sinkd.user.conf"

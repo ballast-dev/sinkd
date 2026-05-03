@@ -5,14 +5,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
-#[cfg(windows)]
-use crate::parameters::DaemonType;
-use crate::{config, outcome::Outcome, parameters::DaemonParameters, shiplog};
+use crate::{config, outcome::Outcome};
 
 #[cfg(unix)]
-mod unix;
+pub mod unix;
 #[cfg(windows)]
-mod windows;
+pub mod windows;
 mod zenoh;
 
 pub use zenoh::{Rx, ZenohClient, ZenohMessage, TOPIC_CLIENTS, TOPIC_CONTROL_RELOAD, TOPIC_SERVER};
@@ -58,55 +56,6 @@ pub fn publish_config_reload_signal() -> Outcome<()> {
     let r = client.publish(&mut payload);
     client.disconnect();
     r
-}
-
-pub fn daemon(params: &DaemonParameters) -> Outcome<()> {
-    #[cfg(unix)]
-    {
-        match params {
-            DaemonParameters::Client(p) => {
-                let p = p.clone();
-                unix::daemon(|| {
-                    shiplog::init(&p.shared)?;
-                    crate::client::init(&p)
-                })
-            }
-            DaemonParameters::Server(p) => {
-                let p = p.clone();
-                unix::daemon(|| {
-                    shiplog::init(&p.shared)?;
-                    crate::server::init(&p)
-                })
-            }
-        }
-    }
-    #[cfg(windows)]
-    {
-        match params.shared().daemon_type {
-            DaemonType::WindowsClient => {
-                let DaemonParameters::Client(p) = params else {
-                    return bad!("expected client parameters for Windows client");
-                };
-                windows::redirect_stdio_to_null()?;
-                shiplog::init(&p.shared)?;
-                crate::client::init(p)
-            }
-            DaemonType::WindowsServer => {
-                let DaemonParameters::Server(p) = params else {
-                    return bad!("expected server parameters for Windows server");
-                };
-                windows::redirect_stdio_to_null()?;
-                shiplog::init(&p.shared)?;
-                crate::server::init(p)
-            }
-            DaemonType::UnixClient | DaemonType::UnixServer => windows::daemon().map(|_pid| ()),
-        }
-    }
-    #[cfg(not(any(unix, windows)))]
-    {
-        let _ = params;
-        Ok(())
-    }
 }
 
 #[derive(PartialEq, Clone, Copy, Debug, Default, Serialize, Deserialize)]

@@ -2590,13 +2590,26 @@ checksum = "e320a6c5ad31d271ad523dcf3ad13e2767ad8b1cb8f047f75a8aeaf8da139da2"
 name = "sinkd"
 version = "0.0.4+5bedf12"
 dependencies = [
+ "clap",
+ "log",
+ "notify",
+ "signal-hook",
+ "sinkd-core",
+ "tempfile",
+ "uuid",
+ "windows",
+]
+
+[[package]]
+name = "sinkd-core"
+version = "0.0.4+5bedf12"
+dependencies = [
  "bincode",
  "chrono",
  "clap",
  "libc",
  "log",
  "nix 0.30.1",
- "notify",
  "serde",
  "signal-hook",
  "tempfile",
@@ -2604,6 +2617,19 @@ dependencies = [
  "uuid",
  "windows",
  "zenoh",
+]
+
+[[package]]
+name = "sinkd-srv"
+version = "0.0.4+5bedf12"
+dependencies = [
+ "clap",
+ "log",
+ "serde",
+ "signal-hook",
+ "sinkd-core",
+ "toml",
+ "windows",
 ]
 
 [[package]]

@@ -1,15 +1,8 @@
-[package]
-name = "sinkd"
-version = "0.0.4+5bedf12"
-authors = ["Tony <krakjn@gmail.com>"]
-edition = "2021"
-
 [workspace]
 resolver = "2"
-members = ["scenario"]
+members = ["core", "client", "server", "scenario"]
 
 [workspace.dependencies]
-# Shared dependencies that can be used by workspace members
 log = { version = "0.4", features = ["std"] }
 chrono = { version = "0.4", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -18,44 +11,12 @@ clap = { version = "4", features = ["derive"] }
 bincode = "1"
 zenoh = "1.7.2"
 
-# Workspace-wide Clippy lint levels - matches justfile lint recipe behavior
 [workspace.lints.clippy]
 perf = "warn"
 pedantic = "deny"
 correctness = "deny"
 suspicious = "deny"
 complexity = "deny"
-
-[lib]
-path = "src/lib.rs"
-
-[dependencies]
-bincode = "1"
-chrono = { workspace = true }
-clap = { workspace = true }
-zenoh = { workspace = true }
-libc = "0.2"
-log = { workspace = true }
-nix = { version = "0.30", features = ["process", "signal"] }
-notify = "8"
-serde = { workspace = true }
-signal-hook = "0.3"
-toml = { workspace = true }
-uuid = { version = "1", features = ["v4"] }
-windows = { version = "0.60.0", features = [
-    "Win32_Foundation",
-    "Win32_Security",
-    "Win32_System_Console",
-    "Win32_System_SystemInformation",
-    "Win32_System_Threading",
-    "Win32_System_WindowsProgramming",
-] }
-
-[dev-dependencies]
-tempfile = "3"
-
-[lints]
-workspace = true
 
 [profile.release]
 strip = true

@@ -95,9 +95,7 @@ pub fn rsync_behind_mirror_sync(
         return bad!("rsync failed with status {status}");
     }
 
-    debug!(
-        "\u{1f6b0} rsync behind {src_dir} -> {dest_dir} backup:{backup_dir:?} \u{1f919}"
-    );
+    debug!("\u{1f6b0} rsync behind {src_dir} -> {dest_dir} backup:{backup_dir:?} \u{1f919}");
     Ok(())
 }
 

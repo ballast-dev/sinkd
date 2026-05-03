@@ -188,9 +188,7 @@ impl ScenarioRunner {
             } => {
                 let full = self.root.join(path);
                 Self::assert_eventually(
-                    || {
-                        fs::read_to_string(&full).is_ok_and(|text| text.contains(contains))
-                    },
+                    || fs::read_to_string(&full).is_ok_and(|text| text.contains(contains)),
                     *within_ms,
                     *poll_interval_ms,
                     &format!(

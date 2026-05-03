@@ -59,19 +59,22 @@ options=('!lto' '!debug')
 build() {
   cd "$ROOT"
   _bin="\${CARGO_TARGET_DIR:-$ROOT/target}/${MUSL_TARGET}/release/sinkd"
-  if [[ -s "\$_bin" ]]; then
+  _bin_srv="\${CARGO_TARGET_DIR:-$ROOT/target}/${MUSL_TARGET}/release/sinkd-srv"
+  if [[ -s "\$_bin" && -s "\$_bin_srv" ]]; then
     return 0
   fi
   export PATH="\$HOME/.cargo/bin:\$PATH"
   if command -v rustup >/dev/null 2>&1; then
     rustup target add ${MUSL_TARGET} 2>/dev/null || true
   fi
-  cargo build -p sinkd --release --locked --target ${MUSL_TARGET}
+  cargo build -p sinkd -p sinkd-srv --release --locked --target ${MUSL_TARGET}
 }
 
 package() {
   _bin="\${CARGO_TARGET_DIR:-$ROOT/target}/${MUSL_TARGET}/release/sinkd"
+  _bin_srv="\${CARGO_TARGET_DIR:-$ROOT/target}/${MUSL_TARGET}/release/sinkd-srv"
   install -Dm755 "\${_bin}" "\${pkgdir}/usr/bin/sinkd"
+  install -Dm755 "\${_bin_srv}" "\${pkgdir}/usr/bin/sinkd-srv"
   install -Dm644 "$ROOT/cfg/system/sinkd.conf" "\${pkgdir}/etc/sinkd.conf"
   install -Dm644 "$ROOT/cfg/user/sinkd.conf" "\${pkgdir}/usr/share/sinkd/sinkd.user.conf"
   # install -Dm644 "$ROOT/cfg/user/sinkd.conf" "\${pkgdir}/etc/skel/.config/sinkd/sinkd.conf"

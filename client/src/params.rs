@@ -1,53 +1,14 @@
-//! Composed runtime parameters (shared logging + role-specific fields). Client commands use TOML paths
-//! (`system_config`, `user_configs`); the server daemon uses only [`crate::server`]’s sync root and
-//! persisted generation / client id state — see [`crate::config`] for the split between client and server configuration.
+//! Client-only runtime parameters and argv parsing.
 
 use clap::{parser::ValuesRef, ArgMatches};
-use std::{
-    fmt, fs,
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::{fmt, path::PathBuf, sync::Arc};
 
-use crate::{config, fancy, outcome::Outcome};
 use log::{debug, error};
-
-#[derive(PartialEq, Clone, Copy, Debug)]
-pub enum DaemonType {
-    UnixClient,
-    UnixServer,
-    WindowsClient,
-    WindowsServer,
-}
-
-#[derive(Clone, Debug)]
-pub struct SharedDaemonParams {
-    pub daemon_type: DaemonType,
-    pub verbosity: u8,
-    pub debug: u8,
-    pub log_path: PathBuf,
-}
-
-impl fmt::Display for SharedDaemonParams {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&fancy::format(
-            &format!(
-                r"🎨 SharedDaemonParams 🔍
-daemon_type:{:?}
-verbosity:{}
-debug:{}
-log_path:{}
-",
-                self.daemon_type,
-                self.verbosity,
-                self.debug,
-                self.log_path.display(),
-            ),
-            fancy::Attrs::Bold,
-            fancy::Colors::Yellow,
-        ))
-    }
-}
+use sinkd_core::{
+    config::{self},
+    outcome::Outcome,
+    parameters::{create_log_dir, get_log_path, DaemonType, SharedDaemonParams},
+};
 
 #[derive(Clone, Debug)]
 pub struct ClientParameters {
@@ -78,75 +39,44 @@ impl fmt::Display for ClientParameters {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct ServerParameters {
-    pub shared: SharedDaemonParams,
-}
-
-impl fmt::Display for ServerParameters {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.shared.fmt(f)
-    }
-}
-
-#[derive(Clone, Debug)]
-pub enum DaemonParameters {
-    Client(ClientParameters),
-    Server(ServerParameters),
-}
-
-impl fmt::Display for DaemonParameters {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Client(c) => c.fmt(f),
-            Self::Server(s) => s.fmt(f),
-        }
-    }
-}
-
-impl DaemonParameters {
-    #[must_use]
-    pub fn shared(&self) -> &SharedDaemonParams {
-        match self {
-            Self::Client(c) => &c.shared,
-            Self::Server(s) => &s.shared,
-        }
-    }
-
+impl ClientParameters {
     pub fn from_matches(matches: &ArgMatches) -> Outcome<Self> {
         let debug = matches.get_count("debug");
         create_log_dir(debug)?;
 
         let (daemon_type, system_config, user_configs, client_state_dir_override) =
             match matches.subcommand() {
-                Some(("client", client_m)) => {
-                    let windows = client_m.get_flag("windows-daemon");
+                Some(("init", init_m)) => {
+                    let client_state_dir_override = init_m
+                        .get_one::<String>("client-state-dir")
+                        .map(|s| PathBuf::from(s.trim()))
+                        .filter(|p| !p.as_os_str().is_empty());
+                    (
+                        DaemonType::UnixClient,
+                        init_m.get_one("system-config"),
+                        init_m.get_many("user-configs"),
+                        client_state_dir_override,
+                    )
+                }
+                Some(_) => {
+                    let windows = matches.get_flag("windows-daemon");
                     let daemon_type = if windows {
                         DaemonType::WindowsClient
                     } else {
                         DaemonType::UnixClient
                     };
-                    let client_state_dir_override = client_m
+                    let client_state_dir_override = matches
                         .get_one::<String>("client-state-dir")
                         .map(|s| PathBuf::from(s.trim()))
                         .filter(|p| !p.as_os_str().is_empty());
                     (
                         daemon_type,
-                        client_m.get_one("system-config"),
-                        client_m.get_many("user-configs"),
+                        matches.get_one("system-config"),
+                        matches.get_many("user-configs"),
                         client_state_dir_override,
                     )
                 }
-                Some(("server", server_m)) => {
-                    let windows = server_m.get_flag("windows-daemon");
-                    let daemon_type = if windows {
-                        DaemonType::WindowsServer
-                    } else {
-                        DaemonType::UnixServer
-                    };
-                    (daemon_type, None, None, None)
-                }
-                _ => return bad!("expected `client` or `server` subcommand"),
+                None => return sinkd_core::bad!("expected subcommand"),
             };
 
         let debug_level = match debug {
@@ -171,54 +101,19 @@ impl DaemonParameters {
             log_path: get_log_path(debug, daemon_type),
         };
 
-        let params = match daemon_type {
-            DaemonType::UnixClient | DaemonType::WindowsClient => Self::Client(ClientParameters {
-                shared,
-                system_config: resolve_system_config(system_config)?,
-                user_configs: resolve_user_configs(user_configs)?,
-                client_state_dir_override,
-            }),
-            DaemonType::UnixServer | DaemonType::WindowsServer => {
-                Self::Server(ServerParameters { shared })
-            }
+        let params = Self {
+            shared,
+            system_config: resolve_system_config(system_config)?,
+            user_configs: resolve_user_configs(user_configs)?,
+            client_state_dir_override,
         };
 
-        if params.shared().debug > 0 {
+        if params.shared.debug > 0 {
             println!("{params}");
         }
 
         Ok(params)
     }
-}
-
-fn log_base_dir(debug: u8) -> &'static Path {
-    if debug >= 1 {
-        Path::new("/tmp/sinkd")
-    } else {
-        Path::new("/var/log/sinkd")
-    }
-}
-
-fn create_log_dir(debug: u8) -> Outcome<()> {
-    let path = log_base_dir(debug);
-    if path.exists() {
-        return Ok(());
-    }
-    if debug == 0 && !config::have_permissions() {
-        return bad!("Need elevated permissions to create {}", path.display());
-    }
-    match fs::create_dir_all(path) {
-        Ok(()) => Ok(()),
-        Err(e) => bad!("Unable to create '{}'  {}", path.display(), e),
-    }
-}
-
-fn get_log_path(debug: u8, daemon_type: DaemonType) -> PathBuf {
-    let file = match daemon_type {
-        DaemonType::UnixClient | DaemonType::WindowsClient => "client.log",
-        DaemonType::UnixServer | DaemonType::WindowsServer => "server.log",
-    };
-    log_base_dir(debug).join(file)
 }
 
 fn resolve_system_config(system_config: Option<&String>) -> Outcome<Arc<PathBuf>> {
@@ -228,17 +123,17 @@ fn resolve_system_config(system_config: Option<&String>) -> Outcome<Arc<PathBuf>
         match config::resolve(sys_cfg) {
             Ok(normalized) => {
                 if normalized.is_dir() {
-                    return bad!(
+                    return sinkd_core::bad!(
                         "{} is a directory not a file, aborting",
                         normalized.display()
                     );
                 } else if normalized.exists() {
                     cfg_path = normalized;
                 } else {
-                    return bad!("{} does not exist", normalized.display());
+                    return sinkd_core::bad!("{} does not exist", normalized.display());
                 }
             }
-            Err(e) => return bad!("system config path error: {}", e),
+            Err(e) => return sinkd_core::bad!("system config path error: {}", e),
         }
     } else if cfg!(target_os = "macos") {
         cfg_path = PathBuf::from("/opt/sinkd/sinkd.conf");
@@ -260,7 +155,7 @@ pub fn resolve_user_configs(user_configs: Option<ValuesRef<String>>) -> Outcome<
         for cfg in usr_cfgs {
             let normalized = config::resolve(cfg)?;
             if normalized.is_dir() {
-                return bad!(
+                return sinkd_core::bad!(
                     "{} is a directory, not a file; aborting",
                     normalized.display()
                 );

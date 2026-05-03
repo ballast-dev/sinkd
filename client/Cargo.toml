@@ -1,0 +1,31 @@
+[package]
+name = "sinkd"
+version = "0.0.4+5bedf12"
+authors = ["Tony <krakjn@gmail.com>"]
+edition = "2021"
+
+[[bin]]
+name = "sinkd"
+path = "src/main.rs"
+
+[dependencies]
+sinkd-core = { path = "../core" }
+clap = { workspace = true }
+log = { workspace = true }
+notify = "8"
+signal-hook = "0.3"
+uuid = { version = "1", features = ["v4"] }
+windows = { version = "0.60.0", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Console",
+    "Win32_System_SystemInformation",
+    "Win32_System_Threading",
+    "Win32_System_WindowsProgramming",
+] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

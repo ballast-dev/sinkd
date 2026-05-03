@@ -2,7 +2,7 @@
 //   / __/__ _____  _____ ____
 //  _\ \/ -_) __/ |/ / -_) __/
 // /___/\__/_/  |___/\__/_/
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 
 use std::{
     fs,
@@ -14,108 +14,17 @@ use std::{
         Arc, Mutex,
     },
     thread,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
-
-use serde::{Deserialize, Serialize};
 
 use crate::{
-    config, ipc,
-    outcome::Outcome,
-    parameters::{DaemonParameters, ServerParameters},
-    rsync::rsync,
+    daemon,
+    generation::{
+        load_generation_state, now_unix_secs, persist_generation_state, GenerationState, PostApply,
+    },
+    params::ServerParameters,
 };
-
-const GENERATION_HISTORY_TTL_SECS: i64 = 7 * 24 * 3600;
-const GENERATION_HISTORY_MAX: usize = 4096;
-
-enum PostApply {
-    Applied {
-        writer_client_id: String,
-        head_generation: u64,
-    },
-    StaleAtApply {
-        head_generation: u64,
-    },
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-struct HistoryEntry {
-    generation: u64,
-    saved_at_unix: i64,
-}
-
-#[derive(Debug, Default)]
-struct GenerationState {
-    current_generation: u64,
-    history: Vec<HistoryEntry>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct PersistedGeneration {
-    current_generation: u64,
-    #[serde(default)]
-    history: Vec<HistoryEntry>,
-}
-
-fn now_unix_secs() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .ok()
-        .and_then(|d| i64::try_from(d.as_secs()).ok())
-        .unwrap_or(0)
-}
-
-impl GenerationState {
-    fn prune_history(&mut self, now_unix: i64) {
-        self.history
-            .retain(|e| now_unix - e.saved_at_unix <= GENERATION_HISTORY_TTL_SECS);
-        while self.history.len() > GENERATION_HISTORY_MAX {
-            self.history.remove(0);
-        }
-    }
-
-    /// Returns the new head generation.
-    fn bump(&mut self, now_unix: i64) -> u64 {
-        self.current_generation = self.current_generation.saturating_add(1);
-        let g = self.current_generation;
-        self.history.push(HistoryEntry {
-            generation: g,
-            saved_at_unix: now_unix,
-        });
-        self.prune_history(now_unix);
-        g
-    }
-}
-
-fn load_generation_state(path: &Path) -> GenerationState {
-    let Ok(content) = fs::read_to_string(path) else {
-        return GenerationState::default();
-    };
-    let Ok(p) = toml::from_str::<PersistedGeneration>(&content) else {
-        warn!(
-            "server: unable to parse generation state '{}'",
-            path.display()
-        );
-        return GenerationState::default();
-    };
-    let mut st = GenerationState {
-        current_generation: p.current_generation,
-        history: p.history,
-    };
-    st.prune_history(now_unix_secs());
-    st
-}
-
-fn persist_generation_state(path: &Path, state: &GenerationState) -> Outcome<()> {
-    let p = PersistedGeneration {
-        current_generation: state.current_generation,
-        history: state.history.clone(),
-    };
-    let serialized = toml::to_string(&p).map_err(|e| format!("serialize generation state: {e}"))?;
-    fs::write(path, serialized)?;
-    Ok(())
-}
+use sinkd_core::{bad, config, ipc, outcome::Outcome, rsync::rsync};
 
 fn needs_push_basis_check(payload: &ipc::Payload) -> bool {
     matches!(payload.status, ipc::Status::Ready) && !payload.src_paths.is_empty()
@@ -124,7 +33,7 @@ fn needs_push_basis_check(payload: &ipc::Payload) -> bool {
 pub fn start(params: &ServerParameters) -> Outcome<()> {
     // No need to start mosquitto - Zenoh is peer-to-peer
     println!("logging to: {}", params.shared.log_path.display());
-    ipc::daemon(&DaemonParameters::Server(params.clone()))
+    daemon::spawn(params)
 }
 
 pub fn stop() -> Outcome<()> {
@@ -138,6 +47,7 @@ pub fn restart(params: &ServerParameters) -> Outcome<()> {
     }
 }
 
+#[allow(clippy::unnecessary_wraps)]
 pub fn ls(params: &ServerParameters) -> Outcome<()> {
     let srv_dir = get_srv_dir(params.shared.debug);
     println!("server sync root: {}", srv_dir.display());
@@ -149,29 +59,6 @@ pub fn ls(params: &ServerParameters) -> Outcome<()> {
         println!("(no generation_state.toml yet)");
     }
     Ok(())
-}
-
-/// Bootstrap the server's system configuration file from the embedded template.
-/// Idempotent: refuses to overwrite an existing file unless `force` is set.
-pub fn init_config(
-    target: &Path,
-    server_addr: &str,
-    users: &[String],
-    force: bool,
-) -> Outcome<()> {
-    use crate::cli::init::{self, InitOptions};
-
-    let users_body = init::toml_string_array_body(users);
-    init::render(&InitOptions {
-        target_path: target.to_path_buf(),
-        template_disk: Some(Path::new(init::SYSTEM_TEMPLATE_DISK)),
-        template_embedded: init::SYSTEM_TEMPLATE,
-        substitutions: &[
-            ("server_addr", server_addr.to_string()),
-            ("users", users_body),
-        ],
-        force,
-    })
 }
 
 fn get_srv_dir(debug: u8) -> PathBuf {
@@ -620,7 +507,9 @@ fn broadcast_status(
 mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use super::{load_generation_state, persist_generation_state, GenerationState};
+    use crate::generation::{
+        load_generation_state, now_unix_secs, persist_generation_state, GenerationState,
+    };
 
     #[test]
     fn generation_state_roundtrip_persists_data() {
@@ -634,7 +523,7 @@ mod tests {
             current_generation: 4,
             ..Default::default()
         };
-        let now = super::now_unix_secs();
+        let now = now_unix_secs();
         st.bump(now);
 
         persist_generation_state(&path, &st).expect("persist should succeed");
