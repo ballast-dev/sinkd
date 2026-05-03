@@ -1,6 +1,6 @@
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::{
-    path::{Path, PathBuf},
+    path::Path,
     process::ExitCode,
 };
 
@@ -53,7 +53,7 @@ pub fn build_command() -> Command {
         .help("username");
 
     Command::new("sinkd")
-        .about("Sync client: watch paths and sync via Zenoh + rsync.")
+        .about("Deployable Cloud: client side")
         .version(env!("CARGO_PKG_VERSION"))
         .arg(verbose_arg)
         .arg(debug_arg)
@@ -194,67 +194,32 @@ fn collect_share_user_paths(submatches: &ArgMatches) -> (Vec<&String>, Vec<&Stri
 }
 
 #[must_use]
-pub fn dispatch(matches: &ArgMatches, params: &ClientParameters) -> ExitCode {
+pub fn dispatch(matches: &ArgMatches, parameters: &ClientParameters) -> ExitCode {
     match matches.subcommand() {
-        Some(("start", _)) => egress(client::start(params)),
-        Some(("restart", _)) => egress(client::restart(params)),
-        Some(("stop", _)) => egress(client::stop(params)),
+        Some(("start", _)) => egress(client::start(parameters)),
+        Some(("restart", _)) => egress(client::restart(parameters)),
+        Some(("stop", _)) => egress(client::stop(parameters)),
         Some(("add", s)) => {
             let (sp, up) = collect_share_user_paths(s);
-            egress(client::add(params, &sp, &up))
+            egress(client::add(parameters, &sp, &up))
         }
         Some(("rm", s)) => {
             let (sp, up) = collect_share_user_paths(s);
-            egress(client::rm(params, &sp, &up))
+            egress(client::rm(parameters, &sp, &up))
         }
-        Some(("adduser", s)) => egress(client::adduser(params, s.get_many::<String>("user"))),
-        Some(("rmuser", s)) => egress(client::rmuser(params, s.get_many::<String>("user"))),
+        Some(("adduser", s)) => egress(client::adduser(parameters, s.get_many::<String>("user"))),
+        Some(("rmuser", s)) => egress(client::rmuser(parameters, s.get_many::<String>("user"))),
         Some(("ls", s)) => {
             let paths = s
                 .get_many::<String>("path")
                 .map(|ps| ps.filter(|p| check_path_exists(p)).collect());
-            egress(client::ls(params, paths))
+            egress(client::ls(parameters, paths))
         }
-        Some(("log", _)) => egress(client::log(params)),
-        Some(("init", s)) => egress(run_init(s, params)),
+        Some(("log", _)) => egress(client::log(parameters)),
+        Some(("init", s)) => egress(crate::init::run(s, parameters)),
         _ => {
             fancy_error!("unknown subcommand");
             ExitCode::FAILURE
         }
     }
-}
-
-fn run_init(sub: &ArgMatches, params: &ClientParameters) -> Outcome<()> {
-    let server_addr = sub
-        .get_one::<String>("server-addr")
-        .map(String::as_str)
-        .ok_or("client init: --server-addr is required")?;
-    let user = sub
-        .get_one::<String>("user")
-        .map(String::as_str)
-        .ok_or("client init: --user is required")?;
-    let watch_arg = sub
-        .get_one::<String>("watch")
-        .ok_or("client init: --watch is required")?;
-    let interval: u64 = sub
-        .get_one::<String>("interval")
-        .map_or("1", String::as_str)
-        .parse()
-        .map_err(|e| format!("client init: --interval must be an integer: {e}"))?;
-    let force = sub.get_flag("force");
-
-    let watch = PathBuf::from(watch_arg);
-    let sys_target: PathBuf = params.system_config.as_ref().as_path().to_path_buf();
-    let user_target = client::default_user_config_target();
-    let users = vec![user.to_string()];
-
-    sinkd_core::init::init_client_config(
-        &sys_target,
-        &user_target,
-        server_addr,
-        &users,
-        &watch,
-        interval,
-        force,
-    )
 }

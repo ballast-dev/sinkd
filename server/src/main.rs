@@ -1,6 +1,7 @@
 mod cli;
 mod daemon;
 mod generation;
+mod init;
 mod params;
 mod server;
 

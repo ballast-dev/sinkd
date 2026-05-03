@@ -1,9 +1,8 @@
-//! Shared template-render logic for `sinkd init client` and `sinkd init server`.
+//! Template-based config scaffolding primitives.
 //!
-//! Each `init` subcommand scaffolds a TOML config from a template — disk-first
-//! (`/usr/share/sinkd/*.conf` installed by the package) with embedded fallbacks
-//! baked into the binary via [`include_str!`]. Placeholders are `{{name}}` style
-//! and substituted in-place.
+//! Disk-first (`/usr/share/sinkd/*.conf` when installed) with embedded fallbacks
+//! via [`include_str!`]. Placeholders are `{{name}}` style. Client and server
+//! binaries compose [`render`] with their own targets and substitutions.
 
 use std::{
     fs,
@@ -102,60 +101,6 @@ pub fn toml_string_array_body(items: &[String]) -> String {
         .map(|s| format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\"")))
         .collect::<Vec<_>>()
         .join(", ")
-}
-
-/// Bootstrap the client's system + user configuration files from templates.
-pub fn init_client_config(
-    sys_target: &Path,
-    user_target: &Path,
-    server_addr: &str,
-    users: &[String],
-    watch: &Path,
-    interval: u64,
-    force: bool,
-) -> Outcome<()> {
-    let users_body = toml_string_array_body(users);
-    render(&InitOptions {
-        target_path: sys_target.to_path_buf(),
-        template_disk: Some(Path::new(SYSTEM_TEMPLATE_DISK)),
-        template_embedded: SYSTEM_TEMPLATE,
-        substitutions: &[
-            ("server_addr", server_addr.to_string()),
-            ("users", users_body),
-        ],
-        force,
-    })?;
-
-    render(&InitOptions {
-        target_path: user_target.to_path_buf(),
-        template_disk: Some(Path::new(USER_TEMPLATE_DISK)),
-        template_embedded: USER_TEMPLATE,
-        substitutions: &[
-            ("watch", watch.display().to_string()),
-            ("interval", interval.to_string()),
-        ],
-        force,
-    })
-}
-
-/// Bootstrap the server's system configuration file from the embedded template.
-pub fn init_server_config(
-    target: &Path,
-    server_addr: &str,
-    users: &[String],
-    force: bool,
-) -> Outcome<()> {
-    let users_body = toml_string_array_body(users);
-    render(&InitOptions {
-        target_path: target.to_path_buf(),
-        template_disk: Some(Path::new(SYSTEM_TEMPLATE_DISK)),
-        template_embedded: SYSTEM_TEMPLATE,
-        substitutions: &[
-            ("server_addr", server_addr.to_string()),
-            ("users", users_body),
-        ],
-        force,
-    })
 }
 
 #[cfg(test)]

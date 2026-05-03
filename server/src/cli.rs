@@ -1,5 +1,5 @@
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use std::{path::PathBuf, process::ExitCode};
+use std::process::ExitCode;
 
 use sinkd_core::{fancy_error, outcome::Outcome};
 
@@ -83,51 +83,16 @@ pub fn build_command() -> Command {
 }
 
 #[must_use]
-pub fn dispatch(matches: &ArgMatches, server_params: &ServerParameters) -> ExitCode {
+pub fn dispatch(matches: &ArgMatches, parameters: &ServerParameters) -> ExitCode {
     match matches.subcommand() {
-        Some(("start", _)) => egress(server::start(server_params)),
-        Some(("restart", _)) => egress(server::restart(server_params)),
+        Some(("start", _)) => egress(server::start(parameters)),
+        Some(("restart", _)) => egress(server::restart(parameters)),
         Some(("stop", _)) => egress(server::stop()),
-        Some(("ls", _)) => egress(server::ls(server_params)),
-        Some(("init", s)) => egress(run_init(s)),
+        Some(("ls", _)) => egress(server::ls(parameters)),
+        Some(("init", s)) => egress(crate::init::run(s, parameters)),
         _ => {
             fancy_error!("unknown subcommand");
             ExitCode::FAILURE
         }
-    }
-}
-
-fn run_init(sub: &ArgMatches) -> Outcome<()> {
-    let users_csv = sub
-        .get_one::<String>("users")
-        .ok_or_else(|| "server init: --users is required".to_string())?;
-    let users: Vec<String> = users_csv
-        .split(',')
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .collect();
-    if users.is_empty() {
-        return sinkd_core::bad!("server init: --users must contain at least one name");
-    }
-    let server_addr = sub
-        .get_one::<String>("server-addr")
-        .map_or("0.0.0.0", String::as_str);
-    let force = sub.get_flag("force");
-
-    let target = sub
-        .get_one::<String>("config")
-        .map_or_else(default_system_target, PathBuf::from);
-
-    sinkd_core::init::init_server_config(&target, server_addr, &users, force)
-}
-
-#[must_use]
-fn default_system_target() -> PathBuf {
-    if cfg!(target_os = "macos") {
-        PathBuf::from("/opt/sinkd/sinkd.conf")
-    } else if cfg!(target_os = "windows") {
-        PathBuf::from(r"C:\ProgramData\sinkd\sinkd.conf")
-    } else {
-        PathBuf::from("/etc/sinkd.conf")
     }
 }

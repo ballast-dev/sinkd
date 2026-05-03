@@ -1,6 +1,7 @@
 mod client;
-mod cmd;
+mod cli;
 mod daemon;
+mod init;
 mod params;
 mod sync_state;
 
@@ -12,7 +13,7 @@ use sinkd_core::{shiplog, time};
 use crate::params::ClientParameters;
 
 fn windoze() -> ExitCode {
-    let cli_cmd = cmd::build_command().no_binary_name(true);
+    let cli_cmd = cli::build_command().no_binary_name(true);
     let matches = match cli_cmd.try_get_matches() {
         Ok(m) => m,
         Err(e) => e.exit(),
@@ -29,7 +30,7 @@ fn windoze() -> ExitCode {
     }
     info!("-- windows client daemon --");
     match matches.subcommand() {
-        Some(("start" | "restart", _)) => cmd::egress(client::init(&params)),
+        Some(("start" | "restart", _)) => cli::egress(client::init(&params)),
         Some((name, _)) => {
             debug!("windows daemon unexpected subcommand: {name}");
             ExitCode::SUCCESS
@@ -43,7 +44,7 @@ fn main() -> ExitCode {
         return windoze();
     }
 
-    let cmd = cmd::build_command();
+    let cmd = cli::build_command();
     let matches = match cmd.try_get_matches() {
         Ok(m) => m,
         Err(e) => e.exit(),
@@ -61,5 +62,5 @@ fn main() -> ExitCode {
         println!("timestamp {}", time::stamp(None));
     }
 
-    cmd::dispatch(&matches, &params)
+    cli::dispatch(&matches, &params)
 }
