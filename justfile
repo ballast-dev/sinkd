@@ -18,8 +18,8 @@ test-local:
 # Containerized multi-client/single-server scenario (requires Docker + docker compose).
 # Can take many minutes on cold cache (image build + sync waits); use when validating integration.
 test-compose:
-    rm -rf test_scenarios/compose/_artifacts
-    cargo run -p scenario -- --spec scenario/specs/compose.toml --root test_scenarios/compose
+    rm -rf test/scenario/compose
+    cargo run -p scenario -- --spec scenario/specs/compose.toml --root scenario/compose
 
 # Full lane: unit tests then compose scenario.
 test-all:

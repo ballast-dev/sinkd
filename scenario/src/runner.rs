@@ -1,5 +1,5 @@
 use std::{
-    fs,
+    env, fs,
     path::{Path, PathBuf},
     process::Command,
     thread::sleep,
@@ -14,6 +14,51 @@ use crate::spec::{ScenarioSpec, Step};
 fn expand_root_template(root: &Path, s: &str) -> String {
     let resolved = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
     s.replace("{{root}}", &resolved.display().to_string())
+}
+
+/// Repo root: directory containing `pkg/debian/create.sh`.
+fn workspace_root_for_artifacts(scenario_root: &Path) -> Option<PathBuf> {
+    let mut starts: Vec<PathBuf> = Vec::new();
+    if scenario_root.is_absolute() && let Ok(p) = fs::canonicalize(scenario_root) {
+        starts.push(p);
+    }
+    if let Ok(cwd) = env::current_dir() {
+        starts.push(cwd.join(scenario_root));
+        starts.push(cwd);
+    }
+    for start in starts {
+        let root = fs::canonicalize(&start).unwrap_or(start);
+        let mut dir = root.as_path();
+        loop {
+            if dir.join("pkg/debian/create.sh").is_file() {
+                return Some(dir.to_path_buf());
+            }
+            match dir.parent() {
+                Some(p) => dir = p,
+                None => break,
+            }
+        }
+    }
+    None
+}
+
+#[inline]
+fn sanitize_spec_segment(name: &str) -> String {
+    if name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return name.to_string();
+    }
+    name.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
 }
 
 #[inline]
@@ -227,7 +272,12 @@ impl ScenarioRunner {
     }
 
     fn write_report(&self, report: &ScenarioReport) -> Result<(), String> {
-        let artifacts = self.root.join("_artifacts");
+        let base = workspace_root_for_artifacts(&self.root)
+            .or_else(|| env::current_dir().ok())
+            .unwrap_or_else(|| self.root.clone());
+        let artifacts = base
+            .join("test/scenario")
+            .join(sanitize_spec_segment(&report.name));
         fs::create_dir_all(&artifacts).map_err(|e| {
             format!(
                 "failed to create artifacts dir '{}': {e}",

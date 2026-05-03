@@ -1,0 +1,80 @@
+# Multi-client / single-server scenario.
+#
+# Topology:
+#   zenoh    — optional router (peers also discover via UDP scout on the bridge)
+#   server   — `sinkd-srv start` writing to /srv/sinkd
+#   client-* — `sinkd start` watching /watch_<user>; each fires a
+#              deterministic write/rename/delete loop from its entrypoint.
+#
+# All file events flow client -> zenoh peer -> server rsync; the host driver
+# diffs `sinkd-snapshot /watch_<user>` against `sinkd-snapshot /srv/sinkd/watch_<user>`.
+#
+# Clients mount the same `srv-data` volume read-only at `/srv/sinkd` and set
+# `server_addr` to that path so `NotReady(Behind)` pulls use local rsync (see
+# `pull_behind` in client/src/client.rs) instead of SSH.
+name: sinkd-compose
+
+services:
+  zenoh:
+    image: eclipse/zenoh:latest
+    networks: [sinkd]
+
+  server:
+    build:
+      context: ../..
+      dockerfile: scenario/compose/Dockerfile
+    image: sinkd-compose:latest
+    environment:
+      ROLE: server
+      SINKD_USERS: "alice,bob"
+      # debian:bookworm-slim leaves $USER unset for root; sinkd's Payload::new()
+      # requires it. The server's username is informational only.
+      USER: server
+    depends_on: [zenoh]
+    volumes:
+      - srv-data:/srv/sinkd
+      # Server-side rsync currently treats payload.src_paths as local paths
+      # (synch_entry in server/src/server.rs). For this scenario we give the server
+      # read-only visibility into each client's watch tree so rsync `-aR` lands
+      # the files under /srv/sinkd<watch>/. Production deployments would swap
+      # this for SSH-based rsync; that's tracked separately.
+      - alice-watch:/watch_alice:ro
+      - bob-watch:/watch_bob:ro
+    networks: [sinkd]
+
+  client-alice:
+    image: sinkd-compose:latest
+    environment:
+      ROLE: client
+      USER_NAME: alice
+      USER: alice
+      WATCH: /watch_alice
+      SINKD_SERVER_ADDR: /srv/sinkd
+    depends_on: [server]
+    volumes:
+      - alice-watch:/watch_alice
+      - srv-data:/srv/sinkd:ro
+    networks: [sinkd]
+
+  client-bob:
+    image: sinkd-compose:latest
+    environment:
+      ROLE: client
+      USER_NAME: bob
+      USER: bob
+      WATCH: /watch_bob
+      SINKD_SERVER_ADDR: /srv/sinkd
+    depends_on: [server]
+    volumes:
+      - bob-watch:/watch_bob
+      - srv-data:/srv/sinkd:ro
+    networks: [sinkd]
+
+volumes:
+  srv-data: {}
+  alice-watch: {}
+  bob-watch: {}
+
+networks:
+  sinkd:
+    driver: bridge

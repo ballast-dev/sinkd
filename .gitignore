@@ -2,15 +2,12 @@ target/
 **/*.rs.bk
 **/*.DS_Store
 
-test/
+# python virtual environments
 .venv/
-__pycache__/
+**/__pycache__/
 
-test_scenarios/
-# Tracked: containerized compose scenario assets (generated runs land in _artifacts/).
-!test_scenarios/compose/
-test_scenarios/compose/_artifacts/
-
+# packaging artifacts
+pkg/artifacts/
 pkg/**/__gen/
 
-artifacts/
+test/

@@ -1,4 +1,4 @@
-# Zip release binaries + configs from cfg/ (+ LICENSE, README) into artifacts/.
+# Zip release binaries + configs from cfg/ (+ LICENSE, README) into pkg/artifacts/.
 # Set SINKD_EXE / SINKD_SRV_EXE to prebuilt paths to skip cargo; otherwise Rust + bump on PATH. PowerShell 5+.
 $ErrorActionPreference = 'Stop'
 
@@ -12,7 +12,7 @@ if (-not (Get-Command bump -ErrorAction SilentlyContinue)) {
 $Version = (& bump -b).Trim()
 if (-not $Version) { throw 'bump -b returned empty version' }
 
-$Artifacts = Join-Path $Root 'artifacts'
+$Artifacts = Join-Path $Root 'pkg\artifacts'
 New-Item -ItemType Directory -Force -Path $Artifacts | Out-Null
 
 $cfgSystem = Join-Path $Root 'cfg\system\sinkd.conf'

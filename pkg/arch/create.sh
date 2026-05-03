@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build a native Arch Linux package (sinkd-*.pkg.tar.zst) with static musl binary into artifacts/.
+# Build a native Arch Linux package (sinkd-*.pkg.tar.zst) with static musl binary into pkg/artifacts/.
 # Requires: base-devel, bump, cargo, rustup, musl toolchain for the target (see Arch wiki / musl).
 set -euo pipefail
 
@@ -32,7 +32,7 @@ aarch64)
   ;;
 esac
 
-OUT="${ROOT}/artifacts"
+OUT="${ROOT}/pkg/artifacts"
 mkdir -p "${OUT}"
 
 WORKDIR=$(mktemp -d)

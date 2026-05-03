@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Driver for the multi-client / single-server compose scenario.
 #
-# Usage:  compose.sh <harness-root>
+# Usage:  compose.sh   (run from repo root; logs/manifests -> test/scenario/compose/)
 #
 # Steps:
 #   1. `docker compose build` the scenario image.
@@ -15,15 +15,14 @@
 #   8. Checkpoint B: snapshot-diff again.
 #   9. `docker compose down -v` (in EXIT trap) tears the world down.
 #
-# Manifests + logs are written under <harness-root>/_artifacts/.
+# Manifests + logs are written under test/scenario/compose/.
 set -euo pipefail
 
-HARNESS_ROOT="${1:?usage: compose.sh <harness-root>}"
-ARTIFACTS="${HARNESS_ROOT}/_artifacts"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+ARTIFACTS="${REPO_ROOT}/test/scenario/compose"
 mkdir -p "${ARTIFACTS}"
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-COMPOSE_FILE="${REPO_ROOT}/test_scenarios/compose/compose.yml"
+COMPOSE_FILE="${REPO_ROOT}/scenario/compose/compose.yml"
 PROJECT_NAME="sinkd_compose"
 COMPOSE=(docker compose -f "${COMPOSE_FILE}" -p "${PROJECT_NAME}")
 

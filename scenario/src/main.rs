@@ -15,7 +15,7 @@ struct Args {
     #[arg(short, long, default_value = "scenario/specs/compose.toml")]
     spec: PathBuf,
     /// Root directory where scenario actions are executed
-    #[arg(short, long, default_value = "test_scenarios/compose")]
+    #[arg(short, long, default_value = "scenario/compose")]
     root: PathBuf,
 }
 

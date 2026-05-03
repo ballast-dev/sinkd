@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build a .deb with a static musl sinkd (amd64/arm64) into artifacts/.
+# Build a .deb with a static musl sinkd (amd64/arm64) into pkg/artifacts/.
 # Requires: dpkg-deb, bump. Binary: target/*/release/sinkd for the musl triple, or set SINKD_BIN.
 set -euo pipefail
 
@@ -34,7 +34,7 @@ if [[ "${DEB_ARCH}" == "arm64" ]]; then
   MUSL_TARGET=aarch64-unknown-linux-musl
 fi
 
-OUT="${ROOT}/artifacts"
+OUT="${ROOT}/pkg/artifacts"
 mkdir -p "${OUT}"
 
 STAGE=$(mktemp -d)
