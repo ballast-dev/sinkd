@@ -22,7 +22,7 @@ use crate::{
     generation::{
         load_generation_state, now_unix_secs, persist_generation_state, GenerationState, PostApply,
     },
-    params::ServerParameters,
+    parameters::ServerParameters,
 };
 use sinkd_core::{bad, config, ipc, outcome::Outcome, rsync::rsync};
 

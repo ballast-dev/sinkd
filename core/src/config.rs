@@ -1,5 +1,5 @@
 //! **Two configuration surfaces (by design):**
-//! - **Client** — system TOML (`/etc/sinkd.conf` or `--sys-cfg`) plus per-user TOML files; consumed by
+//! - **Client** — system TOML (`/etc/sinkd.conf` by default, or `--sys-cfg`) plus per-user TOML files; consumed by
 //!   client crate via paths passed to [`crate::config::get_for_client_paths`]. `server_addr` in the
 //!   system file is the sync target/description for clients (see also client-side `_srv_addr` note in
 //!   client daemon init).
@@ -26,6 +26,30 @@ macro_rules! reject_unsupported_rsync_fields {
 
 use crate::outcome::Outcome;
 use log::{error, warn};
+
+pub fn system_default() -> PathBuf {
+    if cfg!(target_os = "macos") {
+        PathBuf::from("/opt/sinkd/sinkd.conf")
+    } else if cfg!(target_os = "windows") {
+        PathBuf::from(r"C:\ProgramData\sinkd\sinkd.conf")
+    } else {
+        PathBuf::from("/etc/sinkd.conf")
+    }
+}
+
+pub fn user_default() -> PathBuf {
+    if cfg!(windows) {
+        let base = std::env::var("APPDATA")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .unwrap_or_else(|_| ".".into());
+        PathBuf::from(base).join("sinkd").join("sinkd.conf")
+    } else {
+        // if HOME is missing use current working directory
+        let cwd = std::env::current_dir().unwrap();
+        let home = std::env::var("HOME").unwrap_or_else(|_| cwd.to_string_lossy().to_string());
+        PathBuf::from(home).join(".config").join("sinkd").join("sinkd.conf")
+    }
+}
 
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]

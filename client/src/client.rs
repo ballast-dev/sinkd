@@ -19,7 +19,7 @@ use crate::sync_state::{
     attach_client_outbound_basis, client_state_dir, load_client_sync_state, mark_local_dirty,
     maybe_record_writer_ack, record_pull_acked, ClientSyncState,
 };
-use crate::{daemon, params::ClientParameters};
+use crate::{daemon, parameters::ClientParameters};
 use sinkd_core::{
     bad,
     config::{self, SysConfig},

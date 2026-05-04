@@ -6,7 +6,7 @@ use std::{
 
 use sinkd_core::{fancy_error, outcome::Outcome};
 
-use crate::{client, params::ClientParameters};
+use crate::{client, parameters::ClientParameters};
 
 pub fn egress<T>(outcome: Outcome<T>) -> ExitCode {
     match outcome {
@@ -76,7 +76,7 @@ pub fn build_command() -> Command {
         .arg(
             Arg::new("system-config")
                 .help("system TOML (overrides default path)")
-                .long_help("overrides default system config path")
+                .long_help("overrides default system config path (/etc/sinkd.conf on Unix, %APPDATA%\\sinkd\\sinkd.system.conf on Windows)")
                 .short('s')
                 .long("sys-cfg")
                 .num_args(1)
@@ -140,8 +140,9 @@ pub fn build_command() -> Command {
                         .long("user")
                         .value_name("NAME")
                         .num_args(1)
-                        .required(true)
-                        .help("Owning user for this client (also added to system `users` list)"),
+                        .help(
+                            "Owning user for this client (also added to system `users` list); default: USER or USERNAME",
+                        ),
                 )
                 .arg(
                     Arg::new("watch")

@@ -3,7 +3,7 @@ use std::process::ExitCode;
 
 use sinkd_core::{fancy_error, outcome::Outcome};
 
-use crate::{params::ServerParameters, server};
+use crate::{parameters::ServerParameters, server};
 
 pub fn egress<T>(outcome: Outcome<T>) -> ExitCode {
     match outcome {
@@ -31,7 +31,7 @@ pub fn build_command() -> Command {
         .global(true);
 
     Command::new("sinkd-srv")
-        .about("Sync server: receive client sync traffic via Zenoh.")
+        .about("Deployable Cloud: server side")
         .version(env!("CARGO_PKG_VERSION"))
         .arg(verbose_arg)
         .arg(debug_arg)

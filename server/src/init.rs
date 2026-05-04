@@ -10,7 +10,7 @@ use sinkd_core::{
     outcome::Outcome,
 };
 
-use crate::params::ServerParameters;
+use crate::parameters::ServerParameters;
 
 pub fn run(sub: &ArgMatches, _parameters: &ServerParameters) -> Outcome<()> {
     let users_csv = sub

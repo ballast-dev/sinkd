@@ -9,7 +9,7 @@ use std::{
 
 use sinkd_core::{ipc, outcome::Outcome};
 
-use crate::params::ClientParameters;
+use crate::parameters::ClientParameters;
 
 pub(crate) struct ClientSyncState {
     pub(crate) client_id: String,

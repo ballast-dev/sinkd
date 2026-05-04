@@ -3,7 +3,7 @@
 use clap::{parser::ValuesRef, ArgMatches};
 use std::{fmt, path::PathBuf, sync::Arc};
 
-use log::{debug, error};
+use log::debug;
 use sinkd_core::{
     config::{self},
     outcome::Outcome,
@@ -120,6 +120,7 @@ fn resolve_system_config(system_config: Option<&String>) -> Outcome<Arc<PathBuf>
     let cfg_path: PathBuf;
     if let Some(sys_cfg) = system_config {
         debug!("resolve_system_config>> passed in: {sys_cfg}");
+
         match config::resolve(sys_cfg) {
             Ok(normalized) => {
                 if normalized.is_dir() {
@@ -135,12 +136,8 @@ fn resolve_system_config(system_config: Option<&String>) -> Outcome<Arc<PathBuf>
             }
             Err(e) => return sinkd_core::bad!("system config path error: {}", e),
         }
-    } else if cfg!(target_os = "macos") {
-        cfg_path = PathBuf::from("/opt/sinkd/sinkd.conf");
-    } else if cfg!(target_os = "windows") {
-        cfg_path = PathBuf::from("/somepath/sinkd.conf");
     } else {
-        cfg_path = PathBuf::from("/etc/sinkd.conf");
+        cfg_path = config::system_default();
     }
 
     debug!("system config: {}", cfg_path.display());
@@ -163,14 +160,7 @@ pub fn resolve_user_configs(user_configs: Option<ValuesRef<String>>) -> Outcome<
             resolved_configs.push(normalized);
         }
     } else {
-        let default_cfgs = vec!["~/.config/sinkd/sinkd.conf", "~/sinkd.conf"];
-
-        for cfg in default_cfgs {
-            match config::resolve(cfg) {
-                Ok(resolved_user_config) => resolved_configs.push(resolved_user_config),
-                Err(e) => error!("Unable to resolve {cfg}  {e}"),
-            }
-        }
+        resolved_configs.push(config::user_default());
     }
 
     debug!(

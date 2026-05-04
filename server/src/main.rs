@@ -2,7 +2,7 @@ mod cli;
 mod daemon;
 mod generation;
 mod init;
-mod params;
+mod parameters;
 mod server;
 
 use std::process::ExitCode;
@@ -10,7 +10,7 @@ use std::process::ExitCode;
 use log::{debug, info};
 use sinkd_core::{shiplog, time};
 
-use crate::params::ServerParameters;
+use crate::parameters::ServerParameters;
 
 fn windoze() -> ExitCode {
     let cli_cmd = cli::build_command().no_binary_name(true);

@@ -4,7 +4,7 @@
 use sinkd_core::parameters::DaemonType;
 use sinkd_core::{ipc, outcome::Outcome, shiplog};
 
-use crate::{params::ServerParameters, server};
+use crate::{parameters::ServerParameters, server};
 
 pub fn spawn(params: &ServerParameters) -> Outcome<()> {
     let params = params.clone();
