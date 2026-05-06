@@ -1,8 +1,10 @@
 //! Template-based config scaffolding primitives.
 //!
 //! Disk-first (`/usr/share/sinkd/*.conf` when installed) with embedded fallbacks
-//! via [`include_str!`]. Placeholders are `{{name}}` style. Client and server
-//! binaries compose [`render`] with their own targets and substitutions.
+//! supplied by each binary via [`InitOptions::template_embedded`]. Placeholders
+//! are `{{name}}` style. System and user templates live beside the `sinkd-srv`
+//! and `sinkd` crates as `conf.tmpl`; client and server compose [`render`] with
+//! their own targets and substitutions.
 
 use std::{
     fs,
@@ -11,11 +13,6 @@ use std::{
 
 use crate::outcome::Outcome;
 use log::info;
-
-/// Embedded system-config template (used when no on-disk template is found).
-pub const SYSTEM_TEMPLATE: &str = include_str!("../../cfg/templates/sinkd.system.conf.tmpl");
-/// Embedded user-config template (used when no on-disk template is found).
-pub const USER_TEMPLATE: &str = include_str!("../../cfg/templates/sinkd.user.conf.tmpl");
 
 /// On-disk locations populated by the Debian package; checked before falling
 /// back to the embedded copies.

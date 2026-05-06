@@ -69,8 +69,8 @@ install -m 644 "${ROOT}/cfg/user/sinkd.conf" "${STAGE}/usr/share/sinkd/sinkd.use
 
 # Init templates consumed by `sinkd init` / `sinkd-srv init` (disk-first;
 # binary falls back to embedded copies if these are missing).
-install -m 644 "${ROOT}/cfg/templates/sinkd.system.conf.tmpl" "${STAGE}/usr/share/sinkd/sinkd.conf"
-install -m 644 "${ROOT}/cfg/templates/sinkd.user.conf.tmpl"   "${STAGE}/usr/share/sinkd/sinkd.user.conf"
+install -m 644 "${ROOT}/server/conf.tmpl" "${STAGE}/usr/share/sinkd/sinkd.conf"
+install -m 644 "${ROOT}/client/conf.tmpl"   "${STAGE}/usr/share/sinkd/sinkd.user.conf"
 
 cat >"${STAGE}/DEBIAN/control" <<EOF
 Package: sinkd

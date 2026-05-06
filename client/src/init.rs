@@ -1,13 +1,16 @@
 //! `sinkd init` — scaffold system + user config from templates.
 
+const SYSTEM_TEMPLATE: &str =
+    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../server/conf.tmpl"));
+const USER_TEMPLATE: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/conf.tmpl"));
+
 use std::path::{Path, PathBuf};
 
 use clap::ArgMatches;
 use sinkd_core::{
     config,
     init::{
-        InitOptions, SYSTEM_TEMPLATE, SYSTEM_TEMPLATE_DISK, USER_TEMPLATE, USER_TEMPLATE_DISK,
-        render, toml_string_array_body,
+        InitOptions, SYSTEM_TEMPLATE_DISK, USER_TEMPLATE_DISK, render, toml_string_array_body,
     },
     outcome::Outcome,
 };

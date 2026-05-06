@@ -1,12 +1,13 @@
 //! `sinkd-srv init` — scaffold system config from the template.
 
+const SYSTEM_TEMPLATE: &str =
+    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/conf.tmpl"));
+
 use std::path::PathBuf;
 
 use clap::ArgMatches;
 use sinkd_core::{
-    init::{
-        InitOptions, SYSTEM_TEMPLATE, SYSTEM_TEMPLATE_DISK, render, toml_string_array_body,
-    },
+    init::{InitOptions, SYSTEM_TEMPLATE_DISK, render, toml_string_array_body},
     outcome::Outcome,
 };
 
